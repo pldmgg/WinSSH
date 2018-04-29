@@ -182,13 +182,14 @@ function InstallProgram {
 
     if (!$NoUpdatePackageManagement) {
         if (![bool]$(Get-Command UpdatePackageManagement -ErrorAction SilentlyContinue)) {
-            $UpdatePMFunctionUrl = "$MyFunctionsUrl/PowerShellCore_Compatible/UpdatePackageManagement.ps1"
+            $UpdatePMFunctionUrl = "$MyFunctionsUrl/PowerShellCore_Compatible/Update-PackageManagement.ps1"
             try {
-                Invoke-Expression $([System.Net.WebClient]::new().DownloadString($UpdatePMFunctionUrl))
+                #Invoke-Expression $([System.Net.WebClient]::new().DownloadString($UpdatePMFunctionUrl))
+                Invoke-Expression $($([System.Net.WebClient]::new().DownloadString($UpdatePMFunctionUrl)) -replace 'function Update-PackageManagement','function UpdatePackageManagement')
             }
             catch {
                 Write-Error $_
-                Write-Error "Unable to load the UpdatePackageManagement function! Halting!"
+                Write-Error "Unable to load the Update-PackageManagement function! Halting!"
                 $global:FunctionResult = "1"
                 return
             }
@@ -196,8 +197,8 @@ function InstallProgram {
 
         try {
             $global:FunctionResult = "0"
-            $null = UpdatePackageManagement -AddChocolateyPackageProvider -ErrorAction SilentlyContinue -ErrorVariable UPMErr
-            if ($UPMErr -and $global:FunctionResult -eq "1") {throw "The UpdatePackageManagement function failed! Halting!"}
+            $null = Update-PackageManagement -AddChocolateyPackageProvider -ErrorAction SilentlyContinue -ErrorVariable UPMErr
+            if ($UPMErr -and $global:FunctionResult -eq "1") {throw "The Update-PackageManagement function failed! Halting!"}
         }
         catch {
             Write-Error $_
@@ -210,13 +211,14 @@ function InstallProgram {
 
     if ($UseChocolateyCmdLine -or $(!$UsePowerShellGet -and !$UseChocolateyCmdLine)) {
         if (![bool]$(Get-Command InstallChocolateyCmdLine -ErrorAction SilentlyContinue)) {
-            $InstallCCFunctionUrl = "$MyFunctionsUrl/InstallChocolateyCmdLine.ps1"
+            $InstallCCFunctionUrl = "$MyFunctionsUrl/Install-ChocolateyCmdLine.ps1"
             try {
-                Invoke-Expression $([System.Net.WebClient]::new().DownloadString($InstallCCFunctionUrl))
+                #Invoke-Expression $([System.Net.WebClient]::new().DownloadString($InstallCCFunctionUrl))
+                Invoke-Expression $($([System.Net.WebClient]::new().DownloadString($InstallCCFunctionUrl)) -replace 'function Install-ChocolateyCmdLine','function InstallChocolateyCmdLine')
             }
             catch {
                 Write-Error $_
-                Write-Error "Unable to load the InstallChocolateyCmdLine function! Halting!"
+                Write-Error "Unable to load the Install-ChocolateyCmdLine function! Halting!"
                 $global:FunctionResult = "1"
                 return
             }
@@ -224,13 +226,14 @@ function InstallProgram {
     }
 
     if (![bool]$(Get-Command RefreshChocolateyEnv -ErrorAction SilentlyContinue)) {
-        $RefreshCEFunctionUrl = "$MyFunctionsUrl/PowerShellCore_Compatible/RefreshChocolateyEnv.ps1"
+        $RefreshCEFunctionUrl = "$MyFunctionsUrl/PowerShellCore_Compatible/Refresh-ChocolateyEnv.ps1"
         try {
-            Invoke-Expression $([System.Net.WebClient]::new().DownloadString($RefreshCEFunctionUrl))
+            #Invoke-Expression $([System.Net.WebClient]::new().DownloadString($RefreshCEFunctionUrl))
+            Invoke-Expression $($([System.Net.WebClient]::new().DownloadString($RefreshCEFunctionUrl)) -replace 'function Refresh-ChocolateyEnv','function RefreshChocolateyEnv')
         }
         catch {
             Write-Error $_
-            Write-Error "Unable to load the RefreshChocolateyEnv function! Halting!"
+            Write-Error "Unable to load the Refresh-ChocolateyEnv function! Halting!"
             $global:FunctionResult = "1"
             return
         }

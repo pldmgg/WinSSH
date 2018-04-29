@@ -15,7 +15,8 @@ function InstallChocolateyCmdLine {
         if (![bool]$(Get-Command Update-PackageManagement -ErrorAction SilentlyContinue)) {
             $UpdatePMFunctionUrl = "$MyFunctionsUrl/PowerShellCore_Compatible/Update-PackageManagement.ps1"
             try {
-                Invoke-Expression $([System.Net.WebClient]::new().DownloadString($UpdatePMFunctionUrl))
+                #Invoke-Expression $([System.Net.WebClient]::new().DownloadString($UpdatePMFunctionUrl))
+                Invoke-Expression $($([System.Net.WebClient]::new().DownloadString($UpdatePMFunctionUrl)) -replace 'function Update-PackageManagement','function UpdatePackageManagement')
             }
             catch {
                 Write-Error $_
@@ -42,7 +43,8 @@ function InstallChocolateyCmdLine {
     if (![bool]$(Get-Command Refresh-ChocolateyEnv -ErrorAction SilentlyContinue)) {
         $RefreshCEFunctionUrl = "$MyFunctionsUrl/PowerShellCore_Compatible/Refresh-ChocolateyEnv.ps1"
         try {
-            Invoke-Expression $([System.Net.WebClient]::new().DownloadString($RefreshCEFunctionUrl))
+            #Invoke-Expression $([System.Net.WebClient]::new().DownloadString($RefreshCEFunctionUrl))
+            Invoke-Expression $($([System.Net.WebClient]::new().DownloadString($RefreshCEFunctionUrl)) -replace 'function Refresh-ChocolateyEnv','function RefreshChocolateyEnv')
         }
         catch {
             Write-Error $_
