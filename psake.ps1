@@ -80,8 +80,67 @@ foreach ($import in $Private) {
     }
 }
 
-# Public Functions
 '@ | Set-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1"
+
+    <#
+    # Optionally Install-PSDepend and install any dependency Modules
+    $PSDependOperations = @'
+try {
+    & "$PSScriptRoot\Install-PSDepend.ps1"
+}
+catch {
+    Remove-Module WinSSH -ErrorAction SilentlyContinue
+    Write-Error $_
+    Write-Error "Installing the PSDepend Module failed! The WinSSH Module will not be loaded. Halting!
+    $global:FunctionResult = "1"
+    return
+}
+
+try {
+    Import-Module PSDepend
+    $null = Invoke-PSDepend -Path "$PSScriptRoot\module.requirements.psd1" -Install -Import -Force
+}
+catch {
+    Remove-Module WinSSH -ErrorAction SilentlyContinue
+    Write-Error $_
+    Write-Error "Problem with PSDepend Installing/Importing Module Dependencies! The WinSSH Module will not be loaded. Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+
+'@
+    Add-Content -Path -Value '& $PSScriptRoot\Install-PSDepend'
+    
+    $RequiredModules = @("NTFSSecurity","ProgramManagement")
+    $InstallImportRequiredModules = @'
+if (!$(Get-Module -ListAvailable RequiredModuleNameMatch)) {
+    try {
+        Install-Module RequiredModuleNameMatch -ErrorAction Stop
+    }
+    catch {
+        Write-Error $_
+        Write-Error "Problem installing Module PrimaryModuleNameMatch dependency Module RequiredModuleNameMatch! Module PrimaryModuleNameMatch will NOT be loaded. Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+}
+try {
+    Import-Module RequiredModuleNameMatch -ErrorAction Stop
+}
+catch {
+    Write-Error $_
+    Write-Error "Problem importing Module PrimaryModulenameMatch dependency Module RequiredModuleNameMatch! Module PrimaryModuleNameMatch will NOT be loaded. Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+
+'@
+
+    foreach ($ModuleDependency in $RequiredModules) {
+        $UpdatedModuleInstallBlock = $InstallImportRequiredModules -replace 'RequiredModuleNameMatch',$ModuleDependency -replace 'PrimaryModuleNameMatch','$env:BHProjectName'
+        Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $UpdatedModuleInstallBlock
+    }
+    #>
 
     [System.Collections.ArrayList]$FunctionTextToAdd = @()
     foreach ($ScriptFileItem in $PublicScriptFiles) {

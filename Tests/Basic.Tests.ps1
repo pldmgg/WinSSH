@@ -92,7 +92,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Get-VaultLogin' | Should Be $True
         $Commands -contains 'Get-VaultTokenAccessors' | Should Be $True
         $Commands -contains 'Get-VaultTokens' | Should Be $True
-        $Commands -contains 'Install-SSHService' | Should Be $True
+        $Commands -contains 'Install-SSHAgentService' | Should Be $True
         $Commands -contains 'Install-WinSSH' | Should Be $True
         $Commands -contains 'Manage-HyperVVM' | Should Be $True
         $Commands -contains 'New-SSHCredentials' | Should Be $True

@@ -24,7 +24,7 @@ function Install-SSHAgentService {
         [switch]$GitHubInstall,
 
         [Parameter(Mandatory=$False)]
-        [switch]$NoUpdatePackageManagement = $True,
+        [switch]$UpdatePackageManagement,
 
         [Parameter(Mandatory=$False)]
         [switch]$SkipWinCapabilityAttempt,
@@ -126,8 +126,8 @@ function Install-SSHAgentService {
                 ErrorAction         = "SilentlyContinue"
                 ErrorVariable       = "IPErr"
             }
-            if ($NoUpdatePackageManagement) {
-                $InstallProgramSplatParams.Add("NoUpdatePackageManagement",$True)
+            if ($UpdatePackageManagement) {
+                $InstallProgramSplatParams.Add("UpdatePackageManagement",$True)
             }
             if ($Force) {
                 $InstallProgramSplatParams.Add("Force",$True)
@@ -140,12 +140,12 @@ function Install-SSHAgentService {
             }
 
             try {
-                $OpenSSHInstallResults = InstallProgram @InstallProgramSplatParams
-                if (!$OpenSSHInstallResults) {throw "There was a problem with the InstallProgram function! Halting!"}
+                $OpenSSHInstallResults = Install-Program @InstallProgramSplatParams
+                if (!$OpenSSHInstallResults) {throw "There was a problem with the Install-Program function! Halting!"}
             }
             catch {
                 Write-Error $_
-                Write-Host "Errors for the InstallProgram function are as follows:"
+                Write-Host "Errors for the Install-Program function are as follows:"
                 Write-Error $($IPErr | Out-String)
                 $global:FunctionResult = "1"
                 return

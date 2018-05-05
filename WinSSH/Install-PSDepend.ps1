@@ -1,117 +1,62 @@
-function Uninstall-WinSSH {
-    [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$False)]
-        [switch]$KeepSSHAgent
-    )
+<#
+    .SYNOPSIS
+        Bootstrap PSDepend
 
-    if (!$(GetElevation)) {
-        Write-Error "You must run PowerShell as Administrator before using this function! Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
+    .DESCRIPTION
+        Bootstrap PSDepend
 
-    #region >> Prep
-    
-    $OpenSSHProgramFilesPath = "C:\Program Files\OpenSSH-Win64"
-    $OpenSSHProgramDataPath = "C:\ProgramData\ssh"
-    $UninstallLogDir = "$HOME\OpenSSHUninstallLogs"
-    $etwman = "$UninstallLogDir\openssh-events.man"
-    if (!$(Test-Path $UninstallLogDir)) {
-        $null = New-Item -ItemType Directory -Path $UninstallLogDir
-    }
+        Why? No reliance on PowerShellGallery
 
-    #endregion >> Prep
+            * Downloads nuget to your ~\ home directory
+            * Creates $Path (and full path to it)
+            * Downloads module to $Path\PSDepend
+            * Moves nuget.exe to $Path\PSDepend (skips nuget bootstrap on initial PSDepend import)
 
+    .PARAMETER Path
+        Module path to install PSDepend
 
-    #region >> Main Body
-    
-    if (Get-Service sshd -ErrorAction SilentlyContinue)  {
-        try {
-            Stop-Service sshd
-            sc.exe delete sshd 1>$null
-            Write-Host -ForegroundColor Green "sshd successfully uninstalled"
+        Defaults to Profile\Documents\WindowsPowerShell\Modules
 
-            # unregister etw provider
-            wevtutil um `"$etwman`"
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-    else {
-        Write-Host -ForegroundColor Yellow "sshd service is not installed"
-    }
+    .EXAMPLE
+        .\Install-PSDepend.ps1 -Path C:\Modules
 
-    if (!$KeepSSHAgent) {
-        if (Get-Service ssh-agent -ErrorAction SilentlyContinue) {
-            try {
-                Stop-Service ssh-agent
-                sc.exe delete ssh-agent 1>$null
-                Write-Host -ForegroundColor Green "ssh-agent successfully uninstalled"
-            }
-            catch {
-                Write-Error $_
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-        else {
-            Write-Host -ForegroundColor Yellow "ssh-agent service is not installed"
+        # Installs to C:\Modules\PSDepend
+#>
+[cmdletbinding()]
+param(
+    [string]$Path = $( Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules')
+)
+$ExistingProgressPreference = "$ProgressPreference"
+$ProgressPreference = 'SilentlyContinue'
+try {
+    # Bootstrap nuget if we don't have it
+    if(-not ($NugetPath = (Get-Command 'nuget.exe' -ErrorAction SilentlyContinue).Path)) {
+        $NugetPath = Join-Path $ENV:USERPROFILE nuget.exe
+        if(-not (Test-Path $NugetPath)) {
+            Invoke-WebRequest -uri 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $NugetPath
         }
     }
 
-    if (!$(Get-Module ProgramManagement)) {
-        try {
-            Import-Module ProgramManagement -ErrorAction Stop
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
+    # Bootstrap PSDepend, re-use nuget.exe for the module
+    if($path) { $null = mkdir $path -Force }
+    $NugetParams = 'install', 'PSDepend', '-Source', 'https://www.powershellgallery.com/api/v2/',
+                '-ExcludeVersion', '-NonInteractive', '-OutputDirectory', $Path
+    & $NugetPath @NugetParams
+    if (!$(Test-Path "$(Join-Path $Path PSDepend)\nuget.exe")) {
+        Copy-Item -Path $NugetPath -Destination "$(Join-Path $Path PSDepend)\nuget.exe" -Force
     }
-
-    try {
-        $UninstallOpenSSHResult = Uninstall-Program -ProgramName openssh -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        $global:FunctionResult = "1"
-        return
-    }
-
-    if (Test-Path $OpenSSHProgramFilesPath) {
-        try {
-            Remove-Item $OpenSSHProgramFilesPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-    if (Test-Path $OpenSSHProgramDataPath) {
-        try {
-            Remove-Item $OpenSSHProgramDataPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-
-    #endregion >> Main Body
 }
+finally {
+    $ProgressPreference = $ExistingProgressPreference
+}
+
+
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURWutbapb4DuDZ+AoltljUBka
-# 026gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUj1Z+IkpFLXJJCrrW4U8V1UJY
+# IlGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -168,11 +113,11 @@ function Uninstall-WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLzcNTGdzRckiH1y
-# lhGriIiJyBZXMA0GCSqGSIb3DQEBAQUABIIBAKbYs8Y+vY0svvjtNWwyqhhnikW9
-# gqvomOwBStwM4T1g6zju14H0jz/jk44UChkFXod8pn8JGpNvOub7BFyCqlrY8HMT
-# xAGIK3X9Lnu0YvKZPbrQMH022wN9apO1XoB7apB+k6ah1qaf0Pd0K9/IC1UpR9th
-# NKYIOnzpmARkD7FlaKFuuzk1AeDusReM7LFUf7NtheZYjHkqBgzOoKPiP0hzccPy
-# CUfEog5RBRRVAakfrEZu99x9nw65jZa3j43N8hab7mPS755XVH9zb51Q4P9rheZU
-# 0Z8YSwb5cmlo9qEJYmyOe1vnpOYxFQCmIGQ7Lb/KMxg+UVRglG/tg1hJj1Y=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOykEckn9ad0z4Wn
+# sbCXiincR74gMA0GCSqGSIb3DQEBAQUABIIBAH5SIsIqYqTdxtl9ZP9cbgX8SO6G
+# ahzx771BSS0jYjA65wZ3Gos9y/sgakZTLw17naRH4aiBwgRun3uv0D1dSjoNNxxZ
+# fbFUZqFRB4y0SmCPVH9M5l2Z1SgRSyzC7JmAHqQavd8Y5i+mPFx3cw/EKwSn9kvU
+# sSjIB4IIR9TM+gXmHryCYj8YI1FrbVv0s/5AJ/L1aEFK27cijC5q10z3jgMVp5Vu
+# dAr9QV91xa6pbNDKjy939dJoT5+fG7FkrvJaDW54mGH6VlLfzCL4zDmTKKw2kdfj
+# 2k3WJV9HJgZQ6WYlZjqVVvXUKWEYeTW5OE6MZGlySVO0s/PfP7+EmFgVy8c=
 # SIG # End signature block

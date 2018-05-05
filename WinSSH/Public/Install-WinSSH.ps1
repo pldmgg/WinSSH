@@ -67,10 +67,7 @@ function Install-WinSSH {
         [switch]$GitHubInstall,
 
         [Parameter(Mandatory=$False)]
-        [switch]$NoChocolateyCmdLine,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$NoUpdatePackageManagement = $True,
+        [switch]$UpdatePackageManagement,
 
         [Parameter(Mandatory=$False)]
         [switch]$SkipWinCapabilityAttempt,
@@ -125,8 +122,8 @@ function Install-WinSSH {
         ErrorAction         = "SilentlyContinue"
         ErrorVariable       = "ISAErr"
     }
-    if ($NoUpdatePackageManagement) {
-        $InstallSSHAgentSplatParams.Add("NoUpdatePackageManagement",$True)
+    if ($UpdatePackageManagement) {
+        $InstallSSHAgentSplatParams.Add("UpdatePackageManagement",$True)
     }
     if ($UsePowerShellGet) {
         $InstallSSHAgentSplatParams.Add("UsePowerShellGet",$True)  

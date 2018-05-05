@@ -240,8 +240,9 @@ if ([bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) 
 
 ##### BEGIN Tasks Unique to this Module's Build #####
 
-Remove-Module PowerShellGet -Force -ErrorAction SilentlyContinue
-Remove-Module PackageManagement -Force -ErrorAction SilentlyContinue
+Remove-Module WinSSH -Force -ErrorAction SilentlyContinue
+Remove-Module NTFSSecurity -Force -ErrorAction SilentlyContinue
+Remove-Module ProgramManagement -Force -ErrorAction SilentlyContinue
 
 ##### END Tasks Unique to this Module's Build #####
 

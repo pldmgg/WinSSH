@@ -342,7 +342,7 @@ function New-SSHDServer {
         $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
         if (!$PotentialPwshExes) {
             try {
-                Update-PowerShellCore -Latest -DownloadDirectory "$HOME\Downloads" -ErrorAction Stop
+                $null = Update-PowerShellCore -Latest -DownloadDirectory "$HOME\Downloads" -ErrorAction Stop
             }
             catch {
                 Write-Error $_

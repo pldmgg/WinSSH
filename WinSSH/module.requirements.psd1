@@ -1,117 +1,28 @@
-function Uninstall-WinSSH {
-    [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$False)]
-        [switch]$KeepSSHAgent
-    )
-
-    if (!$(GetElevation)) {
-        Write-Error "You must run PowerShell as Administrator before using this function! Halting!"
-        $global:FunctionResult = "1"
-        return
+@{
+    # Some defaults for all dependencies
+    PSDependOptions = @{
+        Target = '$ENV:USERPROFILE\Documents\WindowsPowerShell\Modules'
+        AddToPath = $True
     }
 
-    #region >> Prep
-    
-    $OpenSSHProgramFilesPath = "C:\Program Files\OpenSSH-Win64"
-    $OpenSSHProgramDataPath = "C:\ProgramData\ssh"
-    $UninstallLogDir = "$HOME\OpenSSHUninstallLogs"
-    $etwman = "$UninstallLogDir\openssh-events.man"
-    if (!$(Test-Path $UninstallLogDir)) {
-        $null = New-Item -ItemType Directory -Path $UninstallLogDir
+    # Grab some modules without depending on PowerShellGet
+    'ProgramManagement' = @{
+        DependencyType  = 'PSGalleryNuget'
+        Version         = 'Latest'
     }
-
-    #endregion >> Prep
-
-
-    #region >> Main Body
-    
-    if (Get-Service sshd -ErrorAction SilentlyContinue)  {
-        try {
-            Stop-Service sshd
-            sc.exe delete sshd 1>$null
-            Write-Host -ForegroundColor Green "sshd successfully uninstalled"
-
-            # unregister etw provider
-            wevtutil um `"$etwman`"
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
+    'NTFSSecurity' = @{
+        DependencyType  = 'PSGalleryNuget'
+        Version         = 'Latest'
     }
-    else {
-        Write-Host -ForegroundColor Yellow "sshd service is not installed"
-    }
-
-    if (!$KeepSSHAgent) {
-        if (Get-Service ssh-agent -ErrorAction SilentlyContinue) {
-            try {
-                Stop-Service ssh-agent
-                sc.exe delete ssh-agent 1>$null
-                Write-Host -ForegroundColor Green "ssh-agent successfully uninstalled"
-            }
-            catch {
-                Write-Error $_
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-        else {
-            Write-Host -ForegroundColor Yellow "ssh-agent service is not installed"
-        }
-    }
-
-    if (!$(Get-Module ProgramManagement)) {
-        try {
-            Import-Module ProgramManagement -ErrorAction Stop
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-
-    try {
-        $UninstallOpenSSHResult = Uninstall-Program -ProgramName openssh -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        $global:FunctionResult = "1"
-        return
-    }
-
-    if (Test-Path $OpenSSHProgramFilesPath) {
-        try {
-            Remove-Item $OpenSSHProgramFilesPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-    if (Test-Path $OpenSSHProgramDataPath) {
-        try {
-            Remove-Item $OpenSSHProgramDataPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-
-    #endregion >> Main Body
 }
+
+
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURWutbapb4DuDZ+AoltljUBka
-# 026gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU80tdQB0SPTfzOKi8qgo2nJt7
+# qeSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -168,11 +79,11 @@ function Uninstall-WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLzcNTGdzRckiH1y
-# lhGriIiJyBZXMA0GCSqGSIb3DQEBAQUABIIBAKbYs8Y+vY0svvjtNWwyqhhnikW9
-# gqvomOwBStwM4T1g6zju14H0jz/jk44UChkFXod8pn8JGpNvOub7BFyCqlrY8HMT
-# xAGIK3X9Lnu0YvKZPbrQMH022wN9apO1XoB7apB+k6ah1qaf0Pd0K9/IC1UpR9th
-# NKYIOnzpmARkD7FlaKFuuzk1AeDusReM7LFUf7NtheZYjHkqBgzOoKPiP0hzccPy
-# CUfEog5RBRRVAakfrEZu99x9nw65jZa3j43N8hab7mPS755XVH9zb51Q4P9rheZU
-# 0Z8YSwb5cmlo9qEJYmyOe1vnpOYxFQCmIGQ7Lb/KMxg+UVRglG/tg1hJj1Y=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFP1K71oMsaX0kPoR
+# tBDIk0ERKB1qMA0GCSqGSIb3DQEBAQUABIIBAIBB9EuJFZnFksmNpJ8/i9qUqEmV
+# Ruc3w10vKgiE2ug9eNlTGbWFIflZtegi4llzjKG8eYxXeZvNxbN4AJvQGGX3ntqp
+# o0//o4Kk1gjVnA4oSS2/ZDjduJ0HhezxaL8G9WgDsx1G237IRtGcd81pRBkUWYP1
+# 61Vt+W9qFdfJBaTncX5DIi6Wej2fMKt2amtr9iW1k2p0LOFlLLrxi+fVz3SdnE7X
+# 5o5BJV1CPyXrXJIZ+32tL22VqiQ5N3jxAIti72p4LQaVnxX79XI9i+6CTR6bTijt
+# /wvz3OW8/I5UIrfDwH2g5JNopSfM2L126tlzcH27E6JSY/FblJKEzZzXgAI=
 # SIG # End signature block
