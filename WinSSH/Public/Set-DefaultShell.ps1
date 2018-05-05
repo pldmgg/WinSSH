@@ -26,7 +26,7 @@ function Set-DefaultShell {
         $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
         if (!$PotentialPwshExes) {
             try {
-                UpdatePowerShellCore -Latest -DownloadDirectory "$HOME\Downloads" -ErrorAction Stop
+                Update-PowerShellCore -Latest -DownloadDirectory "$HOME\Downloads" -ErrorAction Stop
             }
             catch {
                 Write-Error $_

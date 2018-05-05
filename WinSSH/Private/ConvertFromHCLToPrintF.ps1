@@ -5,8 +5,6 @@ function ConvertFromHCLToPrintF {
         [string]$HCLAsString
     )
 
-
-
     $CharArray = [char[]]$($HCLAsString -join "") | foreach {
         if ($_ -eq '"') {
             '\' + $_

@@ -392,11 +392,11 @@ function Manage-HyperVVM {
                     }
 
                     try {
-                        Fix-NTVirtualMachinesPerms -Directorypath $DirectoryThatMayNeedPermissionsFix
+                        FixNTVirtualMachinesPerms -Directorypath $DirectoryThatMayNeedPermissionsFix
                     }
                     catch {
                         Write-Error $_
-                        Write-Error "The Fix-NTVirtualMachinesPerms function failed! Halting!"
+                        Write-Error "The FixNTVirtualMachinesPerms function failed! Halting!"
                         $global:FunctionResult = "1"
                         return
                     }
@@ -405,11 +405,11 @@ function Manage-HyperVVM {
                     $DirectoryThatMayNeedPermissionsFix = $VMVhdFile | Split-Path -Parent
 
                     try {
-                        Fix-NTVirtualMachinesPerms -DirectoryPath $DirectoryThatMayNeedPermissionsFix
+                        FixNTVirtualMachinesPerms -DirectoryPath $DirectoryThatMayNeedPermissionsFix
                     }
                     catch {
                         Write-Error $_
-                        Write-Error "The Fix-NTVirtualMachinesPerms function failed! Halting!"
+                        Write-Error "The FixNTVirtualMachinesPerms function failed! Halting!"
                         $global:FunctionResult = "1"
                         return
                     }
@@ -424,11 +424,11 @@ function Manage-HyperVVM {
             
             foreach ($dir in $DirsToPotentiallyFix) {
                 try {
-                    Fix-NTVirtualMachinesPerms -DirectoryPath $dir
+                    FixNTVirtualMachinesPerms -DirectoryPath $dir
                 }
                 catch {
                     Write-Error $_
-                    Write-Error "The Fix-NTVirtualMachinesPerms function failed! Halting!"
+                    Write-Error "The FixNTVirtualMachinesPerms function failed! Halting!"
                     $global:FunctionResult = "1"
                     return
                 }

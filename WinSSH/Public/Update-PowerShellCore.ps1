@@ -1,4 +1,4 @@
-function UpdatePowerShellCore {
+function Update-PowerShellCore {
     [CmdletBinding(DefaultParameterSetName='PackageManagement')]
     Param(
         [Parameter(
@@ -395,32 +395,6 @@ function UpdatePowerShellCore {
                 
                 if (!$($CurrentInstalledPSVersions -contains $PSFullVersion)) {
                     if (!$UsePackageManagement) {
-                        # Check to see if we're trying to install/update to 6.0.0-beta.8 . If so, then
-                        # just use 6.0.0-beta.7 because there's a bug regarding an erroneous dependency
-                        # on Visual Studio 2015 C++ redistributables
-                        if ($PSRelease -eq "6.0.0" -and $PSChannel -eq "beta" -and $PSIteration -eq "8") {
-                            if ($(CheckInstalledPrograms -ProgramTitleSearchTerm "Microsoft Visual C++ 2015 Redistributable") -eq $null) {
-                                Write-Warning $("Installing Microsoft Visual C++ 2015 Redistributable required by PowerShell Core 6.0.0-beta.8. " +
-                                "Please note that this is an erroneous dependency (i.e. the installer thinks it's required and won't proceed without it, but it isn't actually a dependency. " +
-                                "This should be corrected in 6.0.0-beta.9")
-                                
-                                try {
-                                    $MSVis2015Uri = "https://download.microsoft.com/download/9/3/F/93FCF1E7-E6A4-478B-96E7-D4B285925B00/vc_redist.x64.exe"
-                                    $OutFilePath = GetNativePath -PathAsStringArray @($HOME, "Downloads", "vc_redist.x64.exe")
-                                    Invoke-WebRequest -Uri $MSVis2015Uri -OutFile $OutFilePath
-
-                                    Push-Location -Path $($OutFilePath | Split-Path -Parent)
-                                    Start-Process ".\vc_redist.x64.exe" -ArgumentList "/silent" -Wait -NoNewWindow
-                                    Pop-Location
-                                }
-                                catch {
-                                    Write-Error $_
-                                    $global:FunctionResult = "1"
-                                    return
-                                }
-                            }
-                        }
-
                         Write-Host "Downloading PowerShell Core for $OS version $PSFullVersion to $DownloadPath ..."
                         
                         if (!$(Test-Path $DownloadDirectory)) {
@@ -489,7 +463,7 @@ function UpdatePowerShellCore {
                                 $CheckForPSCoreAvail = Find-Package powershell-core -AllVersions -AllowPrereleaseVersions
                             }
                             catch {
-                                $UpdateResults = UpdatePackageManagement -AddChocolateyPackageProvider 2>&1 3>&1 6>&1
+                                $UpdateResults = Update-PackageManagement -AddChocolateyPackageProvider 2>&1 3>&1 6>&1
                                 $UpdateResults
                             }
                             $PackageManagementSuccess = $true

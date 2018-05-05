@@ -14,7 +14,7 @@ function TestPort {
         ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
         
         try {
-            $HostNameNetworkInfo = Resolve-Host -HostNameOrIP $HostName -ErrorAction Stop
+            $HostNameNetworkInfo = ResolveHost -HostNameOrIP $HostName -ErrorAction Stop
         }
         catch {
             Write-Error "Unable to resolve $HostName! Halting!"

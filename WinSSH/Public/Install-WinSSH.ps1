@@ -81,7 +81,7 @@ function Install-WinSSH {
 
     ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
 
-    if (!$(Check-Elevation)) {
+    if (!$(GetElevation)) {
         Write-Verbose "You must run PowerShell as Administrator before using this function! Halting!"
         Write-Error "You must run PowerShell as Administrator before using this function! Halting!"
         $global:FunctionResult = "1"

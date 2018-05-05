@@ -1,4 +1,4 @@
-# Example Usage: Get-DomainController -Domain $(Get-CimInstance Win32_ComputerSystem).Domain
+# Example Usage: GetDomainController -Domain $(Get-CimInstance Win32_ComputerSystem).Domain
 # If you don't specify -Domain, it defaults to the one you're currently on
 function GetDomainController {
     [CmdletBinding()]

@@ -29,12 +29,6 @@ if($env:BHBranchName -notlike "master" -or $env:BHCommitMessage -match "!verbose
 if ([bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) {
     Remove-Module $env:BHProjectName -Force
 }
-$global:SudoCredentials = $null
-$global:NewSessionAndOriginalStatus = $null
-
-if ([bool]$(Get-Module -Name SudoTasks)) {
-    Remove-Module -Name SudoTasks -Force
-}
 
 Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation' -Fixture {
     $Scripts = Get-ChildItem $env:BHProjectPath -Include *.ps1,*.psm1,*.psd1 -Recurse
@@ -60,16 +54,78 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Module = Get-Module $env:BHProjectName
         $Module.Name -eq $env:BHProjectName | Should Be $True
         $Commands = $Module.ExportedCommands.Keys
+        $Commands -contains 'ConfigureGlobalKnownHosts' | Should Be $False
+        $Commands -contains 'ConvertFromHCLToPrintF' | Should Be $False
+        $Commands -contains 'FixNTVirtualMachinesPerms' | Should Be $False
+        $Commands -contains 'GetCurrentUser' | Should Be $False
+        $Commands -contains 'GetDomainController' | Should Be $False
         $Commands -contains 'GetElevation' | Should Be $False
-        $Commands -contains 'New-SudoSession' | Should Be $True
-        $Commands -contains 'Start-SudoSession' | Should Be $True
-        $Commands -contains 'Remove-SudoSession' | Should Be $True
-        $Commands -contains 'Restore-OriginalSystemConfig' | Should Be $True
+        $Commands -contains 'GetGroupObjectsInLDAP' | Should Be $False
+        $Commands -contains 'GetNativePath' | Should Be $False
+        $Commands -contains 'GetUserObjectsInLDAP' | Should Be $False
+        $Commands -contains 'GetVSwitchAllRelatedInfo' | Should Be $False
+        $Commands -contains 'InstallFeatureDism' | Should Be $False
+        $Commands -contains 'InstallHyperVFeatures' | Should Be $False
+        $Commands -contains 'NewUniqueString' | Should Be $False
+        $Commands -contains 'PauseForWarning' | Should Be $False
+        $Commands -contains 'TestIsValidIPAddress' | Should Be $False
+        $Commands -contains 'TestLDAP' | Should Be $False
+        $Commands -contains 'TestPort' | Should Be $False
+        $Commands -contains 'UnzipFile' | Should Be $False
+
+        $Commands -contains 'Add-CAPublicKeyToSSHAndSSHDConfig' | Should Be $True
+        $Commands -contains 'Add-PublicKeyToRemoteHost' | Should Be $True
+        $Commands -contains 'Check-Cert' | Should Be $True
+        $Commands -contains 'Configure-VaultServerForLDAPAuth' | Should Be $True
+        $Commands -contains 'Configure-VaultServerForSSHManagement' | Should Be $True
+        $Commands -contains 'Deploy-HyperVVagrantBoxManually' | Should Be $True
+        $Commands -contains 'Fix-SSHPermissions' | Should Be $True
+        $Commands -contains 'Generate-AuthorizedPrincipalsFile' | Should Be $True
+        $Commands -contains 'Generate-Certificate' | Should Be $True
+        $Commands -contains 'Generate-SSHUserDirFileInfo' | Should Be $True
+        $Commands -contains 'Get-LDAPCert' | Should Be $True
+        $Commands -contains 'Get-PublicKeyAuthInstructions' | Should Be $True
+        $Commands -contains 'Get-SSHClientAuthSanity' | Should Be $True
+        $Commands -contains 'Get-SSHFileInfo' | Should Be $True
+        $Commands -contains 'Get-VagrantBoxManualDownload' | Should Be $True
+        $Commands -contains 'Get-VaultAccessorLookup' | Should Be $True
+        $Commands -contains 'Get-VaultLogin' | Should Be $True
+        $Commands -contains 'Get-VaultTokenAccessors' | Should Be $True
+        $Commands -contains 'Get-VaultTokens' | Should Be $True
+        $Commands -contains 'Install-SSHService' | Should Be $True
+        $Commands -contains 'Install-WinSSH' | Should Be $True
+        $Commands -contains 'Manage-HyperVVM' | Should Be $True
+        $Commands -contains 'New-SSHCredentials' | Should Be $True
+        $Commands -contains 'New-SSHDServer' | Should Be $True
+        $Commands -contains 'New-SSHKey' | Should Be $True
+        $Commands -contains 'Revoke-VaultToken' | Should Be $True
+        $Commands -contains 'Set-DefaultShell' | Should Be $True
+        $Commands -contains 'Sign-SSHHostPublicKey' | Should Be $True
+        $Commands -contains 'Sign-SSHUserPublicKey' | Should Be $True
+        $Commands -contains 'Uninstall-WinSSH' | Should Be $True
+        $Commands -contains 'Update-PowerShellCore' | Should Be $True
+        $Commands -contains 'Validate-SSHPrivateKey' | Should Be $True
     }
 
     It "Module '$env:BHProjectName' Private Functions Are Available in Internal Scope" {
         $Module = Get-Module $env:BHProjectName
+        [bool]$Module.Invoke({Get-Item function:ConfigureGlobalKnownHosts}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:ConvertFromHCLToPrintF}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:FixNTVirtualMachinesPerms}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetDomainController}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetElevation}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetGroupObjectsInLDAP}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetNativePath}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetUserObjectsInLDAP}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetVSwitchAllRelatedInfo}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:InstallFeatureDism}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:InstallHyperVFeatures}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:NewUniqueString}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:PauseForWarning}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:TestIsValidIPAddress}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:TestLDAP}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:TestPort}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:UnzipFile}) | Should Be $True
     }
 }
 

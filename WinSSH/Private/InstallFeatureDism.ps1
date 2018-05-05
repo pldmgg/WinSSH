@@ -1,4 +1,4 @@
-function Install-FeatureDism {
+function InstallFeatureDism {
     [CmdletBinding()]
     Param (
         [Parameter(Mandatory=$True)]

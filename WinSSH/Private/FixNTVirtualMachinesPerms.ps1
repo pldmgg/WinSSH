@@ -1,5 +1,4 @@
 <#
-    This Fix-NTVirtualMachinesPerms function is specifically for Vagrant using Hyper-V.
     The function uses the NTFSSecurity Module to set "ReadAndExecute, Synchronize" permissions
     for the "NT VIRTUAL MACHINE\Virtual Machines" account on:
         - The specified $Directory,
