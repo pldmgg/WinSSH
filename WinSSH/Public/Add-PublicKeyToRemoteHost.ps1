@@ -1,3 +1,30 @@
+<#
+    .SYNOPSIS
+        This function connects to a Remote Host via ssh and adds the specified User/Client SSH Public Key to
+        the ~/.ssh/authorized_keys file on that Remote Host. As long as you can connect to the Remote Host via
+        ssh, this function will work with both Windows and Linux targets.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PublicKeyPath
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to the SSH User/Client Public Key that you
+        would like to add to the Remote Host's ~/.ssh/authorized_keys file.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            PublicKeyPath       = "$HOME\.ssh\id_rsa.pub"
+            RemoteHost          = "Ubuntu18.zero.lab"
+            RemoteHostUserName  = "zero\zeroadmin"
+        }
+        PS C:\Users\zeroadmin> Add-PublicKeyToRemoteHost @SplatParams
+#>
 function Add-PublicKeyToRemoteHost {
     [CmdletBinding()]
     Param(
@@ -52,7 +79,21 @@ function Add-PublicKeyToRemoteHost {
     }
 
     #ssh -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
-    ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+    if ($RemoteHostUserName -match "\\|@") {
+        if ($RemoteHostUserName -match "\\") {
+            $DomainPrefix = $($RemoteHostUserName -split "\\")[0]
+        }
+        if ($RemoteHostUserName -match "@") {
+            $DomainPrefix = $($RemoteHostUserName -split "\\")[-1]
+        }
+    }
+
+    if (!$DomainPrefix) {
+        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+    }
+    else {
+        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+    }
 
     ##### END Main Body #####
 }
@@ -82,11 +123,15 @@ function Add-PublicKeyToRemoteHost {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5RIdNHbXqJlVOaM5gJiLU8SN
-# 4gegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/Y/NzBJVa+51v6rOhjgMxzPV
+# oJ2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -143,11 +188,11 @@ function Add-PublicKeyToRemoteHost {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFC/w6sltCAFe2hWS
-# 5zBB+4dGT4bmMA0GCSqGSIb3DQEBAQUABIIBAE4WdAgJeLWqE8yqT71Owb+N8R8k
-# RHS7KeC6IixbM5j+Db3vRkvywVvDp0p5bMBcKVKA4ts5xKDkEtx+QcEfLPf4cpFo
-# YeUre5KgqnmdWLnCVRxkCYxtI1pwD/N1EPomYXALWT03usL7gaH2NE0Wf54aP4Gn
-# DsO9flibe/mnsp+0vxDkbLkbAsCIceyMNbJxY4cSB9xUl/VFlM3NyYHbIS9jEj7o
-# lXRm9BfUIq/LHbLhJ5POOdHe+stkiEMMVrkmy+mDoeZm3ngNzp64lkobCuSHwOLQ
-# dpxXJERpXhOiAQTRo7lsb080V2SJ1WneuRlFjMs+dX2wOCnivoqtU7lfQxM=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDUgbVhOzbr3BUdD
+# 546i4XNME4W5MA0GCSqGSIb3DQEBAQUABIIBADTt1pSteGA3ic/ORwfM6JHMXC+B
+# qWq7ryo7gEomxiLL+3HvvzI8OUhA7Tw3gpf+JIHDDrCAg1ZA7vTCXcOnOs9o9Ad7
+# py4Xk9bc9QOH5W4ISQkACE4SxGps2QNBEmdLs9VLimjgHOvWbdpzRAtC4a8jKJ8q
+# hQ3VTbW7MR/p6cGRj5S+RpBMpktM6+EFt5Ul/gUNFpkRx/D17gUIHPWaP+xrZ49T
+# ppGUwISE7Ou/yNdewtm3TWxK2T9nUJVVFTXfokBJC/9n4F/V75OQjYJrDSr8Twdu
+# Ynt2d7Gx+FhlSimS17TqdD73fX9ZLuUY1qRp9SgtSbZLhtX5Rt4TvmgaZwk=
 # SIG # End signature block

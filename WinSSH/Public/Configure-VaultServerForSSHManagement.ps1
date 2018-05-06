@@ -1,3 +1,33 @@
+<#
+    .SYNOPSIS
+        This function gets the SSL Certificate at the specified IP Address / Port
+        and returns an System.Security.Cryptography.X509Certificates.X509Certificate2 object.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER IPAddress
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an IP Address.
+
+    .PARAMETER Port
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a Port Number (443, 636, etc).
+
+    .EXAMPLE
+        # In the below example, 172.217.15.110 happens to be a google.com IP Address
+
+        PS C:\Users\zeroadmin> Check-Cert -IPAddress 172.217.15.110 -Port 443
+
+        Thumbprint                                Subject
+        ----------                                -------
+        8FBB134B2216D6C71CF4E4431ABD82182922AC7C  CN=*.google.com, O=Google Inc, L=Mountain View, S=California, C=US
+        
+#>
 function Configure-VaultServerForSSHManagement {
     [CmdletBinding()]
     Param (
@@ -333,11 +363,15 @@ function Configure-VaultServerForSSHManagement {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwajSHz4cuTxyS6MIxHJnKSgI
-# 1Yigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHR74AFMM3C5MZgPAzr9vDmqN
+# WHygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -394,11 +428,11 @@ function Configure-VaultServerForSSHManagement {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCZ6kmOU8JUQKFyN
-# Aq+p9Db7s5OjMA0GCSqGSIb3DQEBAQUABIIBACoUX0C/g8OfASZNxOUh3ez8nUOO
-# 6Rmy8ICZzE6Yh1Z5Zt1O1RrkMOY2aJ8S8GkYlop4eAENYC/tb6YJLdqj8iPniogc
-# Jo45SREpsOxlE7cmJNa0lEQ6yMyL009swMLFSkMEKbhOiZWvq+IY/h3uzZ5AD8U3
-# rvIVC5CVK108Fjn/qdZUrfUq6tOOvRrz6A6zwlvAXkGfIirREImE9lTB/NE3QDIC
-# TZkSTVmHizqwAxE5pgTgxHBWE/vHG9ls+RlV2Rgp30uXWtjNo2zY0PPRaX4ixq5D
-# p/Ikbpzov5w7qlvNJC7brvrFCQLZ/6jrjz1/g3JGkNTAEfu614c8lOvl0QQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMOAlNwsVpepR164
+# YGNX0ZlvGHDpMA0GCSqGSIb3DQEBAQUABIIBABzsP1GP9+2vQyqqtX0anh7Zfppi
+# uE2Q45+DQ5aJM4+H5KtDahNxhOWMBUO0xGF9rlBrGuuO/A3y1SLugsHymFCvd7Ds
+# 666soAuuDperHQMpjAI/fTBb4lcdSMHviHI2vXKGj7DniJR7rmS5lwbOu9ze7w05
+# sw8aVCsn4qMcvVAZhPbtuirwIO0LEIXYdlj7d6XZEGZKGnTelBKvGSU9de+AhH/g
+# tWN1JbkbQDkyaNzrF8JBe9c5Z81DOWABFdlzlrbgOX+MWvl2xck7MV7saZCXmv/D
+# GCvba9MZn9KFu8fEovavaJ4cByP49qEBFqDycJY9ZJuK3g00QgWl9lBjUZk=
 # SIG # End signature block

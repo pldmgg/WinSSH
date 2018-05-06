@@ -1,3 +1,33 @@
+<#
+    .SYNOPSIS
+        This function gets the SSL Certificate at the specified IP Address / Port
+        and returns an System.Security.Cryptography.X509Certificates.X509Certificate2 object.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER IPAddress
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an IP Address.
+
+    .PARAMETER Port
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a Port Number (443, 636, etc).
+
+    .EXAMPLE
+        # In the below example, 172.217.15.110 happens to be a google.com IP Address
+
+        PS C:\Users\zeroadmin> Check-Cert -IPAddress 172.217.15.110 -Port 443
+
+        Thumbprint                                Subject
+        ----------                                -------
+        8FBB134B2216D6C71CF4E4431ABD82182922AC7C  CN=*.google.com, O=Google Inc, L=Mountain View, S=California, C=US
+        
+#>
 function Check-Cert {
     [CmdletBinding()]
     Param (
@@ -54,11 +84,15 @@ function Check-Cert {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU9sLgH+8WMxWKef0kp6ZuaF83
-# w2Ogggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUFE9IZG39+GKeiXwZxZCNvnKY
+# e5+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -115,11 +149,11 @@ function Check-Cert {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLhECwmAI8kqa07v
-# X1/E7xw6TbDRMA0GCSqGSIb3DQEBAQUABIIBAJD/3ojP5czpsotIEhkGZHRW7+d7
-# zbd57mRu1VhDdgRC+o1O6Q194DGIZXTesXEGn/LtmI5kw7RhifMpn2BKcSjbaF5p
-# h55+Zwx6EnaCjY+wrl4g/g1EkUiii2qKEJyAZN+8ZJ0he9sgpv3fdrVKfhjMQq0h
-# Cc6OpQBGzUrlwhlDh+cZVuAgluI78Ma583A9R6qJ3V4h/h3/zAtx4kPOGYAUl3rG
-# DHWSdBYiSQXvPq5Jaw8tjUKdohJcZjMjjbCEg2RIZuXndnY82SKEJKHiPX8d4uBE
-# ML17JWsfqK4FZPMqkZMVKvtcJjlJbakMtmuk9AzVgtSjPvPCcWJ656qfVGY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOFWwy363L2Wq9aT
+# 8XcKwfjoxG3rMA0GCSqGSIb3DQEBAQUABIIBALOjau+vozSbUqpwkDXDtiL5rom3
+# ow7u9Zkrn0iv81ybNVU2YcUPziJjIDZRXqjtevsWV1rDkzvnB9d/cwUpejmSJtkT
+# OLZm1xCqE7613r/S89ksnydCPNDUqMp4rMb54Sof53X7RUyknkSOQhjQtkTC7wJD
+# 1a3Ld1OJi3WN6FSVnftdJKPRtlxlw7pStz50m9eBhFasr60vh/AiJPnBABbS1PM7
+# Xl/Vmwc1RTMqfNmfrWzGCPE0WG3CRk3XxQ/NmvP8fIGCjwPhzDGLLV2Y13U0q7OH
+# /hMbTC1QhiV2hdvNv4SgE+PZ6tE7DD/kEVVhwQydk1ugqsfkhosk8y6n1hU=
 # SIG # End signature block

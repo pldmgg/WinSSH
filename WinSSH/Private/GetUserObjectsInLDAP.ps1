@@ -7,7 +7,7 @@ function GetUserObjectsInLDAP {
     # PortsThatWork
     try {
         $DomainControllerInfo = GetDomainController -ErrorAction Stop
-        $LDAPInfo = TestLDAP -ADServerHostNameOrIP $DomainControllerInfo.PrimaryDomainController -ErrorAction Stop
+        $LDAPInfo = Test-LDAP -ADServerHostNameOrIP $DomainControllerInfo.PrimaryDomainController -ErrorAction Stop
         if (!$DomainControllerInfo) {throw "Problem with GetDomainController function! Halting!"}
         if (!$LDAPInfo) {throw "Problem with TestLDAP function! Halting!"}
     }
@@ -72,11 +72,15 @@ function GetUserObjectsInLDAP {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUiqu8mG6rFlVChjUfk+Kwa6Ix
-# 9Qagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0+03QPeH0ObS59ZcIVkLNJfi
+# hnCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -133,11 +137,11 @@ function GetUserObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKgs5ALO1asdQy51
-# YmI4mOsqzRBxMA0GCSqGSIb3DQEBAQUABIIBALTLQuXD+1EL8UGntKzR1drqwDWK
-# J7Oc+Yvmx9RIlTbuH1sR+oFZuaPIxPR+5HT7nKGjDSPvBXipovcGP8FPy+jYvvDY
-# +z15xUoPYgC87hepq7i5eS5DszSxegEdOyoy/FeltOgcPkLHhBTHpRvkbYcc9dsT
-# LzKc1hVgiNKAOvmUxgVetrBXbl09/IebcnzXYVQ4wLTTLtaa8jpaZ2kCEIt2TnbM
-# tAJRpO2CJMtPRzc9OdqPhBx0TYN5jNe94C8B3rFwWD5MGmO8NX7F64PrhgmLrRsU
-# aeQY4DmXtiQflXaZCF81O2FpBGufm4zftkcWbuOaEyq50EETBKqfB/Y1DXA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCXhBJ6yqjwO+kv/
+# 3C03SfUztV9KMA0GCSqGSIb3DQEBAQUABIIBALL5AnHJJoC6lpkZ8FuCx7eL9/vw
+# jOWxnaHrpz5pk47WazXguwVHZoRrO52l11VqJSvrW1S3idfXS+/yQqevd44szXiQ
+# 20f59c+dETvBIN2gVLy34+e/tk9z+Aq8abAWwC3QJO7YXfpjdcSnzt4TZnEZ3nFV
+# K//5bUTk9jC3/Tzwry6JxzvYbkZelrc/3LvqDacwb61v14vCn0eYEUKsl7GH7gIn
+# ZBoZ/CWuCkfs/T/3yxyNUYa3yO9cw0F99N25pIUnc+r1iim63StXo04YszYL5z44
+# V+cDXcfGYfirZqs7Zkd6jEoIry5H6j6C0JGW884jNbtbbyAZL+/cqOayhWs=
 # SIG # End signature block

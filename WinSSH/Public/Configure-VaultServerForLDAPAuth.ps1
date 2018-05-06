@@ -1,3 +1,152 @@
+<#
+    .SYNOPSIS
+        This function uses the HashiCorp Vault Server's REST API to configure LDAP Authrntication.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerNetworkLocation
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the network location (IP Address or DNS-Resolvable)
+        of the Vault Server.
+
+    .PARAMETER VaultServerPort
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a Port Number (8200, etc). The Vault Server
+        typically uses port 8200.
+
+    .PARAMETER EncrytNetworkTraffic
+        This parameter is OPTIONAL, but is set by default to be $True.
+
+        This parameter is a switch. If used, the Vault Server will be configured to encrypt network
+        traffic via TLS.
+
+        IMPORTANT NOTE: NEVER set this parameter to $False unless you are simply testing the Vault Server
+        in Development Mode. In production, you MUST encrypt network traffic to/from the Vault Server,
+        and therefore, this parameter must be $True.
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Vault Authentiction token with permission to
+        configure teh Vault Server for LDAP Authentication.
+
+    .PARAMETER VaultLogFileName
+        This parameter is OPTIONAL, but is set to 'vault_audit.log' by default.
+
+        This parameter takes a string that represents the name of the log file on the Vault Server that
+        logs all activity (i.e. Vault Operator Command Line as well as REST API calls).
+
+    .PARAMETER VaultLogEndPointName
+        This parameter is OPTIONAL, but is set to 'default-audit'.
+
+        This parameter takes a string that represents the name of the Vault Server REST API Endpoint
+        used to enable and configure the Vault Server activity log. For context, this value is used
+        with a REST API URL similar to:
+            "$VaultServerBaseUri/sys/audit/$VaultLogEndPointName"
+
+    .PARAMETER PerformOptionalSteps
+        This parameter is OPTIONAL, but highly recommended.
+
+        This parameter is a switch. If used, the following additional configuration operations will
+        be performed on the Vault Server:
+            - A backup root token with username 'backupadmin' will be created.
+            - A 'custom-root' policy will be created and applied to the "VaultAdmins" Group (which must already exist
+            in LDAP). This policy effectively grants all users in the "VaultAdmins" Group root access to the Vault Server.
+            - A 'vaultusers' policy will be created and applied to the "VaultUsers" Group (which must already exist
+            in LDAP). Users in the "VaultUsers" Group will have all permissions except 'delete' and 'sudo'.
+
+    .PARAMETER LDAPServerHostNameOrIP
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents either the IP Address or DNS-Resolvable name of
+        the LDAP Server. In a Windows environment, this would be a Domain Controller.
+
+    .PARAMETER LDAPServicePort
+        This parameter is MANDATORY.
+
+        This parameter takes an integer with possible values: 389, 636, 3268, or 3269. Depending
+        on how you have LDAP configured, use the appropriate port number. If you are not sure,
+        use the Test-LDAP function to determine which ports are in use.
+
+    .PARAMETER BindUserDN
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an LDAP Path to a User Account Object - somthing like:
+            cn=vault,ou=OrgUsers,dc=zero,dc=lab
+
+        This User Account will be used by the Vault Server to search the LDAP database and confirm
+        credentials for the user trying to login to the Vault Server against the LDAP database. This
+        LDAP account should be dedicated for use by the Vault Server and should not have any other purpose.
+
+    .PARAMETER LDAPBindCredentials
+        This parameter is MANDATORY.
+
+        This parameter takes a PSCredential. Th e UserName should corredpound to the UserName provided to the
+        -BindUserDN parameter, but should be in format <DomainPrefix>\<UserName>. So, to be consistent with
+        the example provided in the -BindUserDN comment-based-help, you could create the value for
+        -LDAPBindCredentials via:
+            $Creds = [pscredential]::new("zero\vault",$(Read-Host "Please Enter the Password for 'zero\vault'" -AsSecureString))
+
+    .PARAMETER LDAPUserOUDN
+        This parameter is MANDATORY.
+
+        This parameter takes a string tht represents an LDAP Path to an Organizational Unit (OU) that Vault
+        will search in order to find User Accounts. To stay consistent with the example provided in the
+        comment-based-help for the -BindUserDN parameter, this would be:
+            ou=OrgUsers,dc=zero,dc=lab
+
+    .PARAMETER LDAPGroupOUDN
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an LDAP Path to the Organizational Unit (OU) that
+        contains the Security Groups "VaultAdmins" and "VaultUsers". This could be something like:
+            ou=Groups,dc=zero,dc=lab
+
+    .PARAMETER LDAPVaultUsersSecurityGroupDN
+        This parameter is OPTIONAL, however, it becomes MANDATORY when the -PerformOptionalSteps parameter is used.
+
+        This parameter takes a string that represents the LDAP Path to the "VaultUsers" Security Group. To be
+        consistent with the example provided in teh comment-based-help for the -LDAPGroupOUDN parameter, this
+        should be something like:
+            cn=VaultUsers,ou=Groups,dc=zero,dc=lab
+
+        IMPORTANT NOTE: The Common Name (CN) for this LDAP Path MUST be 'VaultUsers'
+
+    .PARAMETER LDAPVaultAdminsSecurityGroupDN
+        This parameter is OPTIONAL, however, it becomes MANDATORY when the -PerformOptionalSteps parameter is used.
+
+        This parameter takes a string that represents the LDAP Path to the "VaultAdmins" Security Group. To be
+        consistent with the example provided in teh comment-based-help for the -LDAPGroupOUDN parameter, this
+        should be something like:
+            cn=VaultAdmins,ou=Groups,dc=zero,dc=lab
+
+        IMPORTANT NOTE: The Common Name (CN) for this LDAP Path MUST be 'VaultAdmins'
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $ConfigureVaultLDAPSplatParams = @{
+            VaultServerNetworkLocation      = "vaultserver.zero.lab"
+            VaultServerPort                 = 8200
+            VaultAuthToken                  = $VaultAuthToken
+            LDAPServerHostNameOrIP          = "ZeroDC01.zero.lab"
+            LDAPServicePort                 = 636
+            LDAPBindCredentials             = $LDAPBindCredentials
+            BindUserDN                      = "cn=vault,ou=OrgUsers,dc=zero,dc=lab"
+            LDAPUserOUDN                    = "ou=OrgUsers,dc=zero,dc=lab"
+            LDAPGroupOUDN                   = "ou=Groups,dc=zero,dc=lab"
+            PerformOptionalSteps            = $True
+            LDAPVaultUsersSecurityGroupDN   = "cn=VaultUsers,ou=Groups,dc=zero,dc=lab"
+            LDAPVaultAdminsSecurityGroupDN  = "cn=VaultAdmins,ou=Groups,dc=zero,dc=lab"
+        }
+        PS C:\Users\zeroadmin> $ConfigureVaultLDAPResult = Configure-VaultServerForLDAPAuth @ConfigureVaultLDAPSplatParams
+        
+#>
 function Configure-VaultServerForLDAPAuth {
     [CmdletBinding()]
     Param (
@@ -32,12 +181,12 @@ function Configure-VaultServerForLDAPAuth {
         [ValidateSet(389,636,3268,3269)]
         [int]$LDAPServicePort,
 
+        [Parameter(Mandatory=$True)]
+        [string]$BindUserDN, # Should be a path to a User Account LDAP object, like cn=vault,ou=OrgUsers,dc=zero,dc=lab
+
         # Should be a non-privileged LDAP/AD account whose sole purpose is allowing Vault to read the LDAP Database
         [Parameter(Mandatory=$True)]
         [pscredential]$LDAPBindCredentials,
-
-        [Parameter(Mandatory=$True)]
-        [string]$BindUserDN, # Should be a path to a User Account LDAP object, like cn=vault,ou=OrgUsers,dc=zero,dc=lab
         
         [Parameter(Mandatory=$True)]
         [string]$LDAPUserOUDN, # Something like ou=OrgUsers,dc=zero,dc=lab
@@ -556,11 +705,15 @@ function Configure-VaultServerForLDAPAuth {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/6pSiMznMbo+5nJ9zztavsRD
-# o/igggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQULo9ns2GNoYketRWFsd96/WBy
+# vcqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -617,11 +770,11 @@ function Configure-VaultServerForLDAPAuth {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFL65rYIWM4oGyGRp
-# FF2oPD84Yk8JMA0GCSqGSIb3DQEBAQUABIIBAGQsz/KEuG7L5z77ScVnBMci1eTw
-# SWRHVx18FSkdQvJ0XdIwzw7ZHQbop4cNZBxLQUBMjpMIKZvSYCQwPVxK0WOsuE1L
-# zpjR4xohAxp2pS/ua2LIgVCnF25MnRXCSn7hqeTE99iEpPGnXZzatP/s80j/Hxge
-# oXNBnGdeLmeRdYmm6qJdcS8jdtbOeekGWsVvk9aNzUZAmrsQburJf/eEkEl+mvyy
-# N0KQ8/5T34jEMqkjzPjh3/MAKIgtzD2VhJ1ytdaiaJU/ipNTqDWnqLE9NgEBLU8x
-# NOyVbgHCGV9eq+JdMeLldY1vSu/BFRX6l5XkwxFuCajjSppEsxjiCemOXig=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFO/zzRO0cjbJLeR5
+# 3+St7X3A4E+bMA0GCSqGSIb3DQEBAQUABIIBAJ7MgdhH6Ncs8bSl/FNIhShs3Mk8
+# 6ZM2d+n9wNwR9BNj9J7U0btVNI8G7vYynh1/mIu3DsFZVJLN7U9Y2dkoZDRT3Kkh
+# bhmd27b950R9t3ZbAUQklTRBMt4JVJlFIEOCkf6qTWfWZXYjwANTyuVg0db6JCD4
+# m36SoWVbaGkyezw7wuUxmfFBf34xaw89NhqTAcGybmo5x8ruQgCr4rNtD532l0K7
+# 0HzUCnn1D6SwzZe+SuW05fKzt29qg54PkS+rV295P5aXBwT0clYBiflHigySG0tx
+# jIPKAXHnAJQtqKDglWun8if0aXBwBfpX4oIaAwbvfVqek8m2uaY/nRgeTLs=
 # SIG # End signature block

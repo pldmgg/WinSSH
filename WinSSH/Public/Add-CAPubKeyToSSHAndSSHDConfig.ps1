@@ -1,6 +1,144 @@
 # This function should be run on BOTH SSH Client AND SSHD Server Machines
 # Output is a PSCustomObject with property [System.Collections.ArrayList] FilesUpdated and property
 # [System.IO.FileInfo] SignSSHHostKeyResult
+<#
+    .SYNOPSIS
+        This function is meant to make it easy to configure both the SSH Client and SSHD Server for Public
+        Certificate Authentication. It can (and should) be run on BOTH the SSH Client and the SSHD Server.
+
+        This function does the following:
+            - Uses the Vault Server's SSH Host Signing Certificate Authority (CA) to sign the local host's
+            ssh host key (i.e. 'C:\ProgramData\ssh\ssh_host_rsa_key.pub', resulting in
+            C:\ProgramData\ssh\ssh_host_rsa_key-cert.pub)
+            - Gets the Public Key of the CA used to sign User/Client SSH Keys from the Vault Server and adds it to:
+                1) The file C:\ProgramData\ssh\authorized_keys as a string;
+                2) The file C:\ProgramData\ssh\ssh_known_hosts as a string; and
+                3) The dedicated file C:\ProgramData\ssh\ca_pub_key_of_client_signer.pub
+            - Gets the Public Key of the CA used to sign Host/Machine SSH Keys from the Vault Server and adds it to:
+                1) The file C:\ProgramData\ssh\authorized_keys as a string;
+                2) The file C:\ProgramData\ssh\ssh_known_hosts as a string; and
+                3) The dedicated file C:\ProgramData\ssh\ca_pub_key_of_host_signer.pub
+            - Adds references to user accounts that you would like to grant ssh access to the local machine
+            to C:\ProgramData\ssh\authorized_principals (includes both Local and Domain users)
+            - Ensures NTFS filesystem permissions are set appropriately for the aforementioned files
+            - Adds references to 'TrustedUserCAKeys' and 'AuthorizedPrincipalsFile' to
+            C:\ProgramData\ssh\sshd_config
+
+        IMPORTANT NOTE: Just in case any breaking/undesireable changes are made to the host's ssh configuration,
+        all files that could potentially be changed are backed up to C:\ProgramData\ssh\Archive before any
+        changes are actually made.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PublicKeyOfCAUsedToSignUserKeysFilePath
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignUserKeysFilePath,
+        -PublicKeyOfCAUsedToSignUserKeysAsString, or -PublicKeyOfCAUsedToSignUserKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents a path to a file that is the Public Key of the CA
+        used to sign SSH User/Client Keys.
+
+    .PARAMETER PublicKeyOfCAUsedToSignUserKeysAsString
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignUserKeysFilePath,
+        -PublicKeyOfCAUsedToSignUserKeysAsString, or -PublicKeyOfCAUsedToSignUserKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the Public Key of the CA used to sign SSH User/Client
+        Keys. The string must start with "ssh-rsa".
+
+    .PARAMETER PublicKeyOfCAUsedToSignUserKeysVaultUrl
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignUserKeysFilePath,
+        -PublicKeyOfCAUsedToSignUserKeysAsString, or -PublicKeyOfCAUsedToSignUserKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the URL of the Vault Server Rest API Endpoint that
+        advertises the Public Key of the CA used to sign SSH User/Client Keys. The URL should be something like:
+            https://<FQDNOfVaultServer>:8200/v1/ssh-client-signer/public_key
+
+    .PARAMETER PublicKeyOfCAUsedToSignHostKeysFilePath
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignHostKeysFilePath,
+        -PublicKeyOfCAUsedToSignhostKeysAsString, or -PublicKeyOfCAUsedToSignHostKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents a path to a file that is the Public Key of the CA
+        used to sign SSH Host/Machine Keys.
+
+    .PARAMETER PublicKeyOfCAUsedToSignHostKeysAsString
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignHostKeysFilePath,
+        -PublicKeyOfCAUsedToSignhostKeysAsString, or -PublicKeyOfCAUsedToSignHostKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the Public Key of the CA used to sign SSH Host/Machine
+        Keys. The string must start with "ssh-rsa".
+
+    .PARAMETER PublicKeyOfCAUsedToSignHostKeysVaultUrl
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignHostKeysFilePath,
+        -PublicKeyOfCAUsedToSignhostKeysAsString, or -PublicKeyOfCAUsedToSignHostKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the URL of the Vault Server REST API Endpoint that
+        advertises the Public Key of the CA used to sign SSH User/Client Keys. The URL should be something like:
+            https://<FQDNOfVaultServer>:8200/v1/ssh-host-signer/public_key
+
+    .PARAMETER AuthorizedUserPrincipals
+        This parameter is OPTIONAL, but highly recommended.
+
+        This parameter takes an array of strings, each of which represents either a Local User Account
+        or a Domain User Account. Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix, if your
+        domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
+
+        These strings will be added to the file C:\ProgramData\ssh\authorized_principals, and these User Accounts
+        will be permitted to SSH into the machine that this function is run on.
+
+        You CAN use this parameter in conjunction with the -AuthorizedPrincipalsUserGroup parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .PARAMETER AuthorizedPrincipalsUserGroup
+        This parameter is OPTIONAL.
+
+        This parameter takes an array of strings that can be any combination of the following values:
+            - AllUsers
+            - LocalAdmins
+            - LocalUsers
+            - DomainAdmins
+            - DomainUsers
+        
+        The value 'AllUsers' is the equivalent of specifying 'LocalAdmins','LocalUsers','DomainAdmins', and
+        'DomainUsers'.
+
+        Each User Account that is a member of the specified groups will be added to the file
+        C:\ProgramData\ssh\authorized_principals, and these User Accounts will be permitted to SSH into the machine
+        that this function is run on.
+
+        You CAN use this parameter in conjunction with the -AuthorizedUserPrincipals parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .PARAMETER VaultSSHHostSigningUrl
+        This parameter is OPTIONAL, but highly recommended.
+
+        This parameter takes a string that represents the URL of the Vault Server REST API endpoint that is
+        responsible for signing the Local Host's Host/Machine SSH Key. The URL should be something like:
+            http://<FQDNOfVaultServer>:8200/v1/ssh-host-signer/sign/hostrole
+
+        Using this parameter outputs the signed SSH Host/Machine Key file C:\ProgramData\ssh\ssh_host_rsa_key-cert.pub
+
+    .PARAMETER VaultAuthToken
+        This parameter is OPTIONAL, but becomes MANDATORY if you use the -VaultSSHHostSigningUrl parameter.
+        It should only be used if you use the -VaultSSHHostSigningUrl parameter.
+
+        This parameter takes a string that represents a Vault Authentiction token with permission to
+        request that the Vault Server sign the Local Host's SSH Host/Machine Key.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+        
+        PS C:\Users\zeroadmin> $AddCAPubKeyToSSHAndSSHDConfigSplatParams = @{
+            PublicKeyOfCAUsedToSignUserKeysVaultUrl     = "$VaultServerBaseUri/ssh-client-signer/public_key"
+            PublicKeyOfCAUsedToSignHostKeysVaultUrl     = "$VaultServerBaseUri/ssh-host-signer/public_key"
+            AuthorizedPrincipalsUserGroup               = @("LocalAdmins","DomainAdmins")
+            VaultSSHHostSigningUrl                      = "$VaultServerBaseUri/ssh-host-signer/sign/hostrole"
+            VaultAuthToken                              = $ZeroAdminToken
+        }
+        PS C:\Users\zeroadmin> $AddCAPubKeysResult = Add-CAPubKeyToSSHAndSSHDConfig @AddCAPubKeyToSSHAndSSHDConfigSplatParams
+#>
 function Add-CAPubKeyToSSHAndSSHDConfig {
     [CmdletBinding(DefaultParameterSetName='VaultUrl')]
     Param(
@@ -571,11 +709,15 @@ function Add-CAPubKeyToSSHAndSSHDConfig {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUb9JpoccVZTRWTYj1FYa9F9Lb
-# vLGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8My4ua1q17yIH7wuQx/fppYW
+# 8Eygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -632,11 +774,11 @@ function Add-CAPubKeyToSSHAndSSHDConfig {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFbqtphaqixl+hrE
-# iZWoTP7EfHxVMA0GCSqGSIb3DQEBAQUABIIBAGMm+SGov0ItEmPfL2JTiJgnXXOF
-# ywQFpIqWJ6QV/TZPr5AseXY2OtOOlxEPVIu14FuR9LieFj+G5MnXCdYgXhfiCRWY
-# WsVZl9L/2UmkZNqoUKVmtp2FPJ5F1pHGPgafZHLTCES1PVl/ks88r5xzZa/efR8n
-# yu11Z0A9AbDyWrc5lHC/CG/6QREs5Bj6WWK69EKyug3/KyFqh7abW3hw/QPTuU2d
-# ATDMA3emkwg5Sd4U4dKGTfUyeQ9ET/ngPDvv+4yhn09qcJXdqd+qphGJX1O0F+3t
-# FJi5YSBnDcyAmvNQwjWBDGmVkfU20y7/bf/B+kUwYmjpJZebvNo/pDUwnGY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAyZwAlE5eBiw74A
+# zthKeDegM92kMA0GCSqGSIb3DQEBAQUABIIBAHZx88Bk6pIDEUSCwYhEKuluYSEz
+# AZyHH9ibA+DzNa+r+4Apjbs4qkaEM6JLtIpMcad6TkA8OPO0NXbs7GWsF68OsebS
+# 5utpjntjG1nDa/pWlz5TC8tyG/5O1rTUEDbhlpW1TFVnWhvq0RWskIGG7P1okooS
+# dBdQB1NPgVLZUggYUhsYAPS+orqbCz25uRHOvWGy/84ERkOr+GodtVNc113dGLEl
+# coH8op0/iwhLCwD8TeFGjRdFGJBYtiatT5KH9zRClskQbJ2FMLqIb9XjX8nsYvfr
+# YBU3kvAFYgLTxnA5OtuP8HNsNJLcooN6r83OTH1s0EZ/0dHcMJ76Lz74Fxg=
 # SIG # End signature block

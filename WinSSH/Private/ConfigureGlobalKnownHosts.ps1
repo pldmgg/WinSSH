@@ -1,6 +1,6 @@
-# The below Configure-GlobalKnownHosts shouldn't be necesary with Public Key Authentication and
+# The below ConfigureGlobalKnownHosts shouldn't be necesary with Public Key Authentication and
 # dissemination of the CA public keys for both host and user signing
-function Configure-GlobalKnownHosts {
+function ConfigureGlobalKnownHosts {
     [CmdletBinding()]
     Param(
         # Each Remote Host key should be in format like:
@@ -122,11 +122,15 @@ function Configure-GlobalKnownHosts {
 
 
 
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUnO5xoKrhxVctS9kYd1kJnvaO
-# ITygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHjGaeQKnCsPZMNtYa4v0YcV6
+# 1lOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -183,11 +187,11 @@ function Configure-GlobalKnownHosts {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDbol+V1bhtHrjcz
-# u3/1ZODk3o9UMA0GCSqGSIb3DQEBAQUABIIBAJv1VyfYXvYS3T9AxN3bXU6BlYXd
-# MonRgTlBlcL6ct+u8i+VhGIa7Q2H9ufy9R/WcGH+CDgLzhExLMuo6SXXTLr26Mgq
-# XqDtjjElRcPmRonoGm9vp5pvqWxxxsXh/YnrlWCanQZc8q3tTRciXlWLLF8CJtoH
-# qaCXaGOEawNDuAAjAuyo9+zWIWuTYh/dEQv8XXD1MrwiEG9U3iYTJGOC2mp59Mlb
-# 1laXSER160TZCGQUA0hhov9XA84P9O0OHJMIbBMgndT98qhH6iZuXAGqsOJozNPN
-# lsu8mY9oBziIeQzy9lm0BziL57sbeDySXBqYgMm83PNqhb+xaRFi1PY10qU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPWUscGaM0TASWIQ
+# P/dxsTZp388aMA0GCSqGSIb3DQEBAQUABIIBAEYtkOjkM0jYCS78PQkZnAy9Y+is
+# 4NQG0AyTs4QMaV21WLHoJWOBXx7bfgQa6CfzHFRLPoaDTvphbr8Z82dtjQicDOoB
+# kQIqfikWw5zoHncBYZeKKIF4WOpTORxgpiqVQRks3BL0YcA80y7BaHE+hNiJEhYc
+# JCqbr1jLM0CkATfJ5qVRbtekvekldp2HRbf7g/hmnkgKkaSndgOx5x0EId6nk1Jv
+# PvooIMo9VSAkzFI62TW840FhVqfkE2LWMvxvpHy07t+lprEavYu9IuJjyj8BDUUM
+# f5YEuEb8Z+MOko6qquKq/yFd7Q0Nb7LZ1Mc5v6N3g16wluWgzJAxpNzaz0o=
 # SIG # End signature block
