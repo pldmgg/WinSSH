@@ -1,6 +1,7 @@
 <#
     .SYNOPSIS
-        This function uses the HashiCorp Vault Server's REST API to configure LDAP Authrntication.
+        This function uses the HashiCorp Vault Server's REST API to configure the Vault Server for
+        LDAP Authrntication.
 
     .DESCRIPTION
         See .SYNOPSIS
@@ -211,7 +212,7 @@ function Configure-VaultServerForLDAPAuth {
     $Output = [ordered]@{}
 
     if ($EncryptNetworkTraffic) {
-        $VaultServerBaseUri = "https://$VaultServerNetworkLocation" + ":$VaultServerPort/v1"    
+        $VaultServerBaseUri = "https://$VaultServerNetworkLocation" + ":$VaultServerPort/v1"
     }
     else {
         $VaultServerBaseUri = "http://$VaultServerNetworkLocation" + ":$VaultServerPort/v1"

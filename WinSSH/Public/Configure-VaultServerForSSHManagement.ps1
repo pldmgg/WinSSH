@@ -1,31 +1,47 @@
 <#
     .SYNOPSIS
-        This function gets the SSL Certificate at the specified IP Address / Port
-        and returns an System.Security.Cryptography.X509Certificates.X509Certificate2 object.
+        This function uses the Hashicorp Vault Server's REST API to configure the Vault Server for
+        SSH Public Key Authentication and Management.
+
+        The following actions are performed on teh Vault Server (via the REST API):
+            - The Vault SSH User/Client Key Signer is enabled
+            - A Certificate Authority (CA) for the SSH User/Client Key Signer is created
+            - The Vault SSH Host/Machine Key Signer is enabled
+            - A Certificate Authority (CA) for the SSH Host/Machine Key Signer is created
+            - The Vault the SSH User/Client Signer Role Endpoint is configured
+            - The Vault the SSH Host/Machine Signer Role Endpoint is configured
 
     .DESCRIPTION
         See .SYNOPSIS
 
     .NOTES
 
-    .PARAMETER IPAddress
+    .PARAMETER VaultServerBaseUri
         This parameter is MANDATORY.
 
-        This parameter takes a string that represents an IP Address.
+        This parameter takes a string that represents Base Uri for the Vault Server REST API. It should be
+        something like:
+            "https://vaultserver.zero.lab:8200/v1"
 
-    .PARAMETER Port
-        This parameter is MANDATORY.
+    .PARAMETER DomainCredentialsWithAdminAccessToVault
+        This parameter is OPTIONAL. However, either this parameter or the -VaultAuthToken parameter is REQUIRED.
 
-        This parameter takes an integer that represents a Port Number (443, 636, etc).
+        This parameter takes a PSCredential. Assuming that LDAP Authenitcation is already enabled and configured
+        onthe Vault Server, create a PSCredential that is a member of the "VaultAdmins" Security Group (or
+        equivalent) in LDAP.
+            $Creds = [pscredential]::new("zero\zeroadmin",$(Read-Host "Please Enter the Password for 'zero\zeroadmin'" -AsSecureString))
+
+    .PARAMETER VaultAuthToken
+        This parameter is OPTIONAL. However, either this parameter or the -DomainCredentialsWithAdminAccessToVault
+        parameter is REQUIRED.
+
+        This parameter takes a string that represents a Vault Authentication Token that has privileges to make
+        configuration changes to the Vault Server.
 
     .EXAMPLE
-        # In the below example, 172.217.15.110 happens to be a google.com IP Address
+        # Open an elevated PowerShell Session, import the module, and -
 
-        PS C:\Users\zeroadmin> Check-Cert -IPAddress 172.217.15.110 -Port 443
-
-        Thumbprint                                Subject
-        ----------                                -------
-        8FBB134B2216D6C71CF4E4431ABD82182922AC7C  CN=*.google.com, O=Google Inc, L=Mountain View, S=California, C=US
+        PS C:\Users\zeroadmin> $ConfigureVaultSSHMgmt = Configure-VaultServerForSSHManagement -VaultServerBaseUri $VaultServerBaseUri -VaultAuthToken $ZeroAdminToken
         
 #>
 function Configure-VaultServerForSSHManagement {
