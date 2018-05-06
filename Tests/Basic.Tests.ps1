@@ -73,7 +73,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'TestPort' | Should Be $False
         $Commands -contains 'UnzipFile' | Should Be $False
 
-        $Commands -contains 'Add-CAPublicKeyToSSHAndSSHDConfig' | Should Be $True
+        $Commands -contains 'Add-CAPubKeyToSSHAndSSHDConfig' | Should Be $True
         $Commands -contains 'Add-PublicKeyToRemoteHost' | Should Be $True
         $Commands -contains 'Check-Cert' | Should Be $True
         $Commands -contains 'Configure-VaultServerForLDAPAuth' | Should Be $True
@@ -131,11 +131,39 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwHMVbSqLYxTGgFrvJas+smsO
-# Xvagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHtV71umlnglzpN4H8+SbsKQ5
+# 85qgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -192,11 +220,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGQNmTRLpV7HTeDT
-# s9X31gYO+ExyMA0GCSqGSIb3DQEBAQUABIIBACh96mRftrh10OSi+kCnkz6P1Dod
-# c2brPl9B4eA3B1mf6/Z8sjXSOwc47SI/RvEljbjs4CSKXcnM7NAKG6C5l8pfxBMc
-# jB+9qhun4ojY+GJTPxXcHENwMonTuvrVGmbkJ77Xktt5V+Bhe50gfVOYfw4Kfrx4
-# USrnO2JGRHyN92jxnVbNlKbZ2vufZthQfPOnidlz8jTh0+pptADQuym1CWGQwFM/
-# I+qIhnanSW4Hqg0y1IO7GKZ0AoVXG6U28/bpi0EA+Nke8tq4boHeaTFh3YjVikIG
-# uGVTFNOMud/bJxR30l54aTI7jB9iltaiey9zqi1MiIw0LnnkgfOhCtXz5Z0=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBTKvQdUxKsGmrbQ
+# 9cuKFQ5Xd00CMA0GCSqGSIb3DQEBAQUABIIBAMLqVTq3eIq+8tnK/EeT9wW6uNUW
+# AB4i+ASGZvJr0IisJNkG6gHh9SbhnJs2edK1aYy+quGCCT3irbceF8zGxvASd6ee
+# tdyW6jPZxetmyGIET4SaZvNDTamgb0vBZWI1l9RRuJTYa80OaexmXBgJarZ2uZ2N
+# RfSJQaJ09E4d2tBRKMH/7u31NcS4szpwDbcBCd+1NPXYJByw8NcechIFWJuXTDyh
+# 4KnQmqEv2Cd9z1BrSMwCwD80gD5ZdLcLu4xeII2B/7gy1rRAV8Z5GKGAwarNVIiP
+# HWGB8xQDHLbOStjPX+PIQLVNnEmLF2G1Eqf8hOKcKyGFxQMY9X38JFBbFo0=
 # SIG # End signature block

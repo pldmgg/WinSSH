@@ -39,16 +39,22 @@ if (![bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue))
 }
 
 # Loading the WinSSH Module should also Install/Import the NTFSSecurity and ProgramManagement Modules
-if (!$(Get-Module ProgramManagement)) {
-    Write-Error "Loading the WinSSH Module did NOT successfully load the ProgramManagement Module as expected. Halting!"
+if (!$(Get-Module -ListAvailable ProgramManagement)) {
+    Write-Error "Loading the WinSSH Module did NOT successfully install the ProgramManagement Module as expected. Halting!"
     $global:FunctionResult = "1"
     return
 }
-if (!$(Get-Module NTFSSecurity)) {
-    Write-Error "Loading the WinSSH Module did NOT successfully load the NTFSSecurity Module as expected. Halting!"
+if (!$(Get-Module -ListAvailable NTFSSecurity)) {
+    Write-Error "Loading the WinSSH Module did NOT successfully install the NTFSSecurity Module as expected. Halting!"
     $global:FunctionResult = "1"
     return
 }
+
+$CurrentlyLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
+if (![bool]$($CurrentlyLoadedAssemblies.FullName -match "System.ServiceProcess,")) {
+    Add-Type -AssemblyName "System.ServiceProcess"
+}
+
 
 $FakeInstallSSHAgentOutput = [System.ServiceProcess.ServiceController]::new()
 $FakeNewSSHDServerOutput = [pscustomobject]@{
@@ -122,7 +128,7 @@ function CommonTestSeries {
     }
     if ($InputObject.GetType().FullName -eq "System.ServiceProcess.ServiceController") {
         it "Should return a ServiceController Object with Status 'Running'" {
-            $InputObject.Status.OutString() | Should -Be "Running" 
+            $($InputObject.Status | Out-String).Trim() | Should -Be "Running" 
         }
     }
 }
@@ -134,8 +140,11 @@ function Cleanup {
     Uninstall-WinSSH
 
     $CheckForPowerShellCore = Get-AllPackageInfo -ProgramName PowerShell-6
-    if ($CheckForPowerShellCore) {
-        Uninstall-Program -ProgramName PowerShell-6
+    if ($CheckForPowerShellCore.ChocolateyInstalledProgramObjects.Count -gt 0 -or
+    $CheckForPowerShellCore.PSGetInstalledPackageObjects.Count -gt 0 -or
+    $CheckForPowerShellCore.RegistryProperties.Count -gt 0
+    ) {
+        Uninstall-Program -ProgramName PowerShell-6 -ErrorAction SilentlyContinue
     }
 }
 
@@ -168,7 +177,7 @@ function StartTesting {
 
     if ($InstallWinSSHResult) {
         switch ($SplatParamsSeriesItem.TestSeriesFunctionNames) {
-            'CommonTestSeries' { $InstallProgramResult | CommonTestSeries }
+            'CommonTestSeries' { $InstallWinSSHResult | CommonTestSeries }
         }
     }
     else {
@@ -225,34 +234,39 @@ $TestSplatParams = @(
 
     @{
         GiveWinSSHBinariesPathPriority  = $True
-        DefaultShell                    = "powershell"
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        DefaultShell                    = "powershell"
         UsePowerShellGet                = $True
     }
 
     @{
         GiveWinSSHBinariesPathPriority  = $True
-        DefaultShell                    = "powershell"
         UseChocolateyCmdLine            = $True
     }
 
     @{
         GiveWinSSHBinariesPathPriority  = $True
-        DefaultShell                    = "powershell"
         GitHubInstall                   = $True
     }
 
     @{
         GiveWinSSHBinariesPathPriority  = $True
+        ConfigureSSHDOnLocalHost        = $True
+    }
+
+    @{
+        GiveWinSSHBinariesPathPriority  = $True
+        ConfigureSSHDOnLocalHost        = $True
+        DefaultShell                    = "powershell"
+    }
+
+    @{
+        GiveWinSSHBinariesPathPriority  = $True
+        ConfigureSSHDOnLocalHost        = $True
         DefaultShell                    = "pwsh"
     }
 
     @{
         GiveWinSSHBinariesPathPriority  = $True
+        ConfigureSSHDOnLocalHost        = $True
         DefaultShell                    = "pwsh"
         Force                           = $True
     }
@@ -266,39 +280,45 @@ $SplatParamsSeries = @(
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -DefaultShell powershell"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -DefaultShell powershell"
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -UsePowerShellGet"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -UsePowerShellGet"
         TestSeriesSplatParams   = $TestSplatParams[1]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -DefaultShell powershell -UsePowerShellGet"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -DefaultShell powershell -UsePowerShellGet"
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -UseChocolateyCmdLine"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -UseChocolateyCmdLine"
         TestSeriesSplatParams   = $TestSplatParams[2]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -DefaultShell powershell -UseChocolateyCmdLine"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -DefaultShell powershell -UseChocolateyCmdLine"
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -GitHubInstall"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -GitHubInstall"
         TestSeriesSplatParams   = $TestSplatParams[3]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -DefaultShell powershell -GitHubInstall"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -DefaultShell powershell -GitHubInstall"
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost"
         TestSeriesSplatParams   = $TestSplatParams[4]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -DefaultShell pwsh"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -DefaultShell pwsh"
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell"
         TestSeriesSplatParams   = $TestSplatParams[5]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -DefaultShell pwsh -Force"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -DefaultShell pwsh -Force"
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh"
         TestSeriesSplatParams   = $TestSplatParams[6]
+        TestSeriesFunctionNames = @("CommonTestSeries")
+    }
+    [pscustomobject]@{
+        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh -Force"
+        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh -Force"
+        TestSeriesSplatParams   = $TestSplatParams[7]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
 )
@@ -312,7 +332,7 @@ $global:MockResources = @{
     FakeInstallWinSSHOutputService  = $FakeInstallWinSSHOutputService
 }
 
-InModuleScope ProgramManagement {
+InModuleScope WinSSH {
     Describe "Test Install-WinSSH" {
         Context "Non-Elevated PowerShell Session" {
             # IMPORTANT NOTE: Any functions that you'd like the 'it' blocks to use should be written in the 'Context' scope HERE!
@@ -353,11 +373,39 @@ InModuleScope ProgramManagement {
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdUXa6z6Tw9g634r1uJbApHza
-# MU2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUy4W7GLIE+ln18QQ3tcj3imh7
+# dUagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -414,11 +462,11 @@ InModuleScope ProgramManagement {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFIyApmpVuMFnw6t
-# Icb8A+yiqYHpMA0GCSqGSIb3DQEBAQUABIIBAAx5Iq2lxH+7xewnIHdrFyryr/LU
-# xMvw87iEsKN2QOiEkVJyeEV9YD4eOnEinTIWxts9DHOkM1jhjCum0rmSsy6G6fiS
-# Hd1IaB0dB074NXRduDQnI1gKDffF1lxq/N/1yILzzL9prnkaFSB+dqqTH0erZ1KY
-# jT59c2py7Ah7kaPnKqrPiicdDXAHN4o2vc/gSUHi7pQGgzSDk3gYQee+Gb6cdcuB
-# NCS30CTI5G8cRetu13hRCShiXhb8iqgZjSuxfyj3++B4ECp2/zzmtHDJF2z2NVjF
-# Yzz9ZjiqCiH0TLBn4wk0AECMDWK7ZbscH+FUMwFHTQyGf8plNP05E8jJ7Do=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFP0PpjGMd5zKrsv2
+# NfBwQOJfJdC9MA0GCSqGSIb3DQEBAQUABIIBAGJg3k0MfeibKts5+gq3MA2BeHj4
+# ekZJspJFN2vYQVFbc/b6eQdfVPnIdfCLFZRQeqEyTkWVJlQOOAQLC8/P13nL6pWC
+# aMROEYjl9cTL7ZCqSZ3wmIa0h+coKSCSZvlc5jTNkX9jyJjjkqL+x5TU92e7av7H
+# MdYnEVodD0whUX/opM1ttPnjeELYFjzG0czqcAtjJd7syc/s3kv28V7a49A6t9QL
+# sMYe+lUxhDJYKBD6E9v7nMNG9ykVQUgdIab5eaNGalmMWFcBcPGYdB07Tt8mU+JA
+# bkU//G6vJdq5vVynMlJSTf6cYoNL+J1OwDj8B3v6m4iQlkPsr70P24/DvO8=
 # SIG # End signature block

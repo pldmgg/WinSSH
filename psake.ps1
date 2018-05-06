@@ -82,7 +82,6 @@ foreach ($import in $Private) {
 
 '@ | Set-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1"
 
-    <#
     # Optionally Install-PSDepend and install any dependency Modules
     $PSDependOperations = @'
 try {
@@ -109,7 +108,7 @@ catch {
 }
 
 '@
-    Add-Content -Path -Value '& $PSScriptRoot\Install-PSDepend'
+    Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value '& $PSScriptRoot\Install-PSDepend.ps1'
     
     $RequiredModules = @("NTFSSecurity","ProgramManagement")
     $InstallImportRequiredModules = @'
@@ -140,7 +139,8 @@ catch {
         $UpdatedModuleInstallBlock = $InstallImportRequiredModules -replace 'RequiredModuleNameMatch',$ModuleDependency -replace 'PrimaryModuleNameMatch','$env:BHProjectName'
         Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $UpdatedModuleInstallBlock
     }
-    #>
+    
+
 
     [System.Collections.ArrayList]$FunctionTextToAdd = @()
     foreach ($ScriptFileItem in $PublicScriptFiles) {
@@ -243,11 +243,39 @@ Task Deploy -Depends Build {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7CTM562shmgNrIy0t3NYPHfY
-# AFygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcKVVuxTBnsUPZlbrrt16DfJK
+# owigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -304,11 +332,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFM1fwf4ZIuRWtX+E
-# MVH1TRJ9u/I9MA0GCSqGSIb3DQEBAQUABIIBAH6RJk4nf48PiB82IdI2I2XUqfbQ
-# bHb64xFBWB6OTAL9/Ux6DAD+bg4FjOgrYeIA92EVgj2L57fZoXbbJiZdjFUpHQxA
-# m/D7MruM0IRUinazBy/nrbWkCdaKssR3dUHAGPbffreUDRiilv1NoPW5H2El8LsB
-# 9IrQpVDBfU1/MFUVc/K9Rxs6RCIOYGrtbze6GDoo3JEqgUdn35fLFwYsF8GMuGWv
-# qalfEbB8cy31RxILykHj5o9ken1DaEVUe4/GpDsUKzLJMBUujHK5C4YNQx8gaPOc
-# CwZ5ZPpbvoNmLMYR7tI/vSlb9E33rQ+i9RNXUlMto0es/8WxsIDJidPHCk0=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFB6KMFjmUmz9fhSw
+# 2+kwpsdGGn79MA0GCSqGSIb3DQEBAQUABIIBAAerJsUVRTl82LNPpF8WjOYuRJPF
+# pOhr2XmRp+0PpW6mlc++2QZaZGgT+qy4UfyEhrBZ1dFo6mR4/CUWLzOBcLBDLOe5
+# VuDMUoXXcLvVMrC+MXsK+zM4cZXQI8XAfEkGujJ+zk1Ppw2CsOxtqmtDoqdGeE9d
+# gu31jhiIa28L4h/mzH0792Zo5T/7DmrVC4FKEDMNSlEMGVc53/I1rNYKAgBldX0/
+# pB4ISNVwfYrqwOf8ZAsmnwrFuKB+zC2Ic/bsk7z5+bCkDKMbhrcJ5poZN5hcAOBM
+# 45IRjLtKm1lFEzLA9hCwo+BZH0auUTN7dl8yQRae7PT+gZou0npqXP5Lo3w=
 # SIG # End signature block
