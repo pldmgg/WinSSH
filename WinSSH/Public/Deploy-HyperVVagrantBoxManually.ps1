@@ -1,31 +1,91 @@
 <#
     .SYNOPSIS
-        This function gets the SSL Certificate at the specified IP Address / Port
-        and returns an System.Security.Cryptography.X509Certificates.X509Certificate2 object.
+        This function downloads the specified Vagrant Virtual Machine from https://app.vagrantup.com
+        and deploys it to the Hyper-V hypervisor on the Local Host. If Hyper-V is not installed on the
+        Local Host, it will be installed.
+
+        IMPORTANT NOTE: Before using this function, you MUST uninstall any other Virtualization Software
+        on the Local Windows Host (VirtualBox, VMWare, etc)
 
     .DESCRIPTION
         See .SYNOPSIS
 
     .NOTES
 
-    .PARAMETER IPAddress
+    .PARAMETER VagrantBox
         This parameter is MANDATORY.
 
-        This parameter takes a string that represents an IP Address.
+        This parameter takes a string that represents the name of the Vagrant Box VM that you would like
+        deployed to Hyper-V. Use https://app.vagrantup.com to search for Vagrant Boxes. One of my favorite
+        VMs is 'centos/7'.
 
-    .PARAMETER Port
+    .PARAMETER VagrantProvider
         This parameter is MANDATORY.
 
-        This parameter takes an integer that represents a Port Number (443, 636, etc).
+        This parameter currently takes only one value: 'hyperv'. At some point, this function will be able
+        to deploy VMs to hypervisors other than Hyper-V, which is why it still exists as a parameter.
+
+    .PARAMETER VMName
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name that you would like your new VM to have in Hyper-V.
+
+    .PARAMETER VMDestinationDirectory
+        This parameter is MANDATORY.
+
+        This parameter takes a string that rperesents the full path to the directory that will contain ALL
+        files related to the new Hyper-V VM (VHDs, SnapShots, Configuration Files, etc). Make sure you
+        pick a directory on a drive that has enough space.
+
+        IMPORTANT NOTE: Vagrant Boxes are downloaded in a compressed format. A good rule of thumb is that
+        you'll need approximately QUADRUPLE the amount of space on the drive in order to decompress and
+        deploy the Vagrant VM. This is especially true with Windows Vagrant Box VMs.
+
+    .PARAMETER TemporaryDownloadDirectory
+        This parameter is OPTIONAL, but is defacto MANDATORY and defaults to "$HOME\Downloads".
+
+        This parameter takes a string that represents the full path to the directory that will be used
+        for Vagrant decompression operations. After everything is decompressed, the resulting files
+        will be moved to the directory specified by the -VMDestinationDirectory parameter.
+
+    .PARAMETER AllowRestarts
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, and if Hyper-V is NOT already installed on the Local
+        Host, then Hyper-V will be installed and the Local Host will be restarted after installation.
+
+    .PARAMETER SkipPreDownloadCheck
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. By default, this function checks to see if the destination drive
+        has enough space before downloading the Vagrant Box VM. It also ensures there is at least 2GB
+        of free space on the drive AFTER the Vagrant Box is downloaded (otherwise, it will not download the
+        Vagrant Box). Use this switch if you would like to attempt to download and deploy the Vagrant Box
+        VM regardless of how much space is available on the storage drive.
+
+    .PARAMETER SkipHyperVInstallCheck
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. By default, this function checks to see if Hyper-V is installed on the
+        Local Host. This takes about 10 seconds. If you would like to skip this check, use this switch.
+
+    .PARAMETER Repository
+        This parameter is OPTIONAL.
+
+        This parameter currently only takes the string 'Vagrant', which refers to the default Vagrant Box
+        Repository at https://app.vagrantup.com. Other Vagrant Repositories exist. At some point, this
+        function will be updated to include those other repositories.
 
     .EXAMPLE
-        # In the below example, 172.217.15.110 happens to be a google.com IP Address
+        # Open an elevated PowerShell Session, import the module, and -
 
-        PS C:\Users\zeroadmin> Check-Cert -IPAddress 172.217.15.110 -Port 443
-
-        Thumbprint                                Subject
-        ----------                                -------
-        8FBB134B2216D6C71CF4E4431ABD82182922AC7C  CN=*.google.com, O=Google Inc, L=Mountain View, S=California, C=US
+        PS C:\Users\zeroadmin> $DeployHyperVVagrantBoxSplatParams = @{
+            VagrantBox              = "centos/7"
+            VagrantProvider         = "hyperv"
+            VMName                  = "CentOS7Vault"
+            VMDestinationDirectory  = "H:\HyperV-VMs"
+        }
+        PS C:\Users\zeroadmin> $DeployVaultServerVMResult = Deploy-HyperVVagrantBoxManually @DeployHyperVVagrantBoxSplatParams
         
 #>
 function Deploy-HyperVVagrantBoxManually {
