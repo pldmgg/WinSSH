@@ -1,3 +1,30 @@
+<#
+    .SYNOPSIS
+        This function modifies sshd_config on the local host and sets the default shell
+        that Remote Users will use when they ssh to the local host.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER DefaultShell
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of two values: "powershell","pwsh"
+
+        If set to "powershell", when a Remote User connects to the local host via ssh, they will enter a
+        Windows PowerShell 5.1 shell.
+
+        If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
+        PowerShell Core 6 shell.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Set-DefaultShell -DefaultShell powershell
+        
+#>
 function Set-DefaultShell {
     [CmdletBinding()]
     Param(

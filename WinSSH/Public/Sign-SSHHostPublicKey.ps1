@@ -1,4 +1,33 @@
-# This function should be run on BOTH SSH Client AND SSHD Server Machines
+<#
+    .SYNOPSIS
+        This function (via teh Vault Server REST API) asks the Vault Server to sign the Local Host's
+        SSH Host Key (i.e. 'C:\ProgramData\ssh\ssh_host_rsa_key.pub', resulting in output
+        'C:\ProgramData\ssh\ssh_host_rsa_key-cert.pub').
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultSSHHostSigningUrl
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the Vault Server REST API endpoint responsible
+        for signing Host/Machine SSH Keys. The Url should be something like:
+            https://vaultserver.zero.lab:8200/v1/ssh-host-signer/sign/hostrole
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Vault Authentication Token that has
+        permission to request SSH Host Key Signing via the Vault Server REST API.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Sign-SSHHostPublicKey -VaultSSHHostSigningUrl $VaultSSHHostSigningUrl -VaultAuthToken $ZeroAdminToken
+        
+#>
 function Sign-SSHHostPublicKey {
     [CmdletBinding()]
     Param(

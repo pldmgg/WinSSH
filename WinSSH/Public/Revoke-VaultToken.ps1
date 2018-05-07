@@ -1,29 +1,44 @@
 <#
     .SYNOPSIS
-        This function Sets and/or fixes NTFS filesystem permissions recursively on the directories
-        'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh' and/or '$HOME\.ssh'.
+        This function revokes the Vault Token for the specified User.
 
     .DESCRIPTION
         See .SYNOPSIS
 
     .NOTES
 
-    .PARAMETER HomeFolderAndSubItemsOnly
-        This parameter is OPTIONAL.
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directory '$HOME\.ssh'
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
 
-    .PARAMETER ProgramDataFolderAndSubItemsOnly
-        This parameter is OPTIONAL.
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+        This parameter takes a string that represents a Token for a Vault User that has (root) permission to
+        lookup and delete Tokens using the Vault Server REST API.
+
+    .PARAMETER VaultUserToDelete
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of the user that you would like to revoke Tokens
+        for. The UserName should match the .meta.username property from objects returned by the
+        Get-VaultAccessorLookup function - which itself should match the Basic UserName in Active Directory.
+        (For example, if the Domain User is 'zero\jsmith' the "Basic UserName" is 'jsmith', which
+        is the value that you should supply to this paramter)
+
+        IMPORTANT NOTE: ALL tokens granted to the specified user will be revoked.
 
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
-        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            VaultServerBaseUri      = $VaultServerBaseUri
+            VaultAuthToken          = $ZeroAdminToken
+            VaultuserToDelete       = "jsmith"
+        }
+        PS C:\Users\zeroadmin> Revoke-VaultToken @SplatParams
         
 #>
 function Revoke-VaultToken {

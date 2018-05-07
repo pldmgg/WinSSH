@@ -1,10 +1,73 @@
-# This function should be run on the SSH Client Machine - i.e. the machine that generated the user ssh key pair via:
-#     ssh-keygen -t rsa -b 2048 -f "$HOME\.ssh\ToWin10LatestB1" -q -C "ToWin10LatestB1"
+<#
+    .SYNOPSIS
+        This function signs an SSH Client/User Public Key (for example, "$HOME\.ssh\id_rsa.pub") resulting
+        in a Public Certificate (for example, "$HOME\.ssh\id_rsa-cert.pub"). This Public Certificate can
+        then be used for Public Key Certificate SSH Authentication.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultSSHClientSigningUrl
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the Vault Server REST API endpoint responsible
+        for signing Client/User SSH Keys. The Url should be something like:
+            https://vaultserver.zero.lab:8200/v1/ssh-client-signer/sign/clientrole
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Vault Authentication Token that has
+        permission to request SSH User/Client Key Signing via the Vault Server REST API.
+
+    .PARAMETER AuthorizedUserPrincipals
+        This parameter is MANDATORY.
+
+        This parameter takes a string or array of strings that represent the User or Users that will
+        be using the Public Key Certificate to SSH into remote machines.
+
+        Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix: if your
+        domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
+
+    .PARAMETER PathToSSHUserPublicKeyFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to the SSH Public Key that you would like
+        the Vault Server to sign. Example: "$HOME\.ssh\id_rsa.pub"
+
+    .PARAMETER PathToSSHUserPublicKeyFile
+        This parameter is OPTIONAL, but becomes MANDATORY if you want to add the signed Public Key Certificate to
+        the ssh-agent service.
+
+        This parameter takes a string that represents a full path to the SSH User/Client private key file.
+
+    .PARAMETER AddToSSHAgent
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the signed Public Key Certificate will be added to the ssh-agent service. 
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            VaultSSHClientSigningUrl    = $VaultSSHClientSigningUrl
+            VaultAuthToken              = $ZeroAdminToken
+            AuthorizedUserPrincipals    = @("zeroadmin@zero")
+            PathToSSHUserPublicKeyFile  = "$HOME\.ssh\zeroadmin_id_rsa.pub"
+            PathToSSHUserPrivateKeyFile = "$HOME\.ssh\zeroadmin_id_rsa"
+            AddToSSHAgent               = $True
+        }
+        PS C:\Users\zeroadmin> Sign-SSHUserPublicKey @SplatParams
+        
+#>
 function Sign-SSHUserPublicKey {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$True)]
-        [string]$VaultSSHClientSigningUrl, # Should be something like "http://192.168.2.12:8200/v1//ssh-client-signer/sign/clientrole"
+        [string]$VaultSSHClientSigningUrl, # Should be something like "http://192.168.2.12:8200/v1/ssh-client-signer/sign/clientrole"
 
         [Parameter(Mandatory=$True)]
         [string]$VaultAuthToken, # Should be something like 'myroot' or '434f37ca-89ae-9073-8783-087c268fd46f'
