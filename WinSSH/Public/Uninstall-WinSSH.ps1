@@ -1,3 +1,26 @@
+<#
+    .SYNOPSIS
+        This function uninstalls OpenSSH-Win64 binaries, removes ssh-agent and sshd services (if they exist),
+        and deletes (recursively) the directories "C:\Program Files\OpenSSH-Win64" and "C:\ProgramData\ssh"
+        (if they exist) 
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER KeepSSHAgent
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, ONLY the SSHD server (i.e. sshd service) is uninstalled. Nothing
+        else is touched.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Uninstall-WinSSH
+        
+#>
 function Uninstall-WinSSH {
     [CmdletBinding()]
     Param (

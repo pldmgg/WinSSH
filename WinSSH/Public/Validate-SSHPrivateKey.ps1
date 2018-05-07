@@ -1,6 +1,30 @@
-# Function should be run on SSH Client Machine as part of Sign-SSHUserPublicKey function
-# In this function, in order to test if we have a valid Private Key, and if that Private Key
-# is password protected, we try and generate a Public Key from it using ssh-keygen
+<#
+    .SYNOPSIS
+        This function is meant to determine the following:
+            - Whether or not the specified file is, in fact, an SSH Private Key
+            - If the SSH Private Key File is password protected
+        
+        In order to test if we have a valid Private Key, and if that Private Key
+        is password protected, we try and generate a Public Key from it using ssh-keygen.
+        Depending on the output of ssh-keygen, we can make a determination.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PathToPrivateKeyFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a full path to the file that we believe is
+        a valid SSH Private Key that we want to test.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Validate-SSHPrivateKey -PathToPrivateKeyFile "$HOME\.ssh\random"
+        
+#>
 function Validate-SSHPrivateKey {
     [CmdletBinding()]
     Param(

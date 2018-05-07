@@ -1,3 +1,63 @@
+<#
+    .SYNOPSIS
+        This function installs or updates PowerShell Core on the local host.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER DownloadDirectory
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a full path to a directory where the latest PowerShell
+        Core release will be downloaded to.
+
+    .PARAMETER UsePackageManagement
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will use the respective Operating System's
+        Package Management system in order to install the latest PowerShell Core.
+        
+    .PARAMETER OS
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that must be one of the following values:
+        "win", "macos", "linux", "ubuntu", "debian", "centos", "redhat"
+
+        This parameter should only be used if you are downloading a PowerShell Core release that is NOT
+        meant for the Operating System that you are currently on.
+
+    .PARAMETER ReleaseVersion
+        This parameter is OPTIONAL. This parameter should only be used if you do NOT want the latest version.
+
+        This parameter takes a string that represents a PowerShell Core Release version.
+        Example: 6.1.0
+
+    .PARAMETER Channel
+        This parameter is OPTIONAL. This parameter should only be used if you do NOT want the latest version.
+
+        This parameter takes a string that can be one of 4 values:
+        "beta", "rc", "stable", "preview"
+    
+    .PARAMETER Iteration
+        This parameter is OPTIONAL. This parameter should only be used if you do NOT want the latest version.
+
+        This parameter takes an integer. For example, in the release "powershell-6.1.0-preview.2-1.rhel.7.x86_64.rpm",
+        iteration is 2.
+
+    .PARAMETER Latest
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. It is used by default. Using this switch installs the latest release of PowerShell
+        Core.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Update-PowerShellCore -DownloadDirectory "$HOME\Downloads" -Latest
+        
+#>
 function Update-PowerShellCore {
     [CmdletBinding(DefaultParameterSetName='PackageManagement')]
     Param(
@@ -24,14 +84,14 @@ function Update-PowerShellCore {
         $ReleaseVersion,
 
         [Parameter(Mandatory=$False)]
-        #[ValidateSet("beta", "rc", "stable")]
+        #[ValidateSet("beta", "rc", "stable", "preview")]
         $Channel,
 
         [Parameter(Mandatory=$False)]
         [int]$Iteration,
 
         [Parameter(Mandatory=$False)]
-        [switch]$Latest
+        [switch]$Latest = $True
         
     )
 
