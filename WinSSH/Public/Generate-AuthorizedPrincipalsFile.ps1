@@ -1,11 +1,11 @@
-# IMPORTANT NOTE: The Generate-AuthorizedPrincipalsFile will only ADD users to the $sshdir/authorized_principals
-# file (if they're not already in there). It WILL NOT delete or otherwise overwrite existing users in
-# $sshdir/authorized_principals
 <#
     .SYNOPSIS
         This function adds the specified User Accounts (both Local and Domain) to the file 
         'C:\ProgramData\ssh\authorized_principals' on the Local Host. Adding these User Accounts
-        to the 'authorized_principals' file allows these users to ssh into the Local Host. 
+        to the 'authorized_principals' file allows these users to ssh into the Local Host.
+
+        IMPORTANT NOTE: The Generate-AuthorizedPrincipalsFile will only ADD users to the authorized_principals
+        file (if they're not already in there). It WILL NOT delete or otherwise overwrite existing users in the file
 
     .DESCRIPTION
         See .SYNOPSIS
@@ -297,11 +297,23 @@ function Generate-AuthorizedPrincipalsFile {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIcrFtPkbU8oA5LdVQnD6Gxjy
-# JZWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5L99JoD+gmdfFu8E84V63o7m
+# +higggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -358,11 +370,11 @@ function Generate-AuthorizedPrincipalsFile {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMNAYoJgfeuhXVot
-# xbCZWLbr4B/AMA0GCSqGSIb3DQEBAQUABIIBAJb2tGVUwjs9fzI1LhkkIc5ogR1U
-# 40HyxkIAUC5cSSHmTVoZLtzGe6u8r5WP2G5iohkQ/WDpP5x/MJJ81iOtmNXU7GjI
-# tLp7Wsh1JYyZKtLUvQFvILCwpZUpeS1ehUw+PyQ6/RDFDUU7VywgGo22jfxeG79B
-# psqdPKHr7bLbk1Z4jA1EECsbl7w0iYd8uzaYJrtoBEI3Po4UXRPNuMec3Id45WOF
-# TzXnSt1Ll3BHRDPM8teqqlUJq3KcjqhNejcFO3+eAJqX1z1eEBrycIFgJtFszsSQ
-# qnNk0JAYyjgpM9pC4zEpC6OaXID5mK9Sk5rt/9+JGR4KvEkE9EfEjq+mGiE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBoRIwJsQTAzLZxW
+# PmWjPzsw/2rPMA0GCSqGSIb3DQEBAQUABIIBADec4eZesaTQTQCQqGFYyDanNPgH
+# bLoNUt7HKRGPOyikrudUTtjOW7fKimLGAdYSp2H4HXRZhGlzch1wAhTz9oRl6QLE
+# c3Bda4Js1MBIByB5RMCJrm0ww7XAEUFiZjn2upa4oqRbnK+h6vlF9ELWVAI7bOKY
+# 6ErNKDzMWlvrkjky3S4woIBjzVVFC1SRNOp3bpX2npzpmh4GLklqaDelP0igNrd9
+# EPegvnHct8hzjbGDPn8xIe74g5dNe3J/sVFXuw7VHjKps1ZbXhX+FzUdkJ2xzduZ
+# IdTuvNaKXd/QXJIgfsVvEjs/Qbg0o9pDN7vrC8F08YwYEORwXmChKiMQfNY=
 # SIG # End signature block

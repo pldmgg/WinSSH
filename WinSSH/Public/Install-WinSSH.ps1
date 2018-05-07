@@ -50,6 +50,12 @@
         This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
         Modules.
 
+    .PARAMETER UseChocolateyCmdLine
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via the Chocolatey CmdLine. If
+        the Chocolatey CmdLine is not already installed, it will be installed.
+
     .PARAMETER GitHubInstall
         This parameter is OPTIONAL.
 
@@ -302,11 +308,23 @@ function Install-WinSSH {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtxwcTdhdRxb9hs9AFaag4fXB
-# cVqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOrhO50NlQXVnXFsWvd9H+kvP
+# NR2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -363,11 +381,11 @@ function Install-WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGPa/HfT+13DAhvn
-# sh4R711nA4InMA0GCSqGSIb3DQEBAQUABIIBAHIiuSGzUAAb4GRNMKdeZGZpHNZr
-# JQgxMB+A+CYvS/NzGXeMzv3dpX4mGcjQz5eDFI4v2OByHO3oUstq3pz6868aMvmz
-# dlx0ldDtcsdD7Y3Raw1c1SMod4Kqcj/mLyMrcDqJ+Hf//yvlIxSgF/Yfhbb2NUEm
-# pYPOuH0mBG0l3Uq/JfB7l8IL8Tri+muUqoDQ82L3brBzrLbha1cZfzjOFuxgzhcj
-# 2F9lvU+aZfuUrQ1AxAAp0SnLSBazE3wLoEe909bBpZ77wPhaNk02YnoN72yd4rcT
-# 50V8HOhQKii9aX6HdqYocbI5Uyj5R4wYDSH3R8hCVoh+aKk4zetZWtCbj+c=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPTu7fGsbIVrF1+6
+# ea4FyxmqCJkIMA0GCSqGSIb3DQEBAQUABIIBAMD9beEkbm6RA9fvjH0b8SRumfWX
+# 93MkpzjN0TgdH5eH/IucsB/wPO/CSGIsEwj8ZUVUe9+8Wblx7hY+qx4TTRu2nw1/
+# YdGXscqKSfclC+yPyclLQ/PllyDeMYveg28gOTU6OAvDK3pDmkzsMDM+FFe3S6uc
+# nw82VGxTkOHDHkUiRvss3j5oB48qi2FLvEGvvQVc1mSw0MbRaBEvVbdjTkekOA1k
+# e4KVVOp8CI3R20WgXOu96nEIt5sWnQkY4KY4wqJWPOrEopyEzEIuS0v3u8wknOwl
+# JFUaTrNQzciNUALXfceMkXTXcMsto6i96Gh8e4A9gCJ+if6SEN1uqnjP3jU=
 # SIG # End signature block

@@ -15,6 +15,18 @@
         This parameter takes a string that represents the full path to the SSH User/Client Public Key that you
         would like to add to the Remote Host's ~/.ssh/authorized_keys file.
 
+    .PARAMETER RemoteHost
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an IP Address or DNS-Resolvable name to a remote host
+        running an sshd server.
+
+    .PARAMETER RemoteHostUserName
+        This parameter is MANDATORY,
+
+        This parameter takes a string that represents the User Name you would like to use to ssh
+        into the Remote Host.
+
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
@@ -127,11 +139,23 @@ function Add-PublicKeyToRemoteHost {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/Y/NzBJVa+51v6rOhjgMxzPV
-# oJ2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/LOeSq0aPVWSUoyz67YHqZ63
+# JLSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -188,11 +212,11 @@ function Add-PublicKeyToRemoteHost {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDUgbVhOzbr3BUdD
-# 546i4XNME4W5MA0GCSqGSIb3DQEBAQUABIIBADTt1pSteGA3ic/ORwfM6JHMXC+B
-# qWq7ryo7gEomxiLL+3HvvzI8OUhA7Tw3gpf+JIHDDrCAg1ZA7vTCXcOnOs9o9Ad7
-# py4Xk9bc9QOH5W4ISQkACE4SxGps2QNBEmdLs9VLimjgHOvWbdpzRAtC4a8jKJ8q
-# hQ3VTbW7MR/p6cGRj5S+RpBMpktM6+EFt5Ul/gUNFpkRx/D17gUIHPWaP+xrZ49T
-# ppGUwISE7Ou/yNdewtm3TWxK2T9nUJVVFTXfokBJC/9n4F/V75OQjYJrDSr8Twdu
-# Ynt2d7Gx+FhlSimS17TqdD73fX9ZLuUY1qRp9SgtSbZLhtX5Rt4TvmgaZwk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKLnbl/4lzjH7T7D
+# +HfRyVJ+18c7MA0GCSqGSIb3DQEBAQUABIIBAJOfInXQ+ORAD3yuPq+PLI2zF99c
+# AGolXhGh21pUwzlEjhdpt5cE7lEHspiUGvu0UGRf/DcU7a928QSBkNMtKnt1+BSD
+# GHwd/MYNLQj3j3fGyH3ptsMcQbCo6xCw7vBaBsAS28otH+apO7smHAUIqAab7gZG
+# SccnoCx+cvPkyA4xT+K4IAExtq6zt7oqbAEWfr0nnI1tev5H4LUHRi34Wr/8T01o
+# Y8u1MTIjfRc7rc0arxxuIflJVmOnYrdlc/4k2kBieVC0r8rpZsO/Pw7U6JJHyNN/
+# z57tLxO0Ac/ONKTY/zw4fjaYmpFT4JfMaayaol+d4CgV8Z2AC8G0dpt+Nb4=
 # SIG # End signature block

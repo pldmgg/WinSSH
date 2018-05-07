@@ -69,6 +69,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'NewUniqueString' | Should Be $False
         $Commands -contains 'PauseForWarning' | Should Be $False
         $Commands -contains 'TestIsValidIPAddress' | Should Be $False
+        $Commands -contains 'TestLDAP' | Should Be $False
         $Commands -contains 'TestPort' | Should Be $False
         $Commands -contains 'UnzipFile' | Should Be $False
 
@@ -101,7 +102,6 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Set-DefaultShell' | Should Be $True
         $Commands -contains 'Sign-SSHHostPublicKey' | Should Be $True
         $Commands -contains 'Sign-SSHUserPublicKey' | Should Be $True
-        $Commands -contains 'Test-LDAP' | Should Be $True
         $Commands -contains 'Uninstall-WinSSH' | Should Be $True
         $Commands -contains 'Update-PowerShellCore' | Should Be $True
         $Commands -contains 'Validate-SSHPrivateKey' | Should Be $True
@@ -123,6 +123,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         [bool]$Module.Invoke({Get-Item function:NewUniqueString}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:PauseForWarning}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:TestIsValidIPAddress}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:TestLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:TestPort}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:UnzipFile}) | Should Be $True
     }
@@ -162,11 +163,23 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNfQxj854kcdhDr0feoo54/w5
-# WpKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUV6G7v01WCdXKtee2bHPVqUVY
+# Ipigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -223,11 +236,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOBMSowQ5O/Ebg6G
-# goR2osmKzC9GMA0GCSqGSIb3DQEBAQUABIIBAB9OdOfRLrkBbvk/d9i7OORCPrcj
-# hUMvEd+IUvgIbnNRm5p9IWml1RTlNcyLABTpoVTGyXCbs3vU71WGuLbYtoPrOJBP
-# kkMNzTuGqQOXvbWpkL5yQFh+Ss6KisOeowIsu7Cse670KlohJAe9yJBiYLkbE5cd
-# tc2kapucbEZfUrM8TvY9kosvkmssPJbij8MsA8TzIjRPSimD/KuqS6WzDriaHwdq
-# 36VQDJzrpqvqLXEK8TTZ/T0tDU7tg7+iJHpfCPNYHJooWQ7hCngZWWrHhO7ETRE5
-# pR5GyC+MRtvgCtbBVDM1OWQriwuAdrqc61qWlC52ayFK/VYmi/bwSY3cITc=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLdFuhAgchTxupAJ
+# RtE9usFF3LpjMA0GCSqGSIb3DQEBAQUABIIBALJQa4buB/LqLZnotzgEZJ+9r31i
+# RPnE5BmaupG9hUXEwEV3ooamyGgkm+2fzy6lXRYwF6ICJ0x8D8MjaTJjftgFPFRe
+# TK0KDKSOLlkcSayoDq5Giyd5/mwzumyjFgJD4kT0JLnv7Co5pCPNFXbAHAFwMbNp
+# qiFpMIVZJMbCKQsaSDgdQyMrwxb7jR0mIml9YbMFWMqoPYHGbIuHk/Ix+MoaRv9t
+# SuMUxqgWoRxaFzoFXD12PHhOsvFCRrgQZuFwlyNMX+GW69MsDHpW9dw1lYvlDh7U
+# 4i6CmD4ThqzOPG8PHB3IaBJE1ctB94p98MVHaUKfGb0VOSofHowbxxCgpEA=
 # SIG # End signature block

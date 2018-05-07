@@ -59,9 +59,144 @@ catch {
 
 
 
-# This function should be run on BOTH SSH Client AND SSHD Server Machines
-# Output is a PSCustomObject with property [System.Collections.ArrayList] FilesUpdated and property
-# [System.IO.FileInfo] SignSSHHostKeyResult
+<#
+    .SYNOPSIS
+        This function is meant to make it easy to configure both the SSH Client and SSHD Server for Public
+        Certificate Authentication. It can (and should) be run on BOTH the SSH Client and the SSHD Server.
+
+        This function does the following:
+            - Uses the Vault Server's SSH Host Signing Certificate Authority (CA) to sign the local host's
+            ssh host key (i.e. 'C:\ProgramData\ssh\ssh_host_rsa_key.pub', resulting in
+            C:\ProgramData\ssh\ssh_host_rsa_key-cert.pub)
+            - Gets the Public Key of the CA used to sign User/Client SSH Keys from the Vault Server and adds it to:
+                1) The file C:\ProgramData\ssh\authorized_keys as a string;
+                2) The file C:\ProgramData\ssh\ssh_known_hosts as a string; and
+                3) The dedicated file C:\ProgramData\ssh\ca_pub_key_of_client_signer.pub
+            - Gets the Public Key of the CA used to sign Host/Machine SSH Keys from the Vault Server and adds it to:
+                1) The file C:\ProgramData\ssh\authorized_keys as a string;
+                2) The file C:\ProgramData\ssh\ssh_known_hosts as a string; and
+                3) The dedicated file C:\ProgramData\ssh\ca_pub_key_of_host_signer.pub
+            - Adds references to user accounts that you would like to grant ssh access to the local machine
+            to C:\ProgramData\ssh\authorized_principals (includes both Local and Domain users)
+            - Ensures NTFS filesystem permissions are set appropriately for the aforementioned files
+            - Adds references to 'TrustedUserCAKeys' and 'AuthorizedPrincipalsFile' to
+            C:\ProgramData\ssh\sshd_config
+
+        IMPORTANT NOTE: Just in case any breaking/undesireable changes are made to the host's ssh configuration,
+        all files that could potentially be changed are backed up to C:\ProgramData\ssh\Archive before any
+        changes are actually made.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PublicKeyOfCAUsedToSignUserKeysFilePath
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignUserKeysFilePath,
+        -PublicKeyOfCAUsedToSignUserKeysAsString, or -PublicKeyOfCAUsedToSignUserKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents a path to a file that is the Public Key of the CA
+        used to sign SSH User/Client Keys.
+
+    .PARAMETER PublicKeyOfCAUsedToSignUserKeysAsString
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignUserKeysFilePath,
+        -PublicKeyOfCAUsedToSignUserKeysAsString, or -PublicKeyOfCAUsedToSignUserKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the Public Key of the CA used to sign SSH User/Client
+        Keys. The string must start with "ssh-rsa".
+
+    .PARAMETER PublicKeyOfCAUsedToSignUserKeysVaultUrl
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignUserKeysFilePath,
+        -PublicKeyOfCAUsedToSignUserKeysAsString, or -PublicKeyOfCAUsedToSignUserKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the URL of the Vault Server Rest API Endpoint that
+        advertises the Public Key of the CA used to sign SSH User/Client Keys. The URL should be something like:
+            https://<FQDNOfVaultServer>:8200/v1/ssh-client-signer/public_key
+
+    .PARAMETER PublicKeyOfCAUsedToSignHostKeysFilePath
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignHostKeysFilePath,
+        -PublicKeyOfCAUsedToSignhostKeysAsString, or -PublicKeyOfCAUsedToSignHostKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents a path to a file that is the Public Key of the CA
+        used to sign SSH Host/Machine Keys.
+
+    .PARAMETER PublicKeyOfCAUsedToSignHostKeysAsString
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignHostKeysFilePath,
+        -PublicKeyOfCAUsedToSignhostKeysAsString, or -PublicKeyOfCAUsedToSignHostKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the Public Key of the CA used to sign SSH Host/Machine
+        Keys. The string must start with "ssh-rsa".
+
+    .PARAMETER PublicKeyOfCAUsedToSignHostKeysVaultUrl
+        This parameter is OPTIONAL, however, either -PublicKeyOfCAUsedToSignHostKeysFilePath,
+        -PublicKeyOfCAUsedToSignhostKeysAsString, or -PublicKeyOfCAUsedToSignHostKeysVaultUrl is REQUIRED.
+
+        This parameter takes a string that represents the URL of the Vault Server REST API Endpoint that
+        advertises the Public Key of the CA used to sign SSH User/Client Keys. The URL should be something like:
+            https://<FQDNOfVaultServer>:8200/v1/ssh-host-signer/public_key
+
+    .PARAMETER AuthorizedUserPrincipals
+        This parameter is OPTIONAL, but highly recommended.
+
+        This parameter takes an array of strings, each of which represents either a Local User Account
+        or a Domain User Account. Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix: if your
+        domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
+
+        These strings will be added to the file C:\ProgramData\ssh\authorized_principals, and these User Accounts
+        will be permitted to SSH into the machine that this function is run on.
+
+        You CAN use this parameter in conjunction with the -AuthorizedPrincipalsUserGroup parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .PARAMETER AuthorizedPrincipalsUserGroup
+        This parameter is OPTIONAL.
+
+        This parameter takes an array of strings that can be any combination of the following values:
+            - AllUsers
+            - LocalAdmins
+            - LocalUsers
+            - DomainAdmins
+            - DomainUsers
+        
+        The value 'AllUsers' is the equivalent of specifying 'LocalAdmins','LocalUsers','DomainAdmins', and
+        'DomainUsers'.
+
+        Each User Account that is a member of the specified groups will be added to the file
+        C:\ProgramData\ssh\authorized_principals, and these User Accounts will be permitted to SSH into the machine
+        that this function is run on.
+
+        You CAN use this parameter in conjunction with the -AuthorizedUserPrincipals parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .PARAMETER VaultSSHHostSigningUrl
+        This parameter is OPTIONAL, but highly recommended.
+
+        This parameter takes a string that represents the URL of the Vault Server REST API endpoint that is
+        responsible for signing the Local Host's Host/Machine SSH Key. The URL should be something like:
+            http://<FQDNOfVaultServer>:8200/v1/ssh-host-signer/sign/hostrole
+
+        Using this parameter outputs the signed SSH Host/Machine Key file C:\ProgramData\ssh\ssh_host_rsa_key-cert.pub
+
+    .PARAMETER VaultAuthToken
+        This parameter is OPTIONAL, but becomes MANDATORY if you use the -VaultSSHHostSigningUrl parameter.
+        It should only be used if you use the -VaultSSHHostSigningUrl parameter.
+
+        This parameter takes a string that represents a Vault Authentiction token with permission to
+        request that the Vault Server sign the Local Host's SSH Host/Machine Key.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+        
+        PS C:\Users\zeroadmin> $AddCAPubKeyToSSHAndSSHDConfigSplatParams = @{
+            PublicKeyOfCAUsedToSignUserKeysVaultUrl     = "$VaultServerBaseUri/ssh-client-signer/public_key"
+            PublicKeyOfCAUsedToSignHostKeysVaultUrl     = "$VaultServerBaseUri/ssh-host-signer/public_key"
+            AuthorizedPrincipalsUserGroup               = @("LocalAdmins","DomainAdmins")
+            VaultSSHHostSigningUrl                      = "$VaultServerBaseUri/ssh-host-signer/sign/hostrole"
+            VaultAuthToken                              = $ZeroAdminToken
+        }
+        PS C:\Users\zeroadmin> $AddCAPubKeysResult = Add-CAPubKeyToSSHAndSSHDConfig @AddCAPubKeyToSSHAndSSHDConfigSplatParams
+#>
 function Add-CAPubKeyToSSHAndSSHDConfig {
     [CmdletBinding(DefaultParameterSetName='VaultUrl')]
     Param(
@@ -608,6 +743,45 @@ function Add-CAPubKeyToSSHAndSSHDConfig {
 }
 
 
+<#
+    .SYNOPSIS
+        This function connects to a Remote Host via ssh and adds the specified User/Client SSH Public Key to
+        the ~/.ssh/authorized_keys file on that Remote Host. As long as you can connect to the Remote Host via
+        ssh, this function will work with both Windows and Linux targets.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PublicKeyPath
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to the SSH User/Client Public Key that you
+        would like to add to the Remote Host's ~/.ssh/authorized_keys file.
+
+    .PARAMETER RemoteHost
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an IP Address or DNS-Resolvable name to a remote host
+        running an sshd server.
+
+    .PARAMETER RemoteHostUserName
+        This parameter is MANDATORY,
+
+        This parameter takes a string that represents the User Name you would like to use to ssh
+        into the Remote Host.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            PublicKeyPath       = "$HOME\.ssh\id_rsa.pub"
+            RemoteHost          = "Ubuntu18.zero.lab"
+            RemoteHostUserName  = "zero\zeroadmin"
+        }
+        PS C:\Users\zeroadmin> Add-PublicKeyToRemoteHost @SplatParams
+#>
 function Add-PublicKeyToRemoteHost {
     [CmdletBinding()]
     Param(
@@ -662,12 +836,56 @@ function Add-PublicKeyToRemoteHost {
     }
 
     #ssh -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
-    ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+    if ($RemoteHostUserName -match "\\|@") {
+        if ($RemoteHostUserName -match "\\") {
+            $DomainPrefix = $($RemoteHostUserName -split "\\")[0]
+        }
+        if ($RemoteHostUserName -match "@") {
+            $DomainPrefix = $($RemoteHostUserName -split "\\")[-1]
+        }
+    }
+
+    if (!$DomainPrefix) {
+        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+    }
+    else {
+        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+    }
 
     ##### END Main Body #####
 }
 
 
+<#
+    .SYNOPSIS
+        This function gets the SSL Certificate at the specified IP Address / Port
+        and returns an System.Security.Cryptography.X509Certificates.X509Certificate2 object.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER IPAddress
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an IP Address.
+
+    .PARAMETER Port
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a Port Number (443, 636, etc).
+
+    .EXAMPLE
+        # In the below example, 172.217.15.110 happens to be a google.com IP Address
+
+        PS C:\Users\zeroadmin> Check-Cert -IPAddress 172.217.15.110 -Port 443
+
+        Thumbprint                                Subject
+        ----------                                -------
+        8FBB134B2216D6C71CF4E4431ABD82182922AC7C  CN=*.google.com, O=Google Inc, L=Mountain View, S=California, C=US
+        
+#>
 function Check-Cert {
     [CmdletBinding()]
     Param (
@@ -700,6 +918,156 @@ function Check-Cert {
 }
 
 
+<#
+    .SYNOPSIS
+        This function uses the HashiCorp Vault Server's REST API to configure the Vault Server for
+        LDAP Authrntication.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerNetworkLocation
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the network location (IP Address or DNS-Resolvable)
+        of the Vault Server.
+
+    .PARAMETER VaultServerPort
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a Port Number (8200, etc). The Vault Server
+        typically uses port 8200.
+
+    .PARAMETER EncrytNetworkTraffic
+        This parameter is OPTIONAL, but is set by default to be $True.
+
+        This parameter is a switch. If used, the Vault Server will be configured to encrypt network
+        traffic via TLS.
+
+        IMPORTANT NOTE: NEVER set this parameter to $False unless you are simply testing the Vault Server
+        in Development Mode. In production, you MUST encrypt network traffic to/from the Vault Server,
+        and therefore, this parameter must be $True.
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Vault Authentiction token with permission to
+        configure teh Vault Server for LDAP Authentication.
+
+    .PARAMETER VaultLogFileName
+        This parameter is OPTIONAL, but is set to 'vault_audit.log' by default.
+
+        This parameter takes a string that represents the name of the log file on the Vault Server that
+        logs all activity (i.e. Vault Operator Command Line as well as REST API calls).
+
+    .PARAMETER VaultLogEndPointName
+        This parameter is OPTIONAL, but is set to 'default-audit'.
+
+        This parameter takes a string that represents the name of the Vault Server REST API Endpoint
+        used to enable and configure the Vault Server activity log. For context, this value is used
+        with a REST API URL similar to:
+            "$VaultServerBaseUri/sys/audit/$VaultLogEndPointName"
+
+    .PARAMETER PerformOptionalSteps
+        This parameter is OPTIONAL, but highly recommended.
+
+        This parameter is a switch. If used, the following additional configuration operations will
+        be performed on the Vault Server:
+            - A backup root token with username 'backupadmin' will be created.
+            - A 'custom-root' policy will be created and applied to the "VaultAdmins" Group (which must already exist
+            in LDAP). This policy effectively grants all users in the "VaultAdmins" Group root access to the Vault Server.
+            - A 'vaultusers' policy will be created and applied to the "VaultUsers" Group (which must already exist
+            in LDAP). Users in the "VaultUsers" Group will have all permissions except 'delete' and 'sudo'.
+
+    .PARAMETER LDAPServerHostNameOrIP
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents either the IP Address or DNS-Resolvable name of
+        the LDAP Server. In a Windows environment, this would be a Domain Controller.
+
+    .PARAMETER LDAPServicePort
+        This parameter is MANDATORY.
+
+        This parameter takes an integer with possible values: 389, 636, 3268, or 3269. Depending
+        on how you have LDAP configured, use the appropriate port number. If you are not sure,
+        use the Test-LDAP function to determine which ports are in use.
+
+    .PARAMETER BindUserDN
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an LDAP Path to a User Account Object - somthing like:
+            cn=vault,ou=OrgUsers,dc=zero,dc=lab
+
+        This User Account will be used by the Vault Server to search the LDAP database and confirm
+        credentials for the user trying to login to the Vault Server against the LDAP database. This
+        LDAP account should be dedicated for use by the Vault Server and should not have any other purpose.
+
+    .PARAMETER LDAPBindCredentials
+        This parameter is MANDATORY.
+
+        This parameter takes a PSCredential. Th e UserName should corredpound to the UserName provided to the
+        -BindUserDN parameter, but should be in format <DomainPrefix>\<UserName>. So, to be consistent with
+        the example provided in the -BindUserDN comment-based-help, you could create the value for
+        -LDAPBindCredentials via:
+            $Creds = [pscredential]::new("zero\vault",$(Read-Host "Please Enter the Password for 'zero\vault'" -AsSecureString))
+
+    .PARAMETER LDAPUserOUDN
+        This parameter is MANDATORY.
+
+        This parameter takes a string tht represents an LDAP Path to an Organizational Unit (OU) that Vault
+        will search in order to find User Accounts. To stay consistent with the example provided in the
+        comment-based-help for the -BindUserDN parameter, this would be:
+            ou=OrgUsers,dc=zero,dc=lab
+
+    .PARAMETER LDAPGroupOUDN
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an LDAP Path to the Organizational Unit (OU) that
+        contains the Security Groups "VaultAdmins" and "VaultUsers". This could be something like:
+            ou=Groups,dc=zero,dc=lab
+
+    .PARAMETER LDAPVaultUsersSecurityGroupDN
+        This parameter is OPTIONAL, however, it becomes MANDATORY when the -PerformOptionalSteps parameter is used.
+
+        This parameter takes a string that represents the LDAP Path to the "VaultUsers" Security Group. To be
+        consistent with the example provided in teh comment-based-help for the -LDAPGroupOUDN parameter, this
+        should be something like:
+            cn=VaultUsers,ou=Groups,dc=zero,dc=lab
+
+        IMPORTANT NOTE: The Common Name (CN) for this LDAP Path MUST be 'VaultUsers'
+
+    .PARAMETER LDAPVaultAdminsSecurityGroupDN
+        This parameter is OPTIONAL, however, it becomes MANDATORY when the -PerformOptionalSteps parameter is used.
+
+        This parameter takes a string that represents the LDAP Path to the "VaultAdmins" Security Group. To be
+        consistent with the example provided in teh comment-based-help for the -LDAPGroupOUDN parameter, this
+        should be something like:
+            cn=VaultAdmins,ou=Groups,dc=zero,dc=lab
+
+        IMPORTANT NOTE: The Common Name (CN) for this LDAP Path MUST be 'VaultAdmins'
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $ConfigureVaultLDAPSplatParams = @{
+            VaultServerNetworkLocation      = "vaultserver.zero.lab"
+            VaultServerPort                 = 8200
+            VaultAuthToken                  = $VaultAuthToken
+            LDAPServerHostNameOrIP          = "ZeroDC01.zero.lab"
+            LDAPServicePort                 = 636
+            LDAPBindCredentials             = $LDAPBindCredentials
+            BindUserDN                      = "cn=vault,ou=OrgUsers,dc=zero,dc=lab"
+            LDAPUserOUDN                    = "ou=OrgUsers,dc=zero,dc=lab"
+            LDAPGroupOUDN                   = "ou=Groups,dc=zero,dc=lab"
+            PerformOptionalSteps            = $True
+            LDAPVaultUsersSecurityGroupDN   = "cn=VaultUsers,ou=Groups,dc=zero,dc=lab"
+            LDAPVaultAdminsSecurityGroupDN  = "cn=VaultAdmins,ou=Groups,dc=zero,dc=lab"
+        }
+        PS C:\Users\zeroadmin> $ConfigureVaultLDAPResult = Configure-VaultServerForLDAPAuth @ConfigureVaultLDAPSplatParams
+        
+#>
 function Configure-VaultServerForLDAPAuth {
     [CmdletBinding()]
     Param (
@@ -734,12 +1102,12 @@ function Configure-VaultServerForLDAPAuth {
         [ValidateSet(389,636,3268,3269)]
         [int]$LDAPServicePort,
 
+        [Parameter(Mandatory=$True)]
+        [string]$BindUserDN, # Should be a path to a User Account LDAP object, like cn=vault,ou=OrgUsers,dc=zero,dc=lab
+
         # Should be a non-privileged LDAP/AD account whose sole purpose is allowing Vault to read the LDAP Database
         [Parameter(Mandatory=$True)]
         [pscredential]$LDAPBindCredentials,
-
-        [Parameter(Mandatory=$True)]
-        [string]$BindUserDN, # Should be a path to a User Account LDAP object, like cn=vault,ou=OrgUsers,dc=zero,dc=lab
         
         [Parameter(Mandatory=$True)]
         [string]$LDAPUserOUDN, # Something like ou=OrgUsers,dc=zero,dc=lab
@@ -764,7 +1132,7 @@ function Configure-VaultServerForLDAPAuth {
     $Output = [ordered]@{}
 
     if ($EncryptNetworkTraffic) {
-        $VaultServerBaseUri = "https://$VaultServerNetworkLocation" + ":$VaultServerPort/v1"    
+        $VaultServerBaseUri = "https://$VaultServerNetworkLocation" + ":$VaultServerPort/v1"
     }
     else {
         $VaultServerBaseUri = "http://$VaultServerNetworkLocation" + ":$VaultServerPort/v1"
@@ -1234,6 +1602,52 @@ function Configure-VaultServerForLDAPAuth {
 }
 
 
+<#
+    .SYNOPSIS
+        This function uses the Hashicorp Vault Server's REST API to configure the Vault Server for
+        SSH Public Key Authentication and Management.
+
+        The following actions are performed on teh Vault Server (via the REST API):
+            - The Vault SSH User/Client Key Signer is enabled
+            - A Certificate Authority (CA) for the SSH User/Client Key Signer is created
+            - The Vault SSH Host/Machine Key Signer is enabled
+            - A Certificate Authority (CA) for the SSH Host/Machine Key Signer is created
+            - The Vault the SSH User/Client Signer Role Endpoint is configured
+            - The Vault the SSH Host/Machine Signer Role Endpoint is configured
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents Base Uri for the Vault Server REST API. It should be
+        something like:
+            "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER DomainCredentialsWithAdminAccessToVault
+        This parameter is OPTIONAL. However, either this parameter or the -VaultAuthToken parameter is REQUIRED.
+
+        This parameter takes a PSCredential. Assuming that LDAP Authenitcation is already enabled and configured
+        onthe Vault Server, create a PSCredential that is a member of the "VaultAdmins" Security Group (or
+        equivalent) in LDAP.
+            $Creds = [pscredential]::new("zero\zeroadmin",$(Read-Host "Please Enter the Password for 'zero\zeroadmin'" -AsSecureString))
+
+    .PARAMETER VaultAuthToken
+        This parameter is OPTIONAL. However, either this parameter or the -DomainCredentialsWithAdminAccessToVault
+        parameter is REQUIRED.
+
+        This parameter takes a string that represents a Vault Authentication Token that has privileges to make
+        configuration changes to the Vault Server.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $ConfigureVaultSSHMgmt = Configure-VaultServerForSSHManagement -VaultServerBaseUri $VaultServerBaseUri -VaultAuthToken $ZeroAdminToken
+        
+#>
 function Configure-VaultServerForSSHManagement {
     [CmdletBinding()]
     Param (
@@ -1545,6 +1959,96 @@ function Configure-VaultServerForSSHManagement {
 }
 
 
+<#
+    .SYNOPSIS
+        This function downloads the specified Vagrant Virtual Machine from https://app.vagrantup.com
+        and deploys it to the Hyper-V hypervisor on the Local Host. If Hyper-V is not installed on the
+        Local Host, it will be installed.
+
+        IMPORTANT NOTE: Before using this function, you MUST uninstall any other Virtualization Software
+        on the Local Windows Host (VirtualBox, VMWare, etc)
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VagrantBox
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of the Vagrant Box VM that you would like
+        deployed to Hyper-V. Use https://app.vagrantup.com to search for Vagrant Boxes. One of my favorite
+        VMs is 'centos/7'.
+
+    .PARAMETER VagrantProvider
+        This parameter is MANDATORY.
+
+        This parameter currently takes only one value: 'hyperv'. At some point, this function will be able
+        to deploy VMs to hypervisors other than Hyper-V, which is why it still exists as a parameter.
+
+    .PARAMETER VMName
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name that you would like your new VM to have in Hyper-V.
+
+    .PARAMETER VMDestinationDirectory
+        This parameter is MANDATORY.
+
+        This parameter takes a string that rperesents the full path to the directory that will contain ALL
+        files related to the new Hyper-V VM (VHDs, SnapShots, Configuration Files, etc). Make sure you
+        pick a directory on a drive that has enough space.
+
+        IMPORTANT NOTE: Vagrant Boxes are downloaded in a compressed format. A good rule of thumb is that
+        you'll need approximately QUADRUPLE the amount of space on the drive in order to decompress and
+        deploy the Vagrant VM. This is especially true with Windows Vagrant Box VMs.
+
+    .PARAMETER TemporaryDownloadDirectory
+        This parameter is OPTIONAL, but is defacto MANDATORY and defaults to "$HOME\Downloads".
+
+        This parameter takes a string that represents the full path to the directory that will be used
+        for Vagrant decompression operations. After everything is decompressed, the resulting files
+        will be moved to the directory specified by the -VMDestinationDirectory parameter.
+
+    .PARAMETER AllowRestarts
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, and if Hyper-V is NOT already installed on the Local
+        Host, then Hyper-V will be installed and the Local Host will be restarted after installation.
+
+    .PARAMETER SkipPreDownloadCheck
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. By default, this function checks to see if the destination drive
+        has enough space before downloading the Vagrant Box VM. It also ensures there is at least 2GB
+        of free space on the drive AFTER the Vagrant Box is downloaded (otherwise, it will not download the
+        Vagrant Box). Use this switch if you would like to attempt to download and deploy the Vagrant Box
+        VM regardless of how much space is available on the storage drive.
+
+    .PARAMETER SkipHyperVInstallCheck
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. By default, this function checks to see if Hyper-V is installed on the
+        Local Host. This takes about 10 seconds. If you would like to skip this check, use this switch.
+
+    .PARAMETER Repository
+        This parameter is OPTIONAL.
+
+        This parameter currently only takes the string 'Vagrant', which refers to the default Vagrant Box
+        Repository at https://app.vagrantup.com. Other Vagrant Repositories exist. At some point, this
+        function will be updated to include those other repositories.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $DeployHyperVVagrantBoxSplatParams = @{
+            VagrantBox              = "centos/7"
+            VagrantProvider         = "hyperv"
+            VMName                  = "CentOS7Vault"
+            VMDestinationDirectory  = "H:\HyperV-VMs"
+        }
+        PS C:\Users\zeroadmin> $DeployVaultServerVMResult = Deploy-HyperVVagrantBoxManually @DeployHyperVVagrantBoxSplatParams
+        
+#>
 function Deploy-HyperVVagrantBoxManually {
     [CmdletBinding(DefaultParameterSetName='ExternalNetworkVM')]
     Param(
@@ -1826,6 +2330,34 @@ function Deploy-HyperVVagrantBoxManually {
 }
 
 
+<#
+    .SYNOPSIS
+        This function Sets and/or fixes NTFS filesystem permissions recursively on the directories
+        'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh' and/or '$HOME\.ssh'.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER HomeFolderAndSubItemsOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will only fix permissions recursively on
+        the directory '$HOME\.ssh'
+
+    .PARAMETER ProgramDataFolderAndSubItemsOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will only fix permissions recursively on
+        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function Fix-SSHPermissions {
     [CmdletBinding()]
     Param(
@@ -2016,9 +2548,77 @@ function Fix-SSHPermissions {
 }
 
 
-# IMPORTANT NOTE: The Generate-AuthorizedPrincipalsFile will only ADD users to the $sshdir/authorized_principals
-# file (if they're not already in there). It WILL NOT delete or otherwise overwrite existing users in
-# $sshdir/authorized_principals
+<#
+    .SYNOPSIS
+        This function adds the specified User Accounts (both Local and Domain) to the file 
+        'C:\ProgramData\ssh\authorized_principals' on the Local Host. Adding these User Accounts
+        to the 'authorized_principals' file allows these users to ssh into the Local Host.
+
+        IMPORTANT NOTE: The Generate-AuthorizedPrincipalsFile will only ADD users to the authorized_principals
+        file (if they're not already in there). It WILL NOT delete or otherwise overwrite existing users in the file
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER AuthorizedPrincipalsFileLocation
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the full path to desired location of the newly generated
+        'authorized_principals' file. If this parameter is NOT used, the function will default to writing the
+        'authorized_principals' file to the 'C:\ProgramData\ssh' directory. If that directory does not exist,
+        then it will be written to the 'C:\Program Files\OpenSSH-Win64' directory. If that directory does not
+        exist, the function will halt.
+
+    .PARAMETER UserGroupToAdd
+        This parameter is OPTIONAL, however, either this parameter or the -UsersToAdd parameter is REQUIRED.
+
+        This parameter takes an array of strings. Possible string values are:
+            - AllUsers
+            - LocalAdmins
+            - LocalUsers
+            - DomainAdmins
+            - DomainUsers
+        
+        Using "LocalAdmins" will add all User Accounts that are members of the Built-In 'Administrators' Security Group
+        on the Local Host to the authorized_principals file.
+
+        Using "LocalUsers" will add all user Accounts that are members of the Built-In 'Users' Security Group on
+        the Local Host to the authorized_principals file.
+
+        Using "DomainAdmins" will add all User Accounts that are members of the "Domain Admins" Security Group in
+        Active Directory to the authorized_principals file.
+
+        Using "Domain Users" will add all User Accounts that are members of the "Domain Users" Security Group in
+        Active Directory to the authorized_principals file.
+
+        Using "AllUsers" will add User Accounts that are members of all of the above Security Groups to the
+        authorized_principals file.
+
+        You CAN use this parameter in conjunction with the -UsersToAdd parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .PARAMETER UsersToAdd
+        This parameter is OPTIONAL, however, either this parameter or the -UserGroupToAdd parameter is REQUIRED.
+
+        This parameter takes an array of strings, each of which represents either a Local User Account
+        or a Domain User Account. Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix: if your
+        domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
+
+        These strings will be added to the authorized_principals file, and these User Accounts
+        will be permitted to SSH into the Local Host.
+
+        You CAN use this parameter in conjunction with the -UserGroupToAdd parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $AuthorizedPrincipalsFile = Generate-AuthorizedPrincipalsFile -UserGroupToAdd @("LocalAdmins","DomainAdmins")
+        
+#>
 function Generate-AuthorizedPrincipalsFile {
     [CmdletBinding()]
     Param(
@@ -2219,6 +2819,705 @@ function Generate-AuthorizedPrincipalsFile {
 }
 
 
+<#
+    .SYNOPSIS
+        This script/function requests and receives a New Certificate from your Windows-based Issuing Certificate Authority.
+
+        When used in conjunction with the Generate-CertTemplate.ps1 script/function, all needs can be satisfied.
+        (See: https://github.com/pldmgg/misc-powershell/blob/master/Generate-CertTemplate.ps1)
+
+        IMPORTANT NOTE: By running the function without any parameters, the user will be walked through several prompts. 
+        This is the recommended way to use this function until the user feels comfortable with parameters mentioned below.
+
+    .DESCRIPTION
+        This function/script is split into the following sections (ctl-f to jump to each of these sections)
+        - Libraries and Helper Functions (~Lines 1127-2794)
+        - Initial Variable Definition and Validation (~Lines 2796-3274)
+        - Writing the Certificate Request Config File (~Lines 3276-3490)
+        - Generate Certificate Request, Submit to Issuing Certificate Authority, and Recieve Response (~Lines 3492-END)
+
+        DEPENDENCIES
+            OPTIONAL DEPENDENCIES (One of the two will be required depending on if you use the ADCS Website)
+            1) RSAT (Windows Server Feature) - If you're not using the ADCS Website, then the Get-ADObject cmdlet is used for various purposes. This cmdlet
+            is available only if RSAT is installed on the Windows Server.
+
+            2) Win32 OpenSSL - If $UseOpenSSL = "Yes", the script/function depends on the latest Win32 OpenSSL binary that can be found here:
+            https://indy.fulgan.com/SSL/
+            Simply extract the (32-bit) zip and place the directory on your filesystem in a location to be referenced by the parameter $PathToWin32OpenSSL.
+
+            IMPORTANT NOTE 2: The above third-party Win32 OpenSSL binary is referenced by OpenSSL.org here:
+            https://wiki.openssl.org/index.php/Binaries
+
+    .PARAMETER CertGenWorking
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to a directory that will contain all output
+        files.
+
+    .PARAMETER BasisTemplate
+        This parameter is OPTIONAL, but becomes MANDATORY if the -IntendedPurposeValues parameter is not used.
+
+        This parameter takes a string that represents either the CN or the displayName of the Certificate Template that you are 
+        basing this New Certificate on.
+        
+        IMPORTANT NOTE: If you are requesting the new certificate via the ADCS Web Enrollment Website, the
+        Certificate Template will ONLY appear in the Certificate Template drop-down (which makes it a valid option
+        for this parameter) if msPKITemplateSchemaVersion is "2" or "1" AND pKIExpirationPeriod is 1 year or LESS. 
+        See the Generate-CertTemplate.ps1 script/function for more details here:
+        https://github.com/pldmgg/misc-powershell/blob/master/DueForRefactor/Generate-CertTemplate.ps1
+
+    .PARAMETER CertificateCN
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name that you would like to give the New Certificate. This name will
+        appear in the following locations:
+            - "FriendlyName" field of the Certificate Request
+            - "Friendly name" field the New Certificate itself
+            - "Friendly Name" field when viewing the New Certificate in the Local Certificate Store
+            - "Subject" field of the Certificate Request
+            - "Subject" field on the New Certificate itself
+            - "Issued To" field when viewing the New Certificate in the Local Certificate Store
+
+    .PARAMETER CertificateRequestConfigFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the Certificate Request
+        Configuration file to be submitted to the Issuing Certificate Authority. File extension should be .inf.
+
+        A default value is supplied: "NewCertRequestConfig_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".inf"
+
+    .PARAMETER CertificateRequestFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the Certificate Request file to be submitted
+        to the Issuing Certificate Authority. File extension should be .csr.
+
+        A default value is supplied: "NewCertRequest_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".csr"
+
+    .PARAMETER CertFileOut
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the New Public Certificate received from the
+        Issuing Certificate Authority. The file extension should be .cer.
+
+        A default value is supplied: "NewCertificate_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".cer"
+
+    .PARAMETER CertificateChainOut
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the Chain of Public Certificates from 
+        the New Public Certificate up to the Root Certificate Authority. File extension should be .p7b.
+
+        A default value is supplied: "NewCertificateChain_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".p7b"
+
+        IMPORTANT NOTE: File extension will be .p7b even if format is actually PKCS10 (which should have extension .p10).
+        This is to ensure that Microsoft Crypto Shell Extensions recognizes the file. (Some systems do not have .p10 associated
+        with Crypto Shell Extensions by default, leading to confusion).
+
+    .PARAMETER PFXFileOut
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the file containing both Public AND 
+        Private Keys for the New Certificate. File extension should be .pfx.
+
+        A default values is supplied: "NewCertificate_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".pfx"
+
+    .PARAMETER PFXPwdAsSecureString
+        This parameter is OPTIONAL.
+
+        This parameter takes a securestring.
+
+        In order to export a .pfx file from the Local Certificate Store, a password must be supplied (or permissions based on user accounts 
+        must be configured beforehand, but this is outside the scope of this script). 
+
+        IMPORTANT NOTE: This same password is applied to $ProtectedPrivateKeyOut if OpenSSL is used to create
+        Linux-compatible certificates in .pem format.
+
+    .PARAMETER ADCSWebEnrollmentURL
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the URL for the ADCS Web Enrollment website.
+        Example: https://pki.test.lab/certsrv
+
+    .PARAMETER ADCSWebAuthType
+        This parameter is OPTIONAL.
+
+        This parameter takes one of two inputs:
+        1) The string "Windows"; OR
+        2) The string "Basic"
+
+        The IIS Web Server hosting the ADCS Web Enrollment site can be configured to use Windows Authentication, Basic
+        Authentication, or both. Use this parameter to specify either "Windows" or "Basic" authentication.
+
+    .PARAMETER ADCSWebAuthUserName
+        This parameter is OPTIONAL. Do NOT use this parameter if you are using the -ADCSWebCreds parameter.
+
+        This parameter takes a string that represents a username with permission to access the ADCS Web Enrollment site.
+        
+        If $ADCSWebAuthType = "Basic", then INCLUDE the domain prefix as part of the username. 
+        Example: test2\testadmin .
+
+        If $ADCSWebAuthType = "Windows", then DO NOT INCLUDE the domain prefix as part of the username.
+        Example: testadmin
+
+        (NOTE: If you mix up the above username formatting, then the script will figure it out. This is more of an FYI.)
+
+    .PARAMETER ADCSWebAuthPass
+        This parameter is OPTIONAL. Do NOT use this parameter if you are using the -ADCSWebCreds parameter.
+
+        This parameter takes a securestring.
+
+        If $ADCSWebEnrollmentUrl is used, then this parameter becomes MANDATORY. Under this circumstance, if 
+        this parameter is left blank, the user will be prompted for secure input. If using this script as part of a larger
+        automated process, use a wrapper function to pass this parameter securely (this is outside the scope of this script).
+
+    .PARAMETER ADCSWebCreds
+        This parameter is OPTIONAL. Do NOT use this parameter if you are using the -ADCSWebAuthuserName and
+        -ADCSWebAuthPass parameters.
+
+        This parameter takes a PSCredential.
+
+        IMPORTANT NOTE: When speicfying the UserName for the PSCredential, make sure the format adheres to the
+        following:
+
+        If $ADCSWebAuthType = "Basic", then INCLUDE the domain prefix as part of the username. 
+        Example: test2\testadmin .
+
+        If $ADCSWebAuthType = "Windows", then DO NOT INCLUDE the domain prefix as part of the username.
+        Example: testadmin
+
+        (NOTE: If you mix up the above username formatting, then the script will figure it out. This is more of an FYI.)
+
+    .PARAMETER CertADCSWebResponseOutFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a valid file path that will contain the HTTP response after
+        submitting the Certificate Request via the ADCS Web Enrollment site.
+
+        A default value is supplied: "NewCertificate_$CertificateCN"+"_ADCSWebResponse"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".txt"
+
+    .PARAMETER Organization
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an Organization name. This will be added to "Subject" field in the
+        Certificate.
+
+    .PARAMETER OriginationalUnit
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an Organization's Department. This will be added to the "Subject" field
+        in the Certificate.
+
+    .PARAMETER Locality
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a City. This will be added to the "Subject" field in the Certificate.
+
+    .PARAMETER State
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a State. This will be added to the "Subject" field in the Certificate.
+
+    .PARAMETER Country
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Country. This will be added to the "Subject" field in the Certificate.
+
+    .PARAMETER KeyLength
+        This parameter is MANDATORY.
+
+        This parameter takes a string representing a key length of either "2048" or "4096".
+
+        A default value is supplied: 2048
+
+        For more information, see:
+        https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER HashAlgorithmValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of the following values:
+        "SHA1","SHA256","SHA384","SHA512","MD5","MD4","MD2"
+
+        A default value is supplied: SHA256
+
+        For more information, see:
+        https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER EncryptionAlgorithmValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string representing an available encryption algorithm. Valid values:
+        "AES","DES","3DES","RC2","RC4"
+
+        A default value is supplied: AES
+
+    .PARAMETER PrivateKeyExportableValue
+        This parameter is MANDATORY.
+
+        The parameter takes a string with one of two values: "True", "False"
+
+        Setting the value to "True" means that the Private Key will be exportable.
+
+        A default value is supplied: True
+
+    .PARAMETER KeySpecValue
+        This parameter is MANDATORY.
+
+        The parameter takes a string that must be one of two values: "1", "2"
+
+        A default value is supplied: 1
+
+        For details about Key Spec Values, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER KeyUsageValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a hexadecimal value.
+
+        A defult value is supplied: 80
+
+        For reference, here are some commonly used values -
+
+        A valid value is the hex sum of one or more of following:
+            CERT_DIGITAL_SIGNATURE_KEY_USAGE = 80
+            CERT_NON_REPUDIATION_KEY_USAGE = 40
+            CERT_KEY_ENCIPHERMENT_KEY_USAGE = 20
+            CERT_DATA_ENCIPHERMENT_KEY_USAGE = 10
+            CERT_KEY_AGREEMENT_KEY_USAGE = 8
+            CERT_KEY_CERT_SIGN_KEY_USAGE = 4
+            CERT_OFFLINE_CRL_SIGN_KEY_USAGE = 2
+            CERT_CRL_SIGN_KEY_USAGE = 2
+            CERT_ENCIPHER_ONLY_KEY_USAGE = 1
+        
+        Some Commonly Used Values:
+            'c0' (i.e. 80+40)
+            'a0' (i.e. 80+20)
+            'f0' (i.e. 80+40+20+10)
+            '30' (i.e. 20+10)
+            '80'
+        
+        All Valid Values:
+        "1","10","11","12","13","14","15","16","17","18","2","20","21","22","23","24","25","26","27","28","3","30","38","4","40",
+        "41","42","43","44","45","46","47","48","5","50","58","6","60","68","7","70","78","8","80","81","82","83","84","85","86","87","88","9","90",
+        "98","a","a0","a8","b","b0","b8","c","c0","c","8","d","d0","d8","e","e0","e8","f","f0","f8"
+
+        For more information see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER MachineKeySet
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of two values: "True", "False"
+
+        A default value is provided: "False"
+
+        If you would like the Private Key exported, use "False".
+
+        If you are creating this certificate to be used in the User's security context (like for a developer
+        to sign their code), use "False".
+        
+        If you are using this certificate for a service that runs in the Computer's security context (such as
+        a Web Server, Domain Controller, etc) and DO NOT need the Private Key exported use "True".
+
+        For more info, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER SecureEmail
+        This parameter is MANDATORY.
+
+        This parameter takes string that must be one of two values: "Yes", "No"
+        
+        A default value is provided: "No"
+
+        If the New Certificate is going to be used to digitally sign and/or encrypt emails, this parameter
+        should be set to "Yes".
+
+    .PARAMETER UserProtected
+        This parameter is MANDATORY.
+
+        This parameter takes  a string that must be one of two values: "True", "False"
+
+        A default value is provided: False
+
+        If $MachineKeySet is set to "True", then $UserProtected MUST be set to "False". If $MachineKeySet is
+        set to "False", then $UserProtected can be set to either "True" or "False". 
+
+        If $UserProtected is set to "True", a CryptoAPI password window is displayed when the key is generated
+        during the certificate request process. Once the key is protected with a password, you must enter this
+        password every time the key is accessed.
+
+        IMPORTANT NOTE: Do not set this parameter to "True" if you want this script/function to run unattended.
+
+    .PARAMETER ProviderNameValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of the Cryptographic Provider you would like to use for the 
+        New Certificate.
+
+        A default value is provided: "Microsoft RSA SChannel Cryptographic Provider"
+        
+        Valid values are as follows:
+        "Microsoft Base Cryptographic Provider v1.0","Microsoft Base DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Base DSS Cryptographic Provider","Microsoft Base Smart Card Crypto Provider",
+        "Microsoft DH SChannel Cryptographic Provider","Microsoft Enhanced Cryptographic Provider v1.0",
+        "Microsoft Enhanced DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Enhanced RSA and AES Cryptographic Provider","Microsoft RSA SChannel Cryptographic Provider",
+        "Microsoft Strong Cryptographic Provider","Microsoft Software Key Storage Provider",
+        "Microsoft Passport Key Storage Provider"
+        
+        For more details and a list of valid values, see:
+        https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+        WARNING: The Certificate Template that this New Certificate is based on (i.e. the value provided for the parameter 
+        $BasisTemplate) COULD POTENTIALLY limit the availble Crypographic Provders for the Certificate Request. Make sure 
+        the Cryptographic Provider you use is allowed by the Basis Certificate Template.
+
+    .PARAMETER RequestTypeValue
+        This parameter is MANDATORY.
+
+        A default value is provided: PKCS10
+
+        This parameter takes a string that indicates the format of the Certificate Request. Valid values are:
+        "CMC", "PKCS10", "PKCS10-", "PKCS7"
+
+        For more details, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER IntendedPurposeValues
+        This parameter is OPTIONAL, but becomes MANDATORY if the -BasisTemplate parameter is not used.
+
+        This parameter takes an array of strings. Valid values are as follows:
+
+        "Code Signing","Document Signing","Client Authentication","Server Authentication",
+        "Remote Desktop","Private Key Archival","Directory Service Email Replication","Key Recovery Agent",
+        "OCSP Signing","Microsoft Trust List Signing","EFS","Secure E-mail","Enrollment Agent","Smart Card Logon",
+        "File Recovery","IPSec IKE Intermediate","KDC Authentication","Windows Update",
+        "Windows Third Party Application Component","Windows TCB Component","Windows Store",
+        "Windows Software Extension Verification","Windows RT Verification","Windows Kits Component",
+        "No OCSP Failover to CRL","Auto Update End Revocation","Auto Update CA Revocation","Revoked List Signer",
+        "Protected Process Verification","Protected Process Light Verification","Platform Certificate",
+        "Microsoft Publisher","Kernel Mode Code Signing","HAL Extension","Endorsement Key Certificate",
+        "Early Launch Antimalware Driver","Dynamic Code Generator","DNS Server Trust","Document Encryption",
+        "Disallowed List","Attestation Identity Key Certificate","System Health Authentication","CTL Usage",
+        "IP Security End System","IP Security Tunnel Termination","IP Security User","Time Stamping",
+        "Microsoft Time Stamping","Windows Hardware Driver Verification","Windows System Component Verification",
+        "OEM Windows System Component Verification","Embedded Windows System Component Verification","Root List Signer",
+        "Qualified Subordination","Key Recovery","Lifetime Signing","Key Pack Licenses","License Server Verification"
+
+        IMPORTANT NOTE: If this parameter is not set by user, the Intended Purpose Value(s) of the
+        Basis Certificate Template (i.e. $BasisTemplate) will be used. If $BasisTemplate is not provided, then
+        the user will be prompted.
+
+    .PARAMETER UseOpenSSL
+        This parameter is MANDATORY.
+
+        A default value is provided: "Yes"
+
+        The parameter takes a string that must be one of two values: "Yes", "No"
+
+        This parameter determines whether the Win32 OpenSSL binary should be used to extract
+        certificates/keys in a format (.pem) readily used in Linux environments.
+
+    .PARAMETER AllPublicKeysInChainOut
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        This parameter takes a string that represents a file name. This file will contain all public certificates in
+        the chain, from the New Certificate up to the Root Certificate Authority. File extension should be .pem
+
+        A default value is provided: "NewCertificate_$CertificateCN"+"_all_public_keys_in_chain"+".pem"
+
+    .PARAMETER ProtectedPrivateKeyOut
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        This parameter takes a string that represents a file name. This file will contain the password-protected private
+        key for the New Certificate. File extension should be .pem
+
+        A default value is provided: "NewCertificate_$CertificateCN"+"_protected_private_key"+".pem"
+
+    .PARAMETER UnProtectedPrivateKeyOut
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        This parameter takes a string that represents a file name. This file will contain the raw private
+        key for the New Certificate. File extension should be .key
+
+        A default value is provided: "NewCertificate_$CertificateCN"+"_unprotected_private_key"+".key"
+
+    .PARAMETER StripPrivateKeyOfPassword
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        The parameter takes a string  that must be one of two values: "Yes", "No"
+
+        This parameter removes the password from the file $ProtectedPrivateKeyOut and outputs the result to
+        $UnProtectedPrivateKeyOut.
+
+        A default value is provided: Yes
+
+    .PARAMETER SANObjectsToAdd
+        This parameter is OPTIONAL.
+
+        This parameter takes an array of strings. All possible values are: 
+        "DNS","Distinguished Name","URL","IP Address","Email","UPN","GUID"
+
+    .PARAMETER DNSSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "DNS".
+        
+        This parameter takes an array of strings. Each string represents a DNS address.
+        Example: "www.fabrikam.com","www.contoso.com"
+
+    .PARAMETER DistinguishedNameSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "Distinguished Name".
+
+        This parameter takes an array of strings. Each string represents an LDAP Path.
+        Example: "CN=www01,OU=Web Servers,DC=fabrikam,DC=com","CN=www01,OU=Load Balancers,DC=fabrikam,DC=com"
+
+    .PARAMETER URLSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "URL".
+
+        This parameter takes an array of string. Ech string represents a Url.
+        Example: "http://www.fabrikam.com","http://www.contoso.com"
+
+    .PARAMETER IPAddressSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "IP Address".
+
+        This parameter takes an array of strings. Each string represents an IP Address.
+        Example: "172.31.10.13","192.168.2.125"
+
+    .PARAMETER EmailSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "Email".
+
+        This paramter takes an array of strings. Each string should represent and Email Address.
+        Example: "mike@fabrikam.com","hazem@fabrikam.com"
+
+    .PARAMETER UPNSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "UPN".
+
+        This parameter takes an array of strings. Each string should represent a Principal Name object.
+        Example: "mike@fabrikam.com","hazem@fabrikam.com"
+
+    .PARAMETER GUIDSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "GUID".
+
+        This parameter takes an array of strings. Each string should represent a GUID.
+        Example: "f7c3ac41-b8ce-4fb4-aa58-3d1dc0e36b39","g8D4ac41-b8ce-4fb4-aa58-3d1dc0e47c48"
+
+    .EXAMPLE
+        # Scenario 1: No Parameters Provided
+        # Executing the script/function without any parameters will ask for input on defacto mandatory parameters.
+        # All other parameters will use default values which should be fine under the vast majority of circumstances.
+        # De facto mandatory parameters are as follows:
+        #   -CertGenWorking
+        #   -BasisTemplate
+        #   -CertificateCN
+        #   -Organization
+        #   -OrganizationalUnit
+        #   -Locality
+        #   -State
+        #   -Country
+
+        PS C:\Users\zeroadmin> Generate-Certificate
+
+    .EXAMPLE
+        # Scenario 2: Generate a Certificate for a Web Server From Machine on Same Domain As Your CA
+        # Assuming you run this function from a workstation on the same Domain as your ADCS Certificate
+        # Authorit(ies) under an account that has privileges to request new Certificates, do the following:
+
+        PS C:\Users\zeroadmin> $GenCertSplatParams = @{
+            CertGenWorking              = "$HOME\Downloads\temp"
+            BasisTemplate               = "WebServer"
+            CertificateCN               = "VaultServer"
+            Organization                = "Boop Inc"
+            OrganizationalUnit          = "DevOps"
+            Locality                    = "Philadelphia"
+            State                       = "PA"
+            Country                     = "US"
+            CertFileOut                 = "VaultServer.cer"
+            PFXFileOut                  = "VaultServer.pfx"
+            CertificateChainOut         = "VaultServerChain.p7b"
+            AllPublicKeysInChainOut     = "VaultServerChain.pem"
+            ProtectedPrivateKeyOut      = "VaultServerPwdProtectedPrivateKey.pem"
+            UnProtectedPrivateKeyOut    = "VaultServerUnProtectedPrivateKey.pem"
+            SANObjectsToAdd             = @("IP Address","DNS")
+            IPAddressSANObjects         = @("$VaultServerIP","0.0.0.0")
+            DNSSANObjects               = "VaultServer.zero.lab"
+        }
+        PS C:\Users\zeroadmin> $GenVaultCertResult = Generate-Certificate @GenCertSplatParams
+        
+    .EXAMPLE
+        # Scenario 3: Generate a Certificate for a Web Server From Machine on a Different Domain Than Your CA
+        # Assuming the ADCS Website is available -
+
+        PS C:\Users\zeroadmin> $GenCertSplatParams = @{
+            CertGenWorking              = "$HOME\Downloads\temp"
+            BasisTemplate               = "WebServer"
+            ADCSWebEnrollmentURL        = "https://pki.test2.lab/certsrv"
+            ADCSWebAuthType             = "Windows"
+            ADCSWebCreds                = [pscredential]::new("testadmin",$(Read-Host "Please enter the password for 'zeroadmin'" -AsSecureString))
+            CertificateCN               = "VaultServer"
+            Organization                = "Boop Inc"
+            OrganizationalUnit          = "DevOps"
+            Locality                    = "Philadelphia"
+            State                       = "PA"
+            Country                     = "US"
+            CertFileOut                 = "VaultServer.cer"
+            PFXFileOut                  = "VaultServer.pfx"
+            CertificateChainOut         = "VaultServerChain.p7b"
+            AllPublicKeysInChainOut     = "VaultServerChain.pem"
+            ProtectedPrivateKeyOut      = "VaultServerPwdProtectedPrivateKey.pem"
+            UnProtectedPrivateKeyOut    = "VaultServerUnProtectedPrivateKey.pem"
+            SANObjectsToAdd             = @("IP Address","DNS")
+            IPAddressSANObjects         = @("$VaultServerIP","0.0.0.0")
+            DNSSANObjects               = "VaultServer.zero.lab"
+        }
+        PS C:\Users\zeroadmin> $GenVaultCertResult = Generate-Certificate @GenCertSplatParams
+
+    .OUTPUTS
+        All outputs are written to the $CertGenWorking directory specified by the user.
+
+        ALWAYS GENERATED
+        The following outputs are ALWAYS generated by this function/script, regardless of optional parameters: 
+            - A Certificate Request Configuration File (with .inf file extension) - 
+                RELEVANT PARAMETER: $CertificateRequestConfigFile
+            - A Certificate Request File (with .csr file extenstion) - 
+                RELEVANT PARAMETER: $CertificateRequestFile
+            - A Public Certificate with the New Certificate Name (NewCertificate_$CertificateCN_[Timestamp].cer) - 
+                RELEVANT PARAMETER: $CertFileOut
+                NOTE: This file is not explicitly generated by the script. Rather, it is received from the Issuing Certificate Authority after 
+                the Certificate Request is submitted and accepted by the Issuing Certificate Authority. 
+                NOTE: If you choose to use Win32 OpenSSL to extract certs/keys from the .pfx file (see below), this file should have SIMILAR CONTENT
+                to the file $PublicKeySansChainOutFile. To clarify, $PublicKeySansChainOutFile does NOT have what appear to be extraneous newlines, 
+                but $CertFileOut DOES. Even though $CertFileOut has what appear to be extraneous newlines, Microsoft Crypto Shell Extensions will 
+                be able to read both files as if they were the same. However, Linux machines will need to use $PublicKeySansChainOutFile (Also, the 
+                file extension for $PublicKeySansChainOutFile can safely be changed from .cer to .pem without issue)
+            - A PSCustomObject with properties:
+                - FileOutputHashTable
+                - CertNamevsContentsHash
+
+                The 'FileOutputHashTable' property can help the user quickly and easily reference output 
+                files in $CertGenWorking. Example content:
+
+                    Key   : CertificateRequestFile
+                    Value : NewCertRequest_aws-coreos3-client-server-cert04-Sep-2016_2127.csr
+                    Name  : CertificateRequestFile
+
+                    Key   : IntermediateCAPublicCertFile
+                    Value : ZeroSCA_Public_Cert.pem
+                    Name  : IntermediateCAPublicCertFile
+
+                    Key   : EndPointPublicCertFile
+                    Value : aws-coreos3-client-server-cert_Public_Cert.pem
+                    Name  : EndPointPublicCertFile
+
+                    Key   : AllPublicKeysInChainOut
+                    Value : NewCertificate_aws-coreos3-client-server-cert_all_public_keys_in_chain.pem
+                    Name  : AllPublicKeysInChainOut
+
+                    Key   : CertificateRequestConfigFile
+                    Value : NewCertRequestConfig_aws-coreos3-client-server-cert04-Sep-2016_2127.inf
+                    Name  : CertificateRequestConfigFile
+
+                    Key   : EndPointUnProtectedPrivateKey
+                    Value : NewCertificate_aws-coreos3-client-server-cert_unprotected_private_key.key
+                    Name  : EndPointUnProtectedPrivateKey
+
+                    Key   : RootCAPublicCertFile
+                    Value : ZeroDC01_Public_Cert.pem
+                    Name  : RootCAPublicCertFile
+
+                    Key   : CertADCSWebResponseOutFile
+                    Value : NewCertificate_aws-coreos3-client-server-cert_ADCSWebResponse04-Sep-2016_2127.txt
+                    Name  : CertADCSWebResponseOutFile
+
+                    Key   : CertFileOut
+                    Value : NewCertificate_aws-coreos3-client-server-cert04-Sep-2016_2127.cer
+                    Name  : CertFileOut
+
+                    Key   : PFXFileOut
+                    Value : NewCertificate_aws-coreos3-client-server-cert04-Sep-2016_2127.pfx
+                    Name  : PFXFileOut
+
+                    Key   : EndPointProtectedPrivateKey
+                    Value : NewCertificate_aws-coreos3-client-server-cert_protected_private_key.pem
+                    Name  : EndPointProtectedPrivateKey
+
+                The 'CertNamevsContentHash' hashtable can help the user quickly access the content of each of the
+                aforementioned files. Example content for the 'CertNamevsContentsHash' property:
+
+                    Key   : EndPointUnProtectedPrivateKey
+                    Value : -----BEGIN RSA PRIVATE KEY-----
+                            ...
+                            -----END RSA PRIVATE KEY-----
+                    Name  : EndPointUnProtectedPrivateKey
+
+                    Key   : aws-coreos3-client-server-cert
+                    Value : -----BEGIN CERTIFICATE-----
+                            ...
+                            -----END CERTIFICATE-----
+                    Name  : aws-coreos3-client-server-cert
+
+                    Key   : ZeroSCA
+                    Value : -----BEGIN CERTIFICATE-----
+                            ...
+                            -----END CERTIFICATE-----
+                    Name  : ZeroSCA
+
+                    Key   : ZeroDC01
+                    Value : -----BEGIN CERTIFICATE-----
+                            ...
+                            -----END CERTIFICATE-----
+                    Name  : ZeroDC01
+
+        GENERATED WHEN $MachineKeySet = "False"
+        The following outputs are ONLY generated by this function/script when $MachineKeySet = "False" (this is its default setting)
+            - A .pfx File Containing the Entire Public Certificate Chain AS WELL AS the Private Key of your New Certificate (with .pfx file extension) - 
+                RELEVANT PARAMETER: $PFXFileOut
+                NOTE: The Private Key must be marked as exportable in your Certificate Request Configuration File in order for the .pfx file to
+                contain the private key. This is controlled by the parameter $PrivateKeyExportableValue = "True". The Private Key is marked as 
+                exportable by default.
+        
+        GENERATED WHEN $ADCSWebEnrollmentUrl is NOT provided
+        The following outputs are ONLY generated by this function/script when $ADCSWebEnrollmentUrl is NOT provided (this is its default setting)
+        (NOTE: Under this scenario, the workstation running the script must be part of the same domain as the Issuing Certificate Authority):
+            - A Certificate Request Response File (with .rsp file extension) 
+                NOTE: This file is not explicitly generated by the script. Rather, it is received from the Issuing Certificate Authority after 
+                the Certificate Request is submitted
+            - A Certificate Chain File (with .p7b file extension) -
+                RELEVANT PARAMETER: $CertificateChainOut
+                NOTE: This file is not explicitly generated by the script. Rather, it is received from the Issuing Certificate Authority after 
+                the Certificate Request is submitted and accepted by the Issuing Certificate Authority
+                NOTE: This file contains the entire chain of public certificates, from the requested certificate, up to the Root CA
+                WARNING: In order to parse the public certificates for each entity up the chain, you MUST use the Crypto Shell Extensions GUI,
+                otherwise, if you look at this content with a text editor, it appears as only one (1) public certificate.  Use the OpenSSL
+                Certificate Chain File ($AllPublicKeysInChainOut) optional output in order to view a text file that parses each entity's public certificate.
+        
+        GENERATED WHEN $ADCSWebEnrollmentUrl IS provided
+        The following outputs are ONLY generated by this function/script when $ADCSWebEnrollmentUrl IS provided
+        (NOTE: Under this scenario, the workstation running the script is sending a web request to the ADCS Web Enrollment website):
+            - An File Containing the HTTP Response From the ADCS Web Enrollment Site (with .txt file extension) - 
+                RELEVANT PARAMETER: $CertADCSWebResponseOutFile
+        
+        GENERATED WHEN $UseOpenSSL = "Yes"
+        The following outputs are ONLY generated by this function/script when $UseOpenSSL = "Yes"
+        (WARNING: This creates a Dependency on a third party Win32 OpenSSL binary that can be found here: https://indy.fulgan.com/SSL/
+        For more information, see the DEPENDENCIES Section below)
+            - A Certificate Chain File (ending with "all_public_keys_in_chain.pem") -
+                RELEVANT PARAMETER: $AllPublicKeysInChainOut
+                NOTE: This optional parameter differs from the aforementioned .p7b certificate chain output in that it actually parses
+                each entity's public certificate in a way that is viewable in a text editor.
+            - EACH Public Certificate in the Certificate Chain File (file name like [Certificate CN]_Public_Cert.cer)
+                - A Public Certificate with the New Certificate Name ($CertificateCN_Public_Cert.cer) -
+                    RELEVANT PARAMETER: $PublicKeySansChainOutFile
+                    NOTE: This file should have SIMILAR CONTENT to $CertFileOut referenced earlier. To clarify, $PublicKeySansChainOutFile does NOT have
+                    what appear to be extraneous newlines, but $CertFileOut DOES. Even though $CertFileOut has what appear to be extraneous newlines, Microsoft Crypto Shell Extensions will 
+                    be able to read both files as if they were the same. However, Linux machines will need to use $PublicKeySansChainOutFile (Also, the 
+                    file extension for $PublicKeySansChainOutFile can safely be changed from .cer to .pem without issue)
+                - Additional Public Certificates in Chain including [Subordinate CA CN]_Public_Cert.cer and [Root CA CN]_Public_Cert.cer
+            - A Password Protected Private Key file (ending with "protected_private_key.pem") -
+                RELEVANT PARAMETER: $ProtectedPrivateKeyOut
+                NOTE: This is the New Certificate's Private Key that is protected by a password defined by the $PFXPwdAsSecureString parameter.
+
+        GENERATED WHEN $UseOpenSSL = "Yes" AND $StripPrivateKeyOfPassword = "Yes"
+            - An Unprotected Private Key File (ends with unprotected_private_key.key) -
+                RELEVANT PARAMETER: $UnProtectedPrivateKeyOut
+
+#>
 function Generate-Certificate {
     [CmdletBinding()]
     Param(
@@ -2450,7 +3749,7 @@ function Generate-Certificate {
         [switch]$CSRGenOnly
     )
 
-    ##### BEGIN Helper Functions #####
+    #region >> Libraries and Helper Functions
 
     function Compare-Arrays {
         [CmdletBinding()]
@@ -4115,10 +5414,11 @@ function Generate-Certificate {
     
         $Output
     }
+    
+    #endregion >> Libraries and Helper Functions
+    
 
-    ##### END Helper Functions #####
-
-    ##### BEGIN Initial Variable Definition and Validation #####
+    #region >> Variable Definition And Validation
 
     # Make a working Directory Where Generated Certificates will be Saved
     if (Test-Path $CertGenWorking) {
@@ -4594,12 +5894,11 @@ function Generate-Certificate {
             }
         }
     }
-        
+    
+    #endregion >> Variable Definition And Validation
+    
 
-
-    ##### END Initial Variable Definition and Validation #####
-
-    ##### BEGIN Writing the Certificate Request Config File #####
+    #region >> Writing the Certificate Request Config File
 
     # This content is saved to $CertGenWorking\$CertificateRequestConfigFile
     # For more information about the contents of the config file, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx 
@@ -4813,10 +6112,10 @@ function Generate-Certificate {
         }
     }
 
-    ##### END Writing the Certificate Request Config File #####
+    #endregion >> Writing the Certificate Request Config File
 
 
-    ##### BEGIN Generate Certificate Request and Submit to Issuing Certificate Authority #####
+    #region >> Generate Certificate Request and Submit to Issuing Certificate Authority
 
     ## Generate new Certificate Request File: ##
     # NOTE: The generation of a Certificate Request File using the below "certreq.exe -new" command also adds the CSR to the 
@@ -5123,11 +6422,45 @@ function Generate-Certificate {
     # ***IMPORTANT NOTE: If you want to write the Certificates contained in the $CertNamevsContentsHash out to files again
     # at some point in the future, make sure you use the "Out-File" cmdlet instead of the "Set-Content" cmdlet
 
-    ##### END Generate Certificate Request and Submit to Issuing Certificate Authority #####
+    #endregion >> Generate Certificate Request and Submit to Issuing Certificate Authority
 
 }
 
 
+<#
+    .SYNOPSIS
+        This function generates:
+            - An ArrayList of PSCustomObjects that describes the contents of each of the files within the
+            "$HOME\.ssh" directory
+            - An .xml file that can be ingested by the 'Import-CliXml' cmdlet to generate
+            the aforementioned ArrayList of PSCustomObjects in future PowerShell sessions.
+            
+            Each PSCustomObject in the ArrayList contains information similar to:
+
+                File     : C:\Users\zeroadmin\.ssh\PwdProtectedPrivKey
+                FileType : RSAPrivateKey
+                Contents : {-----BEGIN RSA PRIVATE KEY-----, Proc-Type: 4,ENCRYPTED, DEK-Info: AES-128-CBC,27E137C044FC7857DAAC05C408472EF8, ...}
+                Info     : {-----BEGIN RSA PRIVATE KEY-----, Proc-Type: 4,ENCRYPTED, DEK-Info: AES-128-CBC,27E137C044FC7857DAAC05C408472EF8, ...}
+
+        By default, the .xml file is written to "$HOME\.ssh\SSHDirectoryFileInfo.xml"
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PathToHomeDotSSHDirectory
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents a full path to the User's .ssh directory. You should
+        only use this parameter if the User's .ssh is NOT under "$HOME\.ssh" for some reason. 
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Generate-SSHUserDirFileInfo
+        
+#>
 function Generate-SSHUserDirFileInfo {
     [CmdletBinding()]
     Param(
@@ -5190,10 +6523,63 @@ function Generate-SSHUserDirFileInfo {
     }
 
     $ArrayOfPSObjects
-    $ArrayOfPSObjects | Export-CliXml "$HOME\.ssh\SSHDirectoryFileInfo.xml"
+    $ArrayOfPSObjects | Export-CliXml "$PathToHomeDotSSHDirectory\SSHDirectoryFileInfo.xml"
 }
 
 
+<#
+    .SYNOPSIS
+        This function gets the TLS certificate used by the LDAP server on the specified Port.
+
+        The function outputs a PSCustomObject with the following properties:
+            - LDAPEndpointCertificateInfo
+            - RootCACertificateInfo
+            - CertChainInfo
+        
+        The 'LDAPEndpointCertificateInfo' property is itself a PSCustomObject with teh following content:
+            X509CertFormat      = $X509Cert2Obj
+            PemFormat           = $PublicCertInPemFormat
+
+        The 'RootCACertificateInfo' property is itself a PSCustomObject with teh following content:
+            X509CertFormat      = $RootCAX509Cert2Obj
+            PemFormat           = $RootCACertInPemFormat
+
+        The 'CertChainInfo' property is itself a PSCustomObject with the following content:
+            X509ChainFormat     = $CertificateChain
+            PemFormat           = $CertChainInPemFormat
+        ...where $CertificateChain is a System.Security.Cryptography.X509Certificates.X509Chain object.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER LDAPServerHostNameOrIP
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents either the IP Address or DNS-Resolvable Name of the
+        LDAP Server. If you're in a Windows environment, this is a Domain Controller's network location.
+
+    .PARAMETER Port
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a port number that the LDAP Server is using that
+        provides a TLS Certificate. Valid values are: 389, 636, 3268, 3269
+
+    .PARAMETER UseOpenSSL
+        This parameter is OPTIONAL. However, if $Port is 389 or 3268, then this parameter is MANDATORY.
+
+        This parameter is a switch. If used, the latest OpenSSL available from
+        http://wiki.overbyte.eu/wiki/index.php/ICS_Download will be downloaded and made available
+        in the current PowerShell Session's $env:Path.
+
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function Get-LDAPCert {
     [CmdletBinding()]
     param (
@@ -5208,7 +6594,6 @@ function Get-LDAPCert {
         [switch]$UseOpenSSL
     )
 
-    ##### BEGIN Pre-Run Check #####
     #region >> Pre-Run Check
 
     try {
@@ -5222,10 +6607,8 @@ function Get-LDAPCert {
     }
 
     #endregion >> Pre-Run Check
-    ##### END Pre-Run Check #####
+    
 
-
-    ##### BEGIN Main Body #####
     #region >> Main Body
 
     if ($UseOpenSSL) {
@@ -5382,11 +6765,24 @@ function Get-LDAPCert {
 
     $CertificateChain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
     $null = $CertificateChain.Build($X509Cert2Obj)
+    [System.Collections.ArrayList]$CertsInPemFormat = @()
+    foreach ($Cert in $CertificateChain.ChainElements.Certificate) {
+        $CertInPemFormatPrep = "-----BEGIN CERTIFICATE-----`n" + 
+        [System.Convert]::ToBase64String($Cert.RawData, [System.Base64FormattingOptions]::InsertLineBreaks) + 
+        "`n-----END CERTIFICATE-----"
+        $CertInPemFormat = $CertInPemFormatPrep -split "`n"
+        
+        $null = $CertsInPemFormat.Add($CertInPemFormat)
+    }
+    $CertChainInPemFormat = $($CertsInPemFormat | Out-String).Trim()
+
     $RootCAX509Cert2Obj = $CertificateChain.ChainElements.Certificate | Where-Object {$_.Issuer -eq $_.Subject}
     $RootCAPublicCertInPemFormatPrep = "-----BEGIN CERTIFICATE-----`n" + 
         [System.Convert]::ToBase64String($RootCAX509Cert2Obj.RawData, [System.Base64FormattingOptions]::InsertLineBreaks) + 
         "`n-----END CERTIFICATE-----"
     $RootCACertInPemFormat = $RootCAPublicCertInPemFormatPrep -split "`n"
+
+    # Create Output
 
     $LDAPEndpointCertificateInfo = [pscustomobject]@{
         X509CertFormat      = $X509Cert2Obj
@@ -5398,18 +6794,51 @@ function Get-LDAPCert {
         PemFormat           = $RootCACertInPemFormat
     }
 
+    $CertChainInfo = [pscustomobject]@{
+        X509ChainFormat     = $CertificateChain
+        PemFormat           = $CertChainInPemFormat
+    }
+
     [pscustomobject]@{
         LDAPEndpointCertificateInfo  = $LDAPEndpointCertificateInfo
-        CertificateChain             = $CertificateChain
         RootCACertificateInfo        = $RootCACertificateInfo
+        CertChainInfo                = $CertChainInfo
     }
     
-
-    #endregion >> Pre-Run Check
-    ##### END Main Body #####
+    #endregion >> Main Body
 }
 
 
+<#
+    .SYNOPSIS
+        This function simply outputs instructions to stdout regarding certain aspects of Public
+        Key Authentication.
+
+        This function needs to be updated. Current instructions are incomplete/misleading.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PublicKeyLocation
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the full path to an SSH Public Key that the user
+        would like instructions for.
+
+    .PARAMETER PrivateKeyLocation
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the full path to an SSH Private Key that the user
+        would like instructions for.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-PublicKeyAuthInstructions -PublicKeyLocation "$HOME\.ssh\id_rsa.pub" -PrivateKeyLocation "$HOME\.ssh\id_rsa"
+        
+#>
 function Get-PublicKeyAuthInstructions {
     [CmdletBinding()]
     Param(
@@ -5530,8 +6959,79 @@ key that has been added to .ssh/authorized_keys on the Remote Windows Host.
 }
 
 
-# This function is used to determine the most efficient ssh.exe command that should work
-# on the Remote Host (assuming the sshd server on the remote host is configured properly)
+<#
+    .SYNOPSIS
+        This function is used to determine the most efficient ssh.exe command that should work
+        on the Remote Host (assuming the sshd server on the remote host is configured properly).
+
+        By providing this function ONE of the following parameters...
+            SSHKeyFilePath
+            SSHPublicKeyFilePath
+            SSHPrivateKeyFilePath
+            SSHPublicCertFilePath
+        ...this function will find all related files (as long as they're in the "$HOME\.ssh" directory
+        or in the ssh-agent). Then, depending on the type of authentication you would like to use
+        (which you sould specify using the -AuthMethod parameter), this function will output a PSCustomObject
+        with properties similar to:
+            PublicKeyAuthShouldWork (Boolean)
+            PublicKeyCertificateAuthShouldWork (Boolean)
+            SSHClientProblemDescription (String)
+            FinalSSHExeCommand (String)
+        
+        The property 'PublicKeyAuthShouldWork' will appear only if -AuthMethod is "PublicKey".
+        The property 'PublicKeyCertificateAuthShouldWork' will appear only if -AuthMethod is "PublicKeyCertificate".
+        The property 'SSHClientProblemDescription' will appear only if an SSH Command cannot be determined.
+        The property 'FinalSSHExeCommand' will always appear. It might be $null if a command cannot be determined.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER SSHKeyFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Key/Cert file.
+
+        This parameter should be used if you are certain that the specified file is related to SSH
+        Authentication, but you are not sure if the file is a Public Key, Private Key, or Public Certificate.
+
+        It is HIGHLY RECOMMENDED that you use this parameter instead of -SSHPublicKeyFilePath or
+        -SSHPrivateKeyFilePath or -SSHPublicCertFilePath.
+
+    .PARAMETER SSHPublicKeyFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Public Key file. If the file
+        is NOT an SSH Public Key file, the function will halt.
+
+    .PARAMETER SSHPrivateKeyFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Private Key file. If the file
+        is NOT an SSH Private Key file, the function will halt.
+
+    .PARAMETER SSHPublicCertFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Public Certificate file. If the file
+        is NOT an SSH Public Certificate file, the function will halt.
+
+    .PARAMETER AuthMethod
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of two values: "PublicKey", "PublicKeyCertificate"
+
+        If you would like this function to output an ssh command that uses Public Key Authentication,
+        use "PublicKey" for this parameter. If you would like this function to ouput an ssh command that
+        uses Public Certificate Authentication, use "PublicKeyCertificate" for this parameter.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-SSHClientAuthSanity -SSHKeyFilePath "$HOME\.ssh\id_rsa"
+        
+#>
 function Get-SSHClientAuthSanity {
     [CmdletBinding(DefaultParameterSetName="UnknownKey")]
     Param(
@@ -6308,6 +7808,45 @@ function Get-SSHClientAuthSanity {
 }
 
 
+<#
+    .SYNOPSIS
+        This function gets information about the specified SSH Key/Certificate file.
+
+        Output is a PSCustomObject with the following properties...
+
+            File                = $PathToKeyFile
+            FileType            = $FileType
+            Contents            = $Contents
+            Info                = $Info
+            FingerPrint         = $FingerPrint
+            PasswordProtected   = $PasswordProtected
+
+        ...where...
+        
+            - $PathToKeyFile is the path to the Key file specified by the -PathToKeyFile parameter,
+            - $FileType is either "RSAPublicKey", "RSAPrivateKey", or "RSAPublicKeyCertificate"
+            - $Contents is the result of: Get-Content $PathToKeyFile
+            - $Info is the result of: ssh-keygen -l -f "$PathToKeyFile"
+            - $FingerPrint is the fingerprint of the $PathToKeyFile
+            - $PasswordProtected is a Boolean that indicates whether or not the file is password protected.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PathToKeyFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to the SSH Key/Cert File you would
+        like to inspect.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-SSHFileInfo -PathToKeyFile "$HOME\.ssh\id_rsa"
+        
+#>
 function Get-SSHFileInfo {
     [CmdletBinding()]
     Param(
@@ -6445,7 +7984,56 @@ function Get-SSHFileInfo {
 }
 
 
-# Downloads a Vagrant Box (.box file) to the specified $DownloadDirectory
+<#
+    .SYNOPSIS
+        This function downloads a Vagrant Box (.box file) to the specified -DownloadDirectory
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VagrantBox
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of a Vagrant Box that can be found
+        on https://app.vagrantup.com. Example: centos/7
+
+    .PARAMETER VagrantProvider
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of the following values:
+        "hyperv","virtualbox","vmware_workstation","docker"
+
+    .PARAMETER DownloadDirectory
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a full path to a directory that the .box file
+        will be downloaded to.
+
+    .PARAMETER SkipPreDownloadCheck
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+
+        By default, this function checks to make sure there is eough space on the target drive BEFORE
+        it attempts ot download the .box file. This calculation ensures that there is at least 2GB of
+        free space on the storage drive after the .box file has been downloaded. If you would like to
+        skip this check, use this switch.
+
+    .PARAMETER Repository
+        This parameter is OPTIONAL.
+
+        This parameter currently only takes the string 'Vagrant', which refers to the default Vagrant Box
+        Repository at https://app.vagrantup.com. Other Vagrant Repositories exist. At some point, this
+        function will be updated to include those other repositories.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function Get-VagrantBoxManualDownload {
     [CmdletBinding(DefaultParameterSetName='ExternalNetworkVM')]
     Param(
@@ -6581,6 +8169,35 @@ function Get-VagrantBoxManualDownload {
 }
 
 
+<#
+    .SYNOPSIS
+        This function uses the Vault Server REST API to return a list of Vault Token Accessors and associated
+        information. (This function differes from the Get-VaultTokenAccessors function in that it provides
+        additional information besides a simple list of Accessors).
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Token for a Vault User that has permission to
+        lookup Token Accessors using the Vault Server REST API.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-VaultAccessorLookup -VaultServerBaseUri "https://vaultserver.zero.lab:8200/v1" -VaultAuthToken '434f37ca-89ae-9073-8783-087c268fd46f'
+        
+#>
 function Get-VaultAccessorLookup {
     [CmdletBinding()]
     Param(
@@ -6643,6 +8260,34 @@ function Get-VaultAccessorLookup {
 }
 
 
+<#
+    .SYNOPSIS
+        This function outputs a Vault Authentication Token granted to the Domain User specified
+        in the -DomainCredentialsWithAccessToVault parameter.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER DomainCredentialsWithAccessToVault
+        This parameter is MANDATORY.
+
+        This parameter takes a PSCredential. Example:
+        $Creds = [pscredential]::new("zero\zeroadmin",$(Read-Host "Please enter the password for 'zero\zeroadmin'" -AsSecureString))
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-VaultLogin -VaultServerBaseUri "https://vaultserver.zero.lab:8200/v1" -DomainCredentialsWithAccessToVault $Creds
+        
+#>
 function Get-VaultLogin {
     [CmdletBinding()]
     Param (
@@ -6651,7 +8296,7 @@ function Get-VaultLogin {
         [string]$VaultServerBaseUri,
 
         [Parameter(Mandatory=$True)]
-        [pscredential]$DomainCredentialsWithAdminAccessToVault
+        [pscredential]$DomainCredentialsWithAccessToVault
     )
 
     [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
@@ -6672,8 +8317,8 @@ function Get-VaultLogin {
     }
 
     # Get the Domain User's Vault Token so that we can interact with Vault
-    $UserName = $($DomainCredentialsWithAdminAccessToVault.UserName -split "\\")[1]
-    $PlainTextPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainCredentialsWithAdminAccessToVault.Password))
+    $UserName = $($DomainCredentialsWithAccessToVault.UserName -split "\\")[1]
+    $PlainTextPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainCredentialsWithAccessToVault.Password))
 
     $jsonRequest = @"
 {
@@ -6712,6 +8357,33 @@ function Get-VaultLogin {
 }
 
 
+<#
+    .SYNOPSIS
+        This function uses the Vault Server REST API to return a list of Vault Token Accessors.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Token for a Vault User that has permission to
+        lookup Token Accessors using the Vault Server REST API.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-VaultTokenAccessors -VaultServerBaseUri "https://vaultserver.zero.lab:8200/v1" -VaultAuthToken '434f37ca-89ae-9073-8783-087c268fd46f'
+        
+#>
 function Get-VaultTokenAccessors {
     [CmdletBinding()]
     Param(
@@ -6748,6 +8420,37 @@ function Get-VaultTokenAccessors {
 }
 
 
+<#
+    .SYNOPSIS
+        This function uses the Vault Server REST API to return a list of Vault Tokens and associated information.
+
+        IMPORTANT NOTE: This function will NOT work unless your Vault Server was created with a vault.hcl
+        configuration that included:
+            raw_storage_endpoint = true
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Token for a Vault User that has (root) permission to
+        lookup Tokens using the Vault Server REST API.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-VaultTokens -VaultServerBaseUri "https://vaultserver.zero.lab:8200/v1" -VaultAuthToken '434f37ca-89ae-9073-8783-087c268fd46f'
+        
+#>
 function Get-VaultTokens {
     [CmdletBinding()]
     Param(
@@ -6816,15 +8519,76 @@ function Get-VaultTokens {
 
 <#
     .SYNOPSIS
-        The Install-SSHAgentService is, in large part, carved out of the 'install-sshd.ps1' script bundled with
+        This function installs OpenSSH-Win64 binaries and creates the ssh-agent service.
+
+        The code for this function is, in large part, carved out of the 'install-sshd.ps1' script bundled with
         an OpenSSH-Win64 install.
 
         Original authors (github accounts):
+            @manojampalam
+            @friism
+            @manojampalam
+            @bingbing8
 
-        @manojampalam - authored initial script
-        @friism - Fixed issue with invalid SDDL on Set-Acl
-        @manojampalam - removed ntrights.exe dependency
-        @bingbing8 - removed secedit.exe dependency
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER UseChocolateyCmdLine
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via the Chocolatey CmdLine.
+        If the Chocolatey CmdLine is not already installed, it will be installed.
+
+    .PARAMETER UsePowerShellGet
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
+        Modules.
+
+    .PARAMETER GitHubInstall
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed by downloading the .zip
+        from https://github.com/PowerShell/Win32-OpenSSH/releases/latest/, expanding the archive, moving
+        the files to the approproiate location(s), and setting permissions appropriately.
+
+    .PARAMETER UpdatePackageManagement
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, PowerShellGet/PackageManagement Modules will be updated to their
+        latest version before installation of OpenSSH binaries.
+
+        WARNING: Using this parameter could break certain PowerShellGet/PackageManagement cmdlets. Recommend
+        using the dedicated function "Update-PackageManagemet" and starting a fresh PowerShell session after
+        it finishes.
+
+    .PARAMETER SkipWinCapabilityAttempt
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+        
+        In more recent versions of Windows (Spring 2018), OpenSSH Client and SSHD Server can be installed as
+        Windows Features using the Dism Module 'Add-WindowsCapability' cmdlet. If you run this function on
+        a more recent version of Windows, it will attempt to use 'Add-WindowsCapability' UNLESS you use
+        this switch.
+
+        As of May 2018, there are reliability issues with the 'Add-WindowsCapability' cmdlet.
+        Using this switch is highly recommend in order to avoid using 'Add-WindowsCapability'.
+
+    .PARAMETER Force
+        This parameter is a OPTIONAL.
+
+        This parameter is a switch.
+
+        If you are already running the latest version of OpenSSH, but would like to reinstall it and the
+        associated ssh-agent service, use this switch.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Install-SSHAgentService
 
 #>
 function Install-SSHAgentService {
@@ -7130,43 +8894,98 @@ function Install-SSHAgentService {
 
 <#
     .SYNOPSIS
-        Install OpenSSH-Win64. Optionally install the latest PowerShell Core Beta. Optionally create new SSH Key Pair.
+        Install OpenSSH-Win64 and the associated ssh-agent service. Optionally install SSHD server and associated
+        sshd service. Optionally install the latest PowerShell Core.
 
     .DESCRIPTION
         See .SYNOPSIS
 
+    .NOTES
+
+    .PARAMETER ConfigureSSHDOnLocalHost
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the SSHD Server and associated sshd service will be installedm
+        configured, and enabled on the local host.
+
     .PARAMETER RemoveHostPrivateKeys
-        OPTIONAL
+        This parameter is OPTIONAL.
 
         This parameter is a switch. Use it to remove the Host Private Keys after they are added to the ssh-agent during
         sshd setup/config. Default is NOT to remove the host private keys.
 
-    .PARAMETER NewSSHKeyName
-        OPTIONAL
+        This parameter should only be used in combination with the -ConfigureSSHDOnLocalHost switch.
 
-        This parameter takes a string that represents the filename of the new SSH Key pair that you would like to create.
-        This string is used in the filename of the private key file as well as the public key file (with the .pub extension).
+    .PARAMETER DefaultShell
+        This parameter is OPTIONAL.
 
-    .PARAMETER NewSSHKeyPwd
-        OPTIONAL
+        This parameter takes a string that must be one of two values: "powershell","pwsh"
 
-        This parameter takes a string that represents the password used to protect the new SSH Private Key.
+        If set to "powershell", when a Remote User connects to the local host via ssh, they will enter a
+        Windows PowerShell 5.1 shell.
 
-    .PARAMETER NewSSHKeyPurpose
-        OPTIONAL
+        If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
+        PowerShell Core 6 shell.
 
-        This parameter takes a string that represents the purpose of the new SSH Key Pair. It will be used in the
-        "-C" (i.e. "comment") parameter of ssh-keygen.
+        If this parameter is NOT used, the Default shell will be cmd.exe.
 
-    .PARAMETER SetupPowerShell6
-        OPTIONAL
+        This parameter should only be used in combination with the -ConfigureSSHDOnLocalHost switch.
 
-        This parameter is a switch. Use it to install the latest PowerShell 6 Beta.
+    .PARAMETER GiveWinSSHBinariesPathPriority
+        This parameter is OPTIONAL, but highly recommended.
 
-        IMPORTANT NOTE: PowerShell 6 Beta is installed *alongside* existing PowerShell version.
+        This parameter is a switch. If used, ssh binaries installed as part of OpenSSH-Win64 installation will get
+        priority in your $env:Path. This is especially useful if you have ssh binaries in your path from other
+        program installs (like git).
+
+    .PARAMETER UsePowerShellGet
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
+        Modules.
+
+    .PARAMETER GitHubInstall
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed by downloading the .zip
+        from https://github.com/PowerShell/Win32-OpenSSH/releases/latest/, expanding the archive, moving
+        the files to the approproiate location(s), and setting permissions appropriately.
+
+    .PARAMETER UpdatePackageManagement
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, PowerShellGet/PackageManagement Modules will be updated to their
+        latest version before installation of OpenSSH binaries.
+
+        WARNING: Using this parameter could break certain PowerShellGet/PackageManagement cmdlets. Recommend
+        using the dedicated function "Update-PackageManagemet" and starting a fresh PowerShell session after
+        it finishes.
+
+    .PARAMETER SkipWinCapabilityAttempt
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+        
+        In more recent versions of Windows (Spring 2018), OpenSSH Client and SSHD Server can be installed as
+        Windows Features using the Dism Module 'Add-WindowsCapability' cmdlet. If you run this function on
+        a more recent version of Windows, it will attempt to use 'Add-WindowsCapability' UNLESS you use
+        this switch.
+
+        As of May 2018, there are reliability issues with the 'Add-WindowsCapability' cmdlet.
+        Using this switch is highly recommend in order to avoid using 'Add-WindowsCapability'.
+
+    .PARAMETER Force
+        This parameter is a OPTIONAL.
+
+        This parameter is a switch.
+
+        If you are already running the latest version of OpenSSH, but would like to reinstall it and the
+        associated ssh-agent service, use this switch.
 
     .EXAMPLE
-        Install-WinSSH -NewSSHKeyName "testadmin-to-Debian8Jessie" -NewSSHKeyPurpose "testadmin-to-Debian8Jessie"
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell -GitHubInstall
 
 #>
 function Install-WinSSH {
@@ -7370,20 +9189,41 @@ function Install-WinSSH {
     .PARAMETER IsoFile
         Path to the ISO image, must be set for Create/ReCreate
 
+    .PARAMETER SwitchName
+        Name of the switch you want to attatch to your new VM.
+
+    .PARAMETER VMGen
+        Generation of the VM you would like to create. Can be either 1 or 2. Defaults to 2.
+
+    .PARAMETER PreferredIntegrationServices
+        List of Hyper-V Integration Services you would like enabled for your new VM.
+        Valid values are: "Heartbeat","Shutdown","TimeSynch","GuestServiceInterface","KeyValueExchange","VSS"
+
+        Defaults to enabling: "Heartbeat","Shutdown","TimeSynch","GuestServiceInterface","KeyValueExchange"
+
+    .PARAMETER VhdPathOverride
+        By default, VHD file(s) for the new VM are stored under "C:\Users\Public\Documents\HyperV".
+
+        If you want VHD(s) stored elsewhere, provide this parameter with a full path to a directory.
+
+    .PARAMETER NoVhd
+        This parameter is a switch. Use it to create a new VM without a VHD. For situations where
+        you want to attach a VHD later.
+
     .PARAMETER Create
         Create a HyperV VM
 
-    .PARAMETER Memory
-        Memory allocated for the VM at start in MB (optional on Create, default: 2048 MB)
-
     .PARAMETER CPUs
         CPUs used in the VM (optional on Create, default: min(2, number of CPUs on the host))
+
+    .PARAMETER Memory
+        Memory allocated for the VM at start in MB (optional on Create, default: 2048 MB)
 
     .PARAMETER Destroy
         Remove a HyperV VM
 
     .PARAMETER KeepVolume
-        if passed, will not delete the vmhd on Destroy
+        If passed, will not delete the VHD on Destroy
 
     .PARAMETER Start
         Start an existing HyperV VM
@@ -7392,10 +9232,14 @@ function Install-WinSSH {
         Stop a running HyperV VM
 
     .EXAMPLE
-        Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -IsoFile .\mobylinux.iso -VMGen 1 -Create
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -IsoFile .\mobylinux.iso -VMGen 1 -Create
 
     .EXAMPLE
-        Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -VHDPathOverride "C:\Win1016Serv.vhdx" -VMGen 2 -Memory 4096 -Create
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -VHDPathOverride "C:\Win1016Serv.vhdx" -VMGen 2 -Memory 4096 -Create
 #>
 function Manage-HyperVVM {
     [CmdletBinding()]
@@ -7970,6 +9814,96 @@ function Manage-HyperVVM {
 }
 
 
+<#
+    .SYNOPSIS
+        This function creates a new SSH User/Client key pair and has the Vault Server sign the Public Key,
+        returning a '-cert.pub' file that can be used for Public Key Certificate SSH Authentication.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER DomainCredentialsWithAccessToVault
+        This parameter is OPTIONAL, however, either -DomainCredentialsWIthAccessToVault or -VaultAuthToken are REQUIRED.
+
+        This parameter takes a PSCredential. Example:
+        $Creds = [pscredential]::new("zero\zeroadmin",$(Read-Host "Please enter the password for 'zero\zeroadmin'" -AsSecureString))
+
+    .PARAMETER VaultAuthToken
+        This parameter is OPTIONAL, however, either -DomainCredentialsWIthAccessToVault or -VaultAuthToken are REQUIRED.
+
+        This parameter takes a string that represents a Token for a Vault User that has (root) permission to
+        lookup Tokens using the Vault Server REST API.
+
+    .PARAMETER NewSSHKeyName
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the file name that you would like to give to the new
+        SSH User/Client Keys.
+
+    .PARAMETER NewSSHKeyPurpose
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents a very brief description of what the new SSH Keys
+        will be used for. This description will be added to the Comment section when the new keys are
+        created.
+
+    .PARAMETER NewSSHKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter takes a SecureString that represents the password used to protect the new
+        Private Key file that is created.
+
+    .PARAMETER BlankSSHPrivateKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. Use it to ensure that the newly created Private Key is NOT password
+        protected.
+
+    .PARAMETER AddToSSHAgent
+        This parameter is OPTIONAL, but recommended.
+
+        This parameter is a switch. If used, the new SSH Key Pair will be added to the ssh-agent service.
+
+    .PARAMETER AllowAwaitModuleInstall
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -BlankSSHPrivateKeyPwd switch.
+
+        This parameter is a switch.
+
+        If you would like the Private Key file to be unprotected, and if you would like to avoid the
+        ssh-keygen prompt for a password, the PowerShell Await Module is required.
+
+        Use this switch along with the -BlankSSHPrivateKeyPwd switch to avoid prompts altogether.
+
+    .PARAMETER RemovePrivateKey
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddtoSSHAgent switch.
+
+        This parameter is a switch. If used, the newly created Private Key will be added to the ssh-agent
+        and deleted from the filesystem.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $NewSSHCredentialsSplatParams = @{
+            VaultServerBaseUri      = $VaultServerBaseUri
+            VaultAuthToken          = $VaultAuthToken
+            NewSSHKeyName           = $NewSSHKeyName
+            BlankSSHPrivateKeyPwd   = $True
+            AllowAwaitModuleInstall = $True
+            AddToSSHAgent           = $True
+        }
+        PS C:\Users\zeroadmin> $NewSSHCredsResult = New-SSHCredentials @NewSSHCredentialsSplatParams
+        
+#>
 function New-SSHCredentials {
     [CmdletBinding()]
     Param (
@@ -7997,7 +9931,7 @@ function New-SSHCredentials {
         [switch]$BlankSSHPrivateKeyPwd,
 
         [Parameter(Mandatory=$False)]
-        [switch]$AddToSSHAgent = $True,
+        [switch]$AddToSSHAgent,
 
         [Parameter(Mandatory=$False)]
         [switch]$AllowAwaitModuleInstall,
@@ -8134,6 +10068,54 @@ function New-SSHCredentials {
 }
 
 
+<#
+    .SYNOPSIS
+        This function installs and configures the SSHD server (sshd service) on the local host.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER RemoveHostPrivateKeys
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. Use it to add the Host Private Keys to the ssh-agent and remove
+        the Private Key files frome the filesystem during sshd setup/config. Default is NOT to remove
+        the Host Private Keys.
+
+    .PARAMETER DefaultShell
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that must be one of two values: "powershell","pwsh"
+
+        If set to "powershell", when a Remote User connects to the local host via ssh, they will enter a
+        Windows PowerShell 5.1 shell.
+
+        If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
+        PowerShell Core 6 shell.
+
+        If this parameter is NOT used, the Default shell will be cmd.exe.
+
+    .PARAMETER SkipWinCapabilityAttempt
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+        
+        In more recent versions of Windows (Spring 2018), OpenSSH Client and SSHD Server can be installed as
+        Windows Features using the Dism Module 'Add-WindowsCapability' cmdlet. If you run this function on
+        a more recent version of Windows, it will attempt to use 'Add-WindowsCapability' UNLESS you use
+        this switch.
+
+        As of May 2018, there are reliability issues with the 'Add-WindowsCapability' cmdlet.
+        Using this switch is highly recommend in order to avoid using 'Add-WindowsCapability'.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> New-SSHDServer -DefaultShell powershell
+        
+#>
 function New-SSHDServer {
     [CmdletBinding()]
     Param(
@@ -8628,6 +10610,97 @@ function New-SSHDServer {
 }
 
 
+<#
+    .SYNOPSIS
+        This function creates a new SSH Public/Private Key Pair. Optionally, add it to the ssh-agent.
+        Optionally add the public key to a Remote Host's ~/.ssh/authorized_keys file.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER NewSSHKeyName
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the file name that you would like to give to the new
+        SSH User/Client Keys.
+
+    .PARAMETER NewSSHKeyPurpose
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents a very brief description of what the new SSH Keys
+        will be used for. This description will be added to the Comment section when the new keys are
+        created.
+
+    .PARAMETER NewSSHKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter takes a SecureString that represents the password used to protect the new
+        Private Key file that is created.
+
+    .PARAMETER BlankSSHPrivateKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. Use it to ensure that the newly created Private Key is NOT password
+        protected.
+
+    .PARAMETER AddToSSHAgent
+        This parameter is OPTIONAL, but recommended.
+
+        This parameter is a switch. If used, the new SSH Key Pair will be added to the ssh-agent service.
+
+    .PARAMETER AllowAwaitModuleInstall
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -BlankSSHPrivateKeyPwd switch.
+
+        This parameter is a switch.
+
+        If you would like the Private Key file to be unprotected, and if you would like to avoid the
+        ssh-keygen prompt for a password, the PowerShell Await Module is required.
+
+        Use this switch along with the -BlankSSHPrivateKeyPwd switch to avoid prompts altogether.
+
+    .PARAMETER RemovePrivateKey
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddtoSSHAgent switch.
+
+        This parameter is a switch. If used, the newly created Private Key will be added to the ssh-agent
+        and deleted from the filesystem.
+
+    .PARAMETER RemoteHost
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddToRemoteHostAuthKeys switch.
+
+        This parameter takes a string that represents the IP Address of DNS-Resolvable name of a Remote Host.
+        The newly created public key will be added to the Remote Host's ~/.ssh/authorized_keys file. The
+        Remote Host can be either Windows or Linux (as long as you can ssh to it from the local host).
+
+    .PARAMETER AddToRemoteHostAuthKeys
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the newly created Public Key will be added to the Remote Host's
+        ~/.ssh/authorized_keys file. (Specify the Remote Host using the -RemoteHost parameter)
+
+    .PARAMETER RemoteHostUserName
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddToRemoteHostAuthKeys parameter.
+
+        This parameter takes a string that represents the name of the user with ssh access to
+        the Remote Host (specified by the -RemoteHost parameter).
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            NewSSHKeyName           = "ToRHServ01"
+            NewSSHKeyPurpose        = "ForSSHToRHServ01"
+            AllowAwaitModuleInstall = $True
+            AddToSSHAgent           = $True
+        }
+        PS C:\Users\zeroadmin> New-SSHKey @SplatParams
+        
+#>
 function New-SSHKey {
     [CmdletBinding()]
     Param(
@@ -8966,6 +11039,49 @@ function New-SSHKey {
 }
 
 
+<#
+    .SYNOPSIS
+        This function revokes the Vault Token for the specified User.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Token for a Vault User that has (root) permission to
+        lookup and delete Tokens using the Vault Server REST API.
+
+    .PARAMETER VaultUserToDelete
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of the user that you would like to revoke Tokens
+        for. The UserName should match the .meta.username property from objects returned by the
+        Get-VaultAccessorLookup function - which itself should match the Basic UserName in Active Directory.
+        (For example, if the Domain User is 'zero\jsmith' the "Basic UserName" is 'jsmith', which
+        is the value that you should supply to this paramter)
+
+        IMPORTANT NOTE: ALL tokens granted to the specified user will be revoked.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            VaultServerBaseUri      = $VaultServerBaseUri
+            VaultAuthToken          = $ZeroAdminToken
+            VaultuserToDelete       = "jsmith"
+        }
+        PS C:\Users\zeroadmin> Revoke-VaultToken @SplatParams
+        
+#>
 function Revoke-VaultToken {
     [CmdletBinding()]
     Param(
@@ -9059,6 +11175,33 @@ function Revoke-VaultToken {
 }
 
 
+<#
+    .SYNOPSIS
+        This function modifies sshd_config on the local host and sets the default shell
+        that Remote Users will use when they ssh to the local host.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER DefaultShell
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of two values: "powershell","pwsh"
+
+        If set to "powershell", when a Remote User connects to the local host via ssh, they will enter a
+        Windows PowerShell 5.1 shell.
+
+        If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
+        PowerShell Core 6 shell.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Set-DefaultShell -DefaultShell powershell
+        
+#>
 function Set-DefaultShell {
     [CmdletBinding()]
     Param(
@@ -9167,7 +11310,36 @@ function Set-DefaultShell {
 }
 
 
-# This function should be run on BOTH SSH Client AND SSHD Server Machines
+<#
+    .SYNOPSIS
+        This function (via teh Vault Server REST API) asks the Vault Server to sign the Local Host's
+        SSH Host Key (i.e. 'C:\ProgramData\ssh\ssh_host_rsa_key.pub', resulting in output
+        'C:\ProgramData\ssh\ssh_host_rsa_key-cert.pub').
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultSSHHostSigningUrl
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the Vault Server REST API endpoint responsible
+        for signing Host/Machine SSH Keys. The Url should be something like:
+            https://vaultserver.zero.lab:8200/v1/ssh-host-signer/sign/hostrole
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Vault Authentication Token that has
+        permission to request SSH Host Key Signing via the Vault Server REST API.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Sign-SSHHostPublicKey -VaultSSHHostSigningUrl $VaultSSHHostSigningUrl -VaultAuthToken $ZeroAdminToken
+        
+#>
 function Sign-SSHHostPublicKey {
     [CmdletBinding()]
     Param(
@@ -9374,13 +11546,76 @@ function Sign-SSHHostPublicKey {
 }
 
 
-# This function should be run on the SSH Client Machine - i.e. the machine that generated the user ssh key pair via:
-#     ssh-keygen -t rsa -b 2048 -f "$HOME\.ssh\ToWin10LatestB1" -q -C "ToWin10LatestB1"
+<#
+    .SYNOPSIS
+        This function signs an SSH Client/User Public Key (for example, "$HOME\.ssh\id_rsa.pub") resulting
+        in a Public Certificate (for example, "$HOME\.ssh\id_rsa-cert.pub"). This Public Certificate can
+        then be used for Public Key Certificate SSH Authentication.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultSSHClientSigningUrl
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the Vault Server REST API endpoint responsible
+        for signing Client/User SSH Keys. The Url should be something like:
+            https://vaultserver.zero.lab:8200/v1/ssh-client-signer/sign/clientrole
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Vault Authentication Token that has
+        permission to request SSH User/Client Key Signing via the Vault Server REST API.
+
+    .PARAMETER AuthorizedUserPrincipals
+        This parameter is MANDATORY.
+
+        This parameter takes a string or array of strings that represent the User or Users that will
+        be using the Public Key Certificate to SSH into remote machines.
+
+        Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix: if your
+        domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
+
+    .PARAMETER PathToSSHUserPublicKeyFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to the SSH Public Key that you would like
+        the Vault Server to sign. Example: "$HOME\.ssh\id_rsa.pub"
+
+    .PARAMETER PathToSSHUserPublicKeyFile
+        This parameter is OPTIONAL, but becomes MANDATORY if you want to add the signed Public Key Certificate to
+        the ssh-agent service.
+
+        This parameter takes a string that represents a full path to the SSH User/Client private key file.
+
+    .PARAMETER AddToSSHAgent
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the signed Public Key Certificate will be added to the ssh-agent service. 
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            VaultSSHClientSigningUrl    = $VaultSSHClientSigningUrl
+            VaultAuthToken              = $ZeroAdminToken
+            AuthorizedUserPrincipals    = @("zeroadmin@zero")
+            PathToSSHUserPublicKeyFile  = "$HOME\.ssh\zeroadmin_id_rsa.pub"
+            PathToSSHUserPrivateKeyFile = "$HOME\.ssh\zeroadmin_id_rsa"
+            AddToSSHAgent               = $True
+        }
+        PS C:\Users\zeroadmin> Sign-SSHUserPublicKey @SplatParams
+        
+#>
 function Sign-SSHUserPublicKey {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$True)]
-        [string]$VaultSSHClientSigningUrl, # Should be something like "http://192.168.2.12:8200/v1//ssh-client-signer/sign/clientrole"
+        [string]$VaultSSHClientSigningUrl, # Should be something like "http://192.168.2.12:8200/v1/ssh-client-signer/sign/clientrole"
 
         [Parameter(Mandatory=$True)]
         [string]$VaultAuthToken, # Should be something like 'myroot' or '434f37ca-89ae-9073-8783-087c268fd46f'
@@ -9513,6 +11748,29 @@ function Sign-SSHUserPublicKey {
 }
 
 
+<#
+    .SYNOPSIS
+        This function uninstalls OpenSSH-Win64 binaries, removes ssh-agent and sshd services (if they exist),
+        and deletes (recursively) the directories "C:\Program Files\OpenSSH-Win64" and "C:\ProgramData\ssh"
+        (if they exist) 
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER KeepSSHAgent
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, ONLY the SSHD server (i.e. sshd service) is uninstalled. Nothing
+        else is touched.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Uninstall-WinSSH
+        
+#>
 function Uninstall-WinSSH {
     [CmdletBinding()]
     Param (
@@ -9623,6 +11881,66 @@ function Uninstall-WinSSH {
 }
 
 
+<#
+    .SYNOPSIS
+        This function installs or updates PowerShell Core on the local host.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER DownloadDirectory
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a full path to a directory where the latest PowerShell
+        Core release will be downloaded to.
+
+    .PARAMETER UsePackageManagement
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will use the respective Operating System's
+        Package Management system in order to install the latest PowerShell Core.
+        
+    .PARAMETER OS
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that must be one of the following values:
+        "win", "macos", "linux", "ubuntu", "debian", "centos", "redhat"
+
+        This parameter should only be used if you are downloading a PowerShell Core release that is NOT
+        meant for the Operating System that you are currently on.
+
+    .PARAMETER ReleaseVersion
+        This parameter is OPTIONAL. This parameter should only be used if you do NOT want the latest version.
+
+        This parameter takes a string that represents a PowerShell Core Release version.
+        Example: 6.1.0
+
+    .PARAMETER Channel
+        This parameter is OPTIONAL. This parameter should only be used if you do NOT want the latest version.
+
+        This parameter takes a string that can be one of 4 values:
+        "beta", "rc", "stable", "preview"
+    
+    .PARAMETER Iteration
+        This parameter is OPTIONAL. This parameter should only be used if you do NOT want the latest version.
+
+        This parameter takes an integer. For example, in the release "powershell-6.1.0-preview.2-1.rhel.7.x86_64.rpm",
+        iteration is 2.
+
+    .PARAMETER Latest
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. It is used by default. Using this switch installs the latest release of PowerShell
+        Core.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Update-PowerShellCore -DownloadDirectory "$HOME\Downloads" -Latest
+        
+#>
 function Update-PowerShellCore {
     [CmdletBinding(DefaultParameterSetName='PackageManagement')]
     Param(
@@ -9649,14 +11967,14 @@ function Update-PowerShellCore {
         $ReleaseVersion,
 
         [Parameter(Mandatory=$False)]
-        #[ValidateSet("beta", "rc", "stable")]
+        #[ValidateSet("beta", "rc", "stable", "preview")]
         $Channel,
 
         [Parameter(Mandatory=$False)]
         [int]$Iteration,
 
         [Parameter(Mandatory=$False)]
-        [switch]$Latest
+        [switch]$Latest = $True
         
     )
 
@@ -10546,9 +12864,33 @@ function Update-PowerShellCore {
 }
 
 
-# Function should be run on SSH Client Machine as part of Sign-SSHUserPublicKey function
-# In this function, in order to test if we have a valid Private Key, and if that Private Key
-# is password protected, we try and generate a Public Key from it using ssh-keygen
+<#
+    .SYNOPSIS
+        This function is meant to determine the following:
+            - Whether or not the specified file is, in fact, an SSH Private Key
+            - If the SSH Private Key File is password protected
+        
+        In order to test if we have a valid Private Key, and if that Private Key
+        is password protected, we try and generate a Public Key from it using ssh-keygen.
+        Depending on the output of ssh-keygen, we can make a determination.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PathToPrivateKeyFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a full path to the file that we believe is
+        a valid SSH Private Key that we want to test.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Validate-SSHPrivateKey -PathToPrivateKeyFile "$HOME\.ssh\random"
+        
+#>
 function Validate-SSHPrivateKey {
     [CmdletBinding()]
     Param(
@@ -10619,8 +12961,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDx2Uvsj4pMP2Bf4kELOZXep5
-# 2H2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcbgPMknbjyWNpUggkCG9bIaZ
+# hS+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -10677,11 +13019,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPigu0HjH7zDqTP7
-# U6hBHQFEpKCLMA0GCSqGSIb3DQEBAQUABIIBAJRNyMN0susVOeSuXWbe6V9FRaVc
-# tETUeumeyQ3uHCyHiI0l++4HQdzy5rFXxY+w/0EHKd3wWWF5BjH+JXe3ut5H6TaP
-# sh4xEjLSNmKySOXMmbPkqpFdAhL5BV+uCzTGvWRT+gpf84ayit/Ld+JUL6RWClR/
-# MBGS5m0SYZkoq7+cr34L1Qx9y4YT+Q+aNtpWFda9VFyHS0lD8ZCBJ+ax7nIfH+Uy
-# hhqdUcPhfCqbgcyImwM+O0tffk4E0nbuOSc90Y8Lkfyx+hi/3jWF0JvOq8Gv3WKS
-# FhSdsHNUrAVKy9hxLsIFnGnKbKyF+glTuc0PMDeHUYAxENlXJSzDsSvDBzE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOcYhzu/DG6hQvOX
+# DrspN8wt8gIDMA0GCSqGSIb3DQEBAQUABIIBAJutVCXIE4W/NK8cj/ahE9kCQDS9
+# b/jCrjdkBRyfR/Ddcf4OoscetF6fs7n3UZqIUVg0er/f5CBo9AkHHs+RmLv/N0Ns
+# re2c2qCXKV+/2/PpqhtvQsprxSoKGWghmw7qlX7iq9yAK0A+y/d5Pyvx2AIul9Ns
+# Xr2ui03kQeEyu1UNDa9k+jG/Dc3K0evNW0vNqDOnHYjlcnjt0vAOqr/ZX3i9jLEi
+# sFAmMaJaa4hdrWP4ztJPUA++1aHuroN7nz/jyGWYqmmP98cj3UhsWABZ5Yw3hl4O
+# jQlyQcy35AmYFNp91SKpt121PJ0Bi++RyuzkZYNAc4x+dX460r8o9aDLzqg=
 # SIG # End signature block

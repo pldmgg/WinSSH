@@ -15,7 +15,7 @@
         - Writing the Certificate Request Config File (~Lines 3276-3490)
         - Generate Certificate Request, Submit to Issuing Certificate Authority, and Recieve Response (~Lines 3492-END)
 
-        .DEPENDENCIES
+        DEPENDENCIES
             OPTIONAL DEPENDENCIES (One of the two will be required depending on if you use the ADCS Website)
             1) RSAT (Windows Server Feature) - If you're not using the ADCS Website, then the Get-ADObject cmdlet is used for various purposes. This cmdlet
             is available only if RSAT is installed on the Windows Server.
@@ -181,7 +181,7 @@
         This parameter takes a string that represents an Organization name. This will be added to "Subject" field in the
         Certificate.
 
-    .PARAMETER OriginationalUnit
+    .PARAMETER OrganizationalUnit
         This parameter is MANDATORY.
 
         This parameter takes a string that represents an Organization's Department. This will be added to the "Subject" field
@@ -476,6 +476,13 @@
 
         This parameter takes an array of strings. Each string should represent a GUID.
         Example: "f7c3ac41-b8ce-4fb4-aa58-3d1dc0e36b39","g8D4ac41-b8ce-4fb4-aa58-3d1dc0e47c48"
+
+    .PARAMETER CSRGenOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, a Certificate Signing Request (CSR) will be created, but it
+        will NOT be submitted to the Issuing Certificate Authority. This is useful for requesting
+        certificates from non-Microsoft Certificate Authorities.
 
     .EXAMPLE
         # Scenario 1: No Parameters Provided
@@ -3634,11 +3641,23 @@ function Generate-Certificate {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGf9b8lib0fs5bDmtKQp+dJzp
-# 86Kgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0aYTBAyTsj7ILofNz11AAAdq
+# GbSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -3695,11 +3714,11 @@ function Generate-Certificate {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFB1DjLOFydrSw2aB
-# 4tq32JkYsHjRMA0GCSqGSIb3DQEBAQUABIIBABsCj+xwZYHeM+L/zs8VFCIJMZs6
-# MFnG+evO66hjgQCumDT5qyGWwbM9dy9e4GVYQMSjqIYmpoaTZ78P8Lac1JdhJSPd
-# 74zIvT+8SirY4vRAUQffYOpVQs341nc3TvwHF9YeDKYJJ9y4w9LAj2ybdksj4Hxv
-# Ek/ZF8vGpFI82n4bkvleP/g+iC81AdFywyJH8xmKJm8h46nqfSuyHUern+Lr9B9w
-# 2I02Gfsxc/7XvGFS2DBR2f2eD3WrUlF2GT3zXsRD15boISDZ99YHypVll98VzY4z
-# OLr4rvnp8kkdMFGQrMH9fDxQqIVIvCClEbTqnu7GskGblCNEHKZcFaDRN08=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEaVXT1xzMRzx3T1
+# mEiiOkp4VyaoMA0GCSqGSIb3DQEBAQUABIIBABaFm63UvnvJrrVmF+JA+fu7dunb
+# sOIfUjOV9TQrvAcdUsCFSid2J0o3UWehKg9J3ZhKChaszqOZ+HyI0/yYdXaYO3E7
+# uhXOsbJC1inJ+Y1ggu2dcfHIqfWLkTbvPDd+QmZq1kwA6o7nnNCbBChbo2SmviIH
+# JlN6IXFFV0jn3G8fbqxI3nrMklficZ+rrorQ9BWgetHPywQP9PGRR8bjGKhHt3OJ
+# XuOzz3NwkA8nB9EQGz7c5tURY6Q5EZ/oBZnUORMDFa77+GJ4jlqGRtnie9N7qeVX
+# mVXbPvk0K/EPzwVIUqWm5bTtTz+ojgi1smN7pSCqfus0d4mFRKKxtdPKgv8=
 # SIG # End signature block
