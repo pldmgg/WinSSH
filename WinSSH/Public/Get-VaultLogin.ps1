@@ -1,3 +1,31 @@
+<#
+    .SYNOPSIS
+        This function outputs a Vault Authentication Token granted to the Domain User specified
+        in the -DomainCredentialsWithAccessToVault parameter.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER DomainCredentialsWithAccessToVault
+        This parameter is MANDATORY.
+
+        This parameter takes a PSCredential. Example:
+        $Creds = [pscredential]::new("zero\zeroadmin",$(Read-Host "Please enter the password for 'zero\zeroadmin'" -AsSecureString))
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-VaultLogin -VaultServerBaseUri "https://vaultserver.zero.lab:8200/v1" -DomainCredentialsWithAccessToVault $Creds
+        
+#>
 function Get-VaultLogin {
     [CmdletBinding()]
     Param (
@@ -6,7 +34,7 @@ function Get-VaultLogin {
         [string]$VaultServerBaseUri,
 
         [Parameter(Mandatory=$True)]
-        [pscredential]$DomainCredentialsWithAdminAccessToVault
+        [pscredential]$DomainCredentialsWithAccessToVault
     )
 
     [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
@@ -27,8 +55,8 @@ function Get-VaultLogin {
     }
 
     # Get the Domain User's Vault Token so that we can interact with Vault
-    $UserName = $($DomainCredentialsWithAdminAccessToVault.UserName -split "\\")[1]
-    $PlainTextPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainCredentialsWithAdminAccessToVault.Password))
+    $UserName = $($DomainCredentialsWithAccessToVault.UserName -split "\\")[1]
+    $PlainTextPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($DomainCredentialsWithAccessToVault.Password))
 
     $jsonRequest = @"
 {

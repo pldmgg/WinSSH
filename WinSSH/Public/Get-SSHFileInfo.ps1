@@ -1,3 +1,42 @@
+<#
+    .SYNOPSIS
+        This function gets information about the specified SSH Key/Certificate file.
+
+        Output is a PSCustomObject with the following properties...
+
+            File                = $PathToKeyFile
+            FileType            = $FileType
+            Contents            = $Contents
+            Info                = $Info
+            FingerPrint         = $FingerPrint
+            PasswordProtected   = $PasswordProtected
+
+        ...where...
+        
+            - $PathToKeyFile is the path to the Key file specified by the -PathToKeyFile parameter,
+            - $FileType is either "RSAPublicKey", "RSAPrivateKey", or "RSAPublicKeyCertificate"
+            - $Contents is the result of: Get-Content $PathToKeyFile
+            - $Info is the result of: ssh-keygen -l -f "$PathToKeyFile"
+            - $FingerPrint is the fingerprint of the $PathToKeyFile
+            - $PasswordProtected is a Boolean that indicates whether or not the file is password protected.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PathToKeyFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to the SSH Key/Cert File you would
+        like to inspect.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-SSHFileInfo -PathToKeyFile "$HOME\.ssh\id_rsa"
+        
+#>
 function Get-SSHFileInfo {
     [CmdletBinding()]
     Param(

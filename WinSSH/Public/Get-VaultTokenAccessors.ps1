@@ -1,3 +1,30 @@
+<#
+    .SYNOPSIS
+        This function uses the Vault Server REST API to return a list of Vault Token Accessors.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER VaultAuthToken
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Token for a Vault User that has permission to
+        lookup Token Accessors using the Vault Server REST API.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-VaultTokenAccessors -VaultServerBaseUri "https://vaultserver.zero.lab:8200/v1" -VaultAuthToken '434f37ca-89ae-9073-8783-087c268fd46f'
+        
+#>
 function Get-VaultTokenAccessors {
     [CmdletBinding()]
     Param(

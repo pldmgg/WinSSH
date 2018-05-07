@@ -1,4 +1,53 @@
-# Downloads a Vagrant Box (.box file) to the specified $DownloadDirectory
+<#
+    .SYNOPSIS
+        This function downloads a Vagrant Box (.box file) to the specified -DownloadDirectory
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER VagrantBox
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of a Vagrant Box that can be found
+        on https://app.vagrantup.com. Example: centos/7
+
+    .PARAMETER VagrantProvider
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of the following values:
+        "hyperv","virtualbox","vmware_workstation","docker"
+
+    .PARAMETER DownloadDirectory
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a full path to a directory that the .box file
+        will be downloaded to.
+
+    .PARAMETER SkipPreDownloadCheck
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+
+        By default, this function checks to make sure there is eough space on the target drive BEFORE
+        it attempts ot download the .box file. This calculation ensures that there is at least 2GB of
+        free space on the storage drive after the .box file has been downloaded. If you would like to
+        skip this check, use this switch.
+
+    .PARAMETER Repository
+        This parameter is OPTIONAL.
+
+        This parameter currently only takes the string 'Vagrant', which refers to the default Vagrant Box
+        Repository at https://app.vagrantup.com. Other Vagrant Repositories exist. At some point, this
+        function will be updated to include those other repositories.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function Get-VagrantBoxManualDownload {
     [CmdletBinding(DefaultParameterSetName='ExternalNetworkVM')]
     Param(
