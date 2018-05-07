@@ -8,22 +8,84 @@
 
     .NOTES
 
-    .PARAMETER HomeFolderAndSubItemsOnly
+    .PARAMETER VaultServerBaseUri
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Uri referencing the location of the Vault Server
+        on your network. Example: "https://vaultserver.zero.lab:8200/v1"
+
+    .PARAMETER DomainCredentialsWithAccessToVault
+        This parameter is OPTIONAL, however, either -DomainCredentialsWIthAccessToVault or -VaultAuthToken are REQUIRED.
+
+        This parameter takes a PSCredential. Example:
+        $Creds = [pscredential]::new("zero\zeroadmin",$(Read-Host "Please enter the password for 'zero\zeroadmin'" -AsSecureString))
+
+    .PARAMETER VaultAuthToken
+        This parameter is OPTIONAL, however, either -DomainCredentialsWIthAccessToVault or -VaultAuthToken are REQUIRED.
+
+        This parameter takes a string that represents a Token for a Vault User that has (root) permission to
+        lookup Tokens using the Vault Server REST API.
+
+    .PARAMETER NewSSHKeyName
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the file name that you would like to give to the new
+        SSH User/Client Keys.
+
+    .PARAMETER NewSSHKeyPurpose
         This parameter is OPTIONAL.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directory '$HOME\.ssh'
+        This parameter takes a string that represents a very brief description of what the new SSH Keys
+        will be used for. This description will be added to the Comment section when the new keys are
+        created.
 
-    .PARAMETER ProgramDataFolderAndSubItemsOnly
+    .PARAMETER NewSSHKeyPwd
         This parameter is OPTIONAL.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+        This parameter takes a SecureString that represents the password used to protect the new
+        Private Key file that is created.
+
+    .PARAMETER BlankSSHPrivateKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. Use it to ensure that the newly created Private Key is NOT password
+        protected.
+
+    .PARAMETER AddToSSHAgent
+        This parameter is OPTIONAL, but recommended.
+
+        This parameter is a switch. If used, the new SSH Key Pair will be added to the ssh-agent service.
+
+    .PARAMETER AllowAwaitModuleInstall
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -BlankSSHPrivateKeyPwd switch.
+
+        This parameter is a switch.
+
+        If you would like the Private Key file to be unprotected, and if you would like to avoid the
+        ssh-keygen prompt for a password, the PowerShell Await Module is required.
+
+        Use this switch along with the -BlankSSHPrivateKeyPwd switch to avoid prompts altogether.
+
+    .PARAMETER RemovePrivateKey
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddtoSSHAgent switch.
+
+        This parameter is a switch. If used, the newly created Private Key will be added to the ssh-agent
+        and deleted from the filesystem.
 
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
-        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        PS C:\Users\zeroadmin> $NewSSHCredentialsSplatParams = @{
+            VaultServerBaseUri      = $VaultServerBaseUri
+            VaultAuthToken          = $VaultAuthToken
+            NewSSHKeyName           = $NewSSHKeyName
+            BlankSSHPrivateKeyPwd   = $True
+            AllowAwaitModuleInstall = $True
+            AddToSSHAgent           = $True
+        }
+        PS C:\Users\zeroadmin> $NewSSHCredsResult = New-SSHCredentials @NewSSHCredentialsSplatParams
         
 #>
 function New-SSHCredentials {
@@ -53,7 +115,7 @@ function New-SSHCredentials {
         [switch]$BlankSSHPrivateKeyPwd,
 
         [Parameter(Mandatory=$False)]
-        [switch]$AddToSSHAgent = $True,
+        [switch]$AddToSSHAgent,
 
         [Parameter(Mandatory=$False)]
         [switch]$AllowAwaitModuleInstall,
