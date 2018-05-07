@@ -1,5 +1,76 @@
-# This function is used to determine the most efficient ssh.exe command that should work
-# on the Remote Host (assuming the sshd server on the remote host is configured properly)
+<#
+    .SYNOPSIS
+        This function is used to determine the most efficient ssh.exe command that should work
+        on the Remote Host (assuming the sshd server on the remote host is configured properly).
+
+        By providing this function ONE of the following parameters...
+            SSHKeyFilePath
+            SSHPublicKeyFilePath
+            SSHPrivateKeyFilePath
+            SSHPublicCertFilePath
+        ...this function will find all related files (as long as they're in the "$HOME\.ssh" directory
+        or in the ssh-agent). Then, depending on the type of authentication you would like to use
+        (which you sould specify using the -AuthMethod parameter), this function will output a PSCustomObject
+        with properties similar to:
+            PublicKeyAuthShouldWork (Boolean)
+            PublicKeyCertificateAuthShouldWork (Boolean)
+            SSHClientProblemDescription (String)
+            FinalSSHExeCommand (String)
+        
+        The property 'PublicKeyAuthShouldWork' will appear only if -AuthMethod is "PublicKey".
+        The property 'PublicKeyCertificateAuthShouldWork' will appear only if -AuthMethod is "PublicKeyCertificate".
+        The property 'SSHClientProblemDescription' will appear only if an SSH Command cannot be determined.
+        The property 'FinalSSHExeCommand' will always appear. It might be $null if a command cannot be determined.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER SSHKeyFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Key/Cert file.
+
+        This parameter should be used if you are certain that the specified file is related to SSH
+        Authentication, but you are not sure if the file is a Public Key, Private Key, or Public Certificate.
+
+        It is HIGHLY RECOMMENDED that you use this parameter instead of -SSHPublicKeyFilePath or
+        -SSHPrivateKeyFilePath or -SSHPublicCertFilePath.
+
+    .PARAMETER SSHPublicKeyFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Public Key file. If the file
+        is NOT an SSH Public Key file, the function will halt.
+
+    .PARAMETER SSHPrivateKeyFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Private Key file. If the file
+        is NOT an SSH Private Key file, the function will halt.
+
+    .PARAMETER SSHPublicCertFilePath
+        This parameter is MANDATORY for its given Parameter Set.
+
+        This parameter takes a string that represents a full path to an SSH Public Certificate file. If the file
+        is NOT an SSH Public Certificate file, the function will halt.
+
+    .PARAMETER AuthMethod
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of two values: "PublicKey", "PublicKeyCertificate"
+
+        If you would like this function to output an ssh command that uses Public Key Authentication,
+        use "PublicKey" for this parameter. If you would like this function to ouput an ssh command that
+        uses Public Certificate Authentication, use "PublicKeyCertificate" for this parameter.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-SSHClientAuthSanity -SSHKeyFilePath "$HOME\.ssh\id_rsa"
+        
+#>
 function Get-SSHClientAuthSanity {
     [CmdletBinding(DefaultParameterSetName="UnknownKey")]
     Param(

@@ -1,3 +1,56 @@
+<#
+    .SYNOPSIS
+        This function gets the TLS certificate used by the LDAP server on the specified Port.
+
+        The function outputs a PSCustomObject with the following properties:
+            - LDAPEndpointCertificateInfo
+            - RootCACertificateInfo
+            - CertChainInfo
+        
+        The 'LDAPEndpointCertificateInfo' property is itself a PSCustomObject with teh following content:
+            X509CertFormat      = $X509Cert2Obj
+            PemFormat           = $PublicCertInPemFormat
+
+        The 'RootCACertificateInfo' property is itself a PSCustomObject with teh following content:
+            X509CertFormat      = $RootCAX509Cert2Obj
+            PemFormat           = $RootCACertInPemFormat
+
+        The 'CertChainInfo' property is itself a PSCustomObject with the following content:
+            X509ChainFormat     = $CertificateChain
+            PemFormat           = $CertChainInPemFormat
+        ...where $CertificateChain is a System.Security.Cryptography.X509Certificates.X509Chain object.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER LDAPServerHostNameOrIP
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents either the IP Address or DNS-Resolvable Name of the
+        LDAP Server. If you're in a Windows environment, this is a Domain Controller's network location.
+
+    .PARAMETER Port
+        This parameter is MANDATORY.
+
+        This parameter takes an integer that represents a port number that the LDAP Server is using that
+        provides a TLS Certificate. Valid values are: 389, 636, 3268, 3269
+
+    .PARAMETER UseOpenSSL
+        This parameter is OPTIONAL. However, if $Port is 389 or 3268, then this parameter is MANDATORY.
+
+        This parameter is a switch. If used, the latest OpenSSL available from
+        http://wiki.overbyte.eu/wiki/index.php/ICS_Download will be downloaded and made available
+        in the current PowerShell Session's $env:Path.
+
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function Get-LDAPCert {
     [CmdletBinding()]
     param (
@@ -12,7 +65,6 @@ function Get-LDAPCert {
         [switch]$UseOpenSSL
     )
 
-    ##### BEGIN Pre-Run Check #####
     #region >> Pre-Run Check
 
     try {
@@ -26,10 +78,8 @@ function Get-LDAPCert {
     }
 
     #endregion >> Pre-Run Check
-    ##### END Pre-Run Check #####
+    
 
-
-    ##### BEGIN Main Body #####
     #region >> Main Body
 
     if ($UseOpenSSL) {
@@ -186,11 +236,24 @@ function Get-LDAPCert {
 
     $CertificateChain = [System.Security.Cryptography.X509Certificates.X509Chain]::new()
     $null = $CertificateChain.Build($X509Cert2Obj)
+    [System.Collections.ArrayList]$CertsInPemFormat = @()
+    foreach ($Cert in $CertificateChain.ChainElements.Certificate) {
+        $CertInPemFormatPrep = "-----BEGIN CERTIFICATE-----`n" + 
+        [System.Convert]::ToBase64String($Cert.RawData, [System.Base64FormattingOptions]::InsertLineBreaks) + 
+        "`n-----END CERTIFICATE-----"
+        $CertInPemFormat = $CertInPemFormatPrep -split "`n"
+        
+        $null = $CertsInPemFormat.Add($CertInPemFormat)
+    }
+    $CertChainInPemFormat = $($CertsInPemFormat | Out-String).Trim()
+
     $RootCAX509Cert2Obj = $CertificateChain.ChainElements.Certificate | Where-Object {$_.Issuer -eq $_.Subject}
     $RootCAPublicCertInPemFormatPrep = "-----BEGIN CERTIFICATE-----`n" + 
         [System.Convert]::ToBase64String($RootCAX509Cert2Obj.RawData, [System.Base64FormattingOptions]::InsertLineBreaks) + 
         "`n-----END CERTIFICATE-----"
     $RootCACertInPemFormat = $RootCAPublicCertInPemFormatPrep -split "`n"
+
+    # Create Output
 
     $LDAPEndpointCertificateInfo = [pscustomobject]@{
         X509CertFormat      = $X509Cert2Obj
@@ -202,15 +265,18 @@ function Get-LDAPCert {
         PemFormat           = $RootCACertInPemFormat
     }
 
+    $CertChainInfo = [pscustomobject]@{
+        X509ChainFormat     = $CertificateChain
+        PemFormat           = $CertChainInPemFormat
+    }
+
     [pscustomobject]@{
         LDAPEndpointCertificateInfo  = $LDAPEndpointCertificateInfo
-        CertificateChain             = $CertificateChain
         RootCACertificateInfo        = $RootCACertificateInfo
+        CertChainInfo                = $CertChainInfo
     }
     
-
-    #endregion >> Pre-Run Check
-    ##### END Main Body #####
+    #endregion >> Main Body
 }
 
 
@@ -245,8 +311,8 @@ function Get-LDAPCert {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbz0VG4n0aBiXDASLaH6L0kLn
-# ImOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWjNO9oZlORsEvQPtXXkIoH1d
+# Gtmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -303,11 +369,11 @@ function Get-LDAPCert {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJE7IAnPgWN78+k/
-# 46ZVIPTfQGqaMA0GCSqGSIb3DQEBAQUABIIBAIbyhZNTZIRBXY7CY6L24xc0B/E2
-# K2Va+D1qBCHLnwTuLzcKXtPcc3ra6AC56PYv4yvy60qVkL69ySzIzN8DqAorDXqw
-# JW4oC+f5VIwPCKnQ2VDviq3zkvusOHUstFJFtmR/jDERwWrV5/zFAaTLOLyhSgzo
-# q3XymBQ5fvoohaL65dEavXhll+8yaUOpqSVghZ6hPZMDIoSZ0qiEFpQZc8blbCcx
-# 83M9lXMc/Mf2usMUyo7CEhXzNrGdMEFiSoKGItyPpfGccIYSLEyqTnRDiGRrrkB3
-# lQTb/036/8No2VgwNZ4CoDrdeYi9EyTTs3TRu2IouVW++n5ak7mrOV63ouI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFD548UU86Vw6Ial8
+# eQ1EwH8M0SSOMA0GCSqGSIb3DQEBAQUABIIBAH7GmqS84XkeSVHNKSpV6HsiuF5S
+# m05ufNsIy3lEO7VPZsUx5VaI0pZEcKW86PZ7Ow0SNbIKZZLfA1iEb+889RkRV/on
+# zqz4buaIjSuoC/Pc8YBmeNeDYU4B9LJud4VQOtF1XfDFt6qrTt5Rgx41sz80JdS4
+# oWIbSMH5Yazd88Kosf4b7ALgG0Xi/fH6VCZRjl0UU+qrrAAPHcsECZ91AfMt7m7k
+# oWCCnU6WfMhV0PyHG5TFRE5HTVby8bQehyB1kMujD2uEFIH86FNF500tcC2AoMz/
+# 5wGGYfENuENiGBdBB1Zdh8LmdiUtM4ms2o2cfUFZW0Sfwpv4xvLl7UzfN4o=
 # SIG # End signature block

@@ -1,29 +1,35 @@
 <#
     .SYNOPSIS
-        This function Sets and/or fixes NTFS filesystem permissions recursively on the directories
-        'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh' and/or '$HOME\.ssh'.
+        This function generates:
+            - An ArrayList of PSCustomObjects that describes the contents of each of the files within the
+            "$HOME\.ssh" directory
+            - An .xml file that can be ingested by the 'Import-CliXml' cmdlet to generate
+            the aforementioned ArrayList of PSCustomObjects in future PowerShell sessions.
+            
+            Each PSCustomObject in the ArrayList contains information similar to:
+
+                File     : C:\Users\zeroadmin\.ssh\PwdProtectedPrivKey
+                FileType : RSAPrivateKey
+                Contents : {-----BEGIN RSA PRIVATE KEY-----, Proc-Type: 4,ENCRYPTED, DEK-Info: AES-128-CBC,27E137C044FC7857DAAC05C408472EF8, ...}
+                Info     : {-----BEGIN RSA PRIVATE KEY-----, Proc-Type: 4,ENCRYPTED, DEK-Info: AES-128-CBC,27E137C044FC7857DAAC05C408472EF8, ...}
+
+        By default, the .xml file is written to "$HOME\.ssh\SSHDirectoryFileInfo.xml"
 
     .DESCRIPTION
         See .SYNOPSIS
 
     .NOTES
 
-    .PARAMETER HomeFolderAndSubItemsOnly
+    .PARAMETER PathToHomeDotSSHDirectory
         This parameter is OPTIONAL.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directory '$HOME\.ssh'
-
-    .PARAMETER ProgramDataFolderAndSubItemsOnly
-        This parameter is OPTIONAL.
-
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+        This parameter takes a string that represents a full path to the User's .ssh directory. You should
+        only use this parameter if the User's .ssh is NOT under "$HOME\.ssh" for some reason. 
 
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
-        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        PS C:\Users\zeroadmin> Generate-SSHUserDirFileInfo
         
 #>
 function Generate-SSHUserDirFileInfo {
@@ -88,7 +94,7 @@ function Generate-SSHUserDirFileInfo {
     }
 
     $ArrayOfPSObjects
-    $ArrayOfPSObjects | Export-CliXml "$HOME\.ssh\SSHDirectoryFileInfo.xml"
+    $ArrayOfPSObjects | Export-CliXml "$PathToHomeDotSSHDirectory\SSHDirectoryFileInfo.xml"
 }
 
 

@@ -1,3 +1,33 @@
+<#
+    .SYNOPSIS
+        This function simply outputs instructions to stdout regarding certain aspects of Public
+        Key Authentication.
+
+        This function needs to be updated. Current instructions are incomplete/misleading.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER PublicKeyLocation
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the full path to an SSH Public Key that the user
+        would like instructions for.
+
+    .PARAMETER PrivateKeyLocation
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the full path to an SSH Private Key that the user
+        would like instructions for.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Get-PublicKeyAuthInstructions -PublicKeyLocation "$HOME\.ssh\id_rsa.pub" -PrivateKeyLocation "$HOME\.ssh\id_rsa"
+        
+#>
 function Get-PublicKeyAuthInstructions {
     [CmdletBinding()]
     Param(
