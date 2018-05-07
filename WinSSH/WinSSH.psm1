@@ -566,7 +566,7 @@ function Add-CAPubKeyToSSHAndSSHDConfig {
     $AuthPrincFilePathForwardSlashes = "$sshdir\authorized_principals" -replace '\\','/'
     $AuthorizedPrincipalsOptionLine = "AuthorizedPrincipalsFile $AuthPrincFilePathForwardSlashes"
     $AuthKeysFilePathForwardSlashes = "$sshdir\authorized_keys" -replace '\\','/'
-    $AuthorizedKeysFileOptionLine = "AuthorizedKeysFile	$AuthKeysFilePathForwardSlashes"
+    $AuthorizedKeysFileOptionLine = "AuthorizedKeysFile $AuthKeysFilePathForwardSlashes"
 
     [System.Collections.ArrayList]$sshdContent = Get-Content $sshdConfigPath
 
@@ -12931,8 +12931,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwdjFFVvoljgeZhhvyxqBxwWp
-# iAmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUV9DqzvUN2uOzpLBb43bT/szn
+# GCOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -12989,11 +12989,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFN+hZJ4rhNYBqZo7
-# Vcv8rhi9K6OmMA0GCSqGSIb3DQEBAQUABIIBAD21e1n6dOBI3IUkn37/vy0bRV+l
-# YtJUoWpCVXPT2RosbuoNbnM3L0FNqCHCvO1RxbXQyLQ42Gvu0Jy1hrh+NGFUyKYZ
-# RkBIkNFbLtna1fsHyYI/yaExYDRb/WoCDzOUthpV//TufB8FyEjbfI95JOc/6u5K
-# psgu09yQheKrSuQ1Z58xDXezkc4y/nwIrd1pq4gB1FLvPoMZVF8KMU7mddoKa1Ar
-# oJS4uRd13KfFAxqG1VKno2B9Sr61iCyKNGk5mU/rWRRreJ90zuEyIpOftv9AN5Po
-# wlzD1l76zt0AdtIVjHZJuv0InnX3gQNhJ3IKGAI7X1E8AN3JcUgFJemfZVs=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDroqLOPOzxvhj9U
+# 1Am7CcMmEo7AMA0GCSqGSIb3DQEBAQUABIIBAB7G35M5QyBVmeXy8TI6YjNDsYVJ
+# y7UOZre+q44DuciGAxVUVm4mo5ZNcuEod3CQHnbervwYGQpm9cg8T8dxVWt2BVLP
+# UOmRBhOTUcSfY1rytgNvFmnK4YmYI2lWUxHTGjfIWjfPNDgpn2/lkZAga66Y6A8B
+# ESkWWZ0uNVBNbQQeow9Po1f+zlX+DLib94f/nFypmaGbY/LHIVdDQMzXopAXMcpf
+# 0F4/5KnZokbgyZrAzCND0dz62qcge3R9UwVltjrbDzCxhQGnwC5tvOVFLidmyDtM
+# UDyaLE8xbgTQphxowvwH3vXdbkpJlSR/Yyj8mnba8qsDf3lNXqw+gW1yHZs=
 # SIG # End signature block
