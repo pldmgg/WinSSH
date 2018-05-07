@@ -1,3 +1,51 @@
+<#
+    .SYNOPSIS
+        This function installs and configures the SSHD server (sshd service) on the local host.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER RemoveHostPrivateKeys
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. Use it to add the Host Private Keys to the ssh-agent and remove
+        the Private Key files frome the filesystem during sshd setup/config. Default is NOT to remove
+        the Host Private Keys.
+
+    .PARAMETER DefaultShell
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that must be one of two values: "powershell","pwsh"
+
+        If set to "powershell", when a Remote User connects to the local host via ssh, they will enter a
+        Windows PowerShell 5.1 shell.
+
+        If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
+        PowerShell Core 6 shell.
+
+        If this parameter is NOT used, the Default shell will be cmd.exe.
+
+    .PARAMETER SkipWinCapabilityAttempt
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+        
+        In more recent versions of Windows (Spring 2018), OpenSSH Client and SSHD Server can be installed as
+        Windows Features using the Dism Module 'Add-WindowsCapability' cmdlet. If you run this function on
+        a more recent version of Windows, it will attempt to use 'Add-WindowsCapability' UNLESS you use
+        this switch.
+
+        As of May 2018, there are reliability issues with the 'Add-WindowsCapability' cmdlet.
+        Using this switch is highly recommend in order to avoid using 'Add-WindowsCapability'.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> New-SSHDServer -DefaultShell powershell
+        
+#>
 function New-SSHDServer {
     [CmdletBinding()]
     Param(

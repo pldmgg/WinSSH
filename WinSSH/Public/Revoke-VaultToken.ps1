@@ -1,3 +1,31 @@
+<#
+    .SYNOPSIS
+        This function Sets and/or fixes NTFS filesystem permissions recursively on the directories
+        'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh' and/or '$HOME\.ssh'.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER HomeFolderAndSubItemsOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will only fix permissions recursively on
+        the directory '$HOME\.ssh'
+
+    .PARAMETER ProgramDataFolderAndSubItemsOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will only fix permissions recursively on
+        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function Revoke-VaultToken {
     [CmdletBinding()]
     Param(

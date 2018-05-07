@@ -1,3 +1,94 @@
+<#
+    .SYNOPSIS
+        This function creates a new SSH Public/Private Key Pair. Optionally, add it to the ssh-agent.
+        Optionally add the public key to a Remote Host's ~/.ssh/authorized_keys file.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER NewSSHKeyName
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the file name that you would like to give to the new
+        SSH User/Client Keys.
+
+    .PARAMETER NewSSHKeyPurpose
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents a very brief description of what the new SSH Keys
+        will be used for. This description will be added to the Comment section when the new keys are
+        created.
+
+    .PARAMETER NewSSHKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter takes a SecureString that represents the password used to protect the new
+        Private Key file that is created.
+
+    .PARAMETER BlankSSHPrivateKeyPwd
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. Use it to ensure that the newly created Private Key is NOT password
+        protected.
+
+    .PARAMETER AddToSSHAgent
+        This parameter is OPTIONAL, but recommended.
+
+        This parameter is a switch. If used, the new SSH Key Pair will be added to the ssh-agent service.
+
+    .PARAMETER AllowAwaitModuleInstall
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -BlankSSHPrivateKeyPwd switch.
+
+        This parameter is a switch.
+
+        If you would like the Private Key file to be unprotected, and if you would like to avoid the
+        ssh-keygen prompt for a password, the PowerShell Await Module is required.
+
+        Use this switch along with the -BlankSSHPrivateKeyPwd switch to avoid prompts altogether.
+
+    .PARAMETER RemovePrivateKey
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddtoSSHAgent switch.
+
+        This parameter is a switch. If used, the newly created Private Key will be added to the ssh-agent
+        and deleted from the filesystem.
+
+    .PARAMETER RemoteHost
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddToRemoteHostAuthKeys switch.
+
+        This parameter takes a string that represents the IP Address of DNS-Resolvable name of a Remote Host.
+        The newly created public key will be added to the Remote Host's ~/.ssh/authorized_keys file. The
+        Remote Host can be either Windows or Linux (as long as you can ssh to it from the local host).
+
+    .PARAMETER AddToRemoteHostAuthKeys
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the newly created Public Key will be added to the Remote Host's
+        ~/.ssh/authorized_keys file. (Specify the Remote Host using the -RemoteHost parameter)
+
+    .PARAMETER RemoteHostUserName
+        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
+        -AddToRemoteHostAuthKeys parameter.
+
+        This parameter takes a string that represents the name of the user with ssh access to
+        the Remote Host (specified by the -RemoteHost parameter).
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> $SplatParams = @{
+            NewSSHKeyName           = "ToRHServ01"
+            NewSSHKeyPurpose        = "ForSSHToRHServ01"
+            AllowAwaitModuleInstall = $True
+            AddToSSHAgent           = $True
+        }
+        PS C:\Users\zeroadmin> New-SSHKey @SplatParams
+        
+#>
 function New-SSHKey {
     [CmdletBinding()]
     Param(
