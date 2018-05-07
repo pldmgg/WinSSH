@@ -101,6 +101,22 @@ function Get-TextFilesList
     return Get-ChildItem -Path $Root -File -Recurse | Where-Object { $textFileExtensions -contains $_.Extension }
 }
 
+function ConvertTo-SpaceIndentation
+{
+    [CmdletBinding()]
+    [OutputType([void])]
+    param(
+        [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
+        [System.IO.FileInfo]$fileInfo
+    )
+
+    process 
+    {
+        $content = (Get-Content -Raw -Path $fileInfo.FullName) -replace "`t",' '
+        [System.IO.File]::WriteAllText($fileInfo.FullName, $content)
+    }
+}
+
 <#
     .SYNOPSIS
         Tests if a file is encoded in Unicode.
@@ -798,11 +814,17 @@ Export-ModuleMember -Function @(
 
 
 
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNG0SKkuP7VWjfdU+eEBXt7Ni
-# cICgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8zLuXlbtpB5AiCqECjPiq02/
+# JMugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -859,11 +881,11 @@ Export-ModuleMember -Function @(
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIHQPTaOd9j08wAC
-# CsYtg+CRIpi3MA0GCSqGSIb3DQEBAQUABIIBAA/OIrfXZqV/Q6JFnc1XY4F8X8jR
-# fqeCZMaCQVFdMMfE5guj6duLZ5rWi8VhVRYQcCjzPX8yUbRwucEpfhkHrfX+aa0m
-# vohXYLm0TBRFAMyEbdMfFp8oFnjdbnX3viO1PyUIUYHD6J7ACrmL8oUhUYIluIwq
-# w6mhTf8ffNlwkWsj2f/M37K4DXfCelevDSA26DyoIoGom2/IeG8BKjioPsrlIqqK
-# RMSL7+dpRjhRgMysQZGAvgIujV0y0kvHlbd1qmPRiqwo/JrwtVmQ9Xs0OK4xOIwq
-# K+0SGPAPuE70gJ/mvWcR3GA8BKMOVcDi4v+1OoSniK+q+S+hVeLOrO8dJ54=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMNKzCvAPLXB7CnP
+# G2ai+e9HsTioMA0GCSqGSIb3DQEBAQUABIIBAGoTw/inUZHfA1AROcciBER0ty6K
+# D6vNbIziJBlpKx/pnsCpAATePSm+D5SofrKNyYRNUfw6NkGmJGiBKQhEy81/MIRx
+# gfXGTgJbNDYhqG+eqQqlKzNQxMHNbWSNUuQ343HhAWMQL7BuA/MSnnL8PJ3nVSXC
+# hvTMNnsWF+U1YklKUC6NA/KuDyQ6T5NnXaYiDfrjlWQWeHWcfQTPa2DIuAvNbcID
+# HN88zm2Sy4zIQWA5CNsFV++i/cVS3CsC0lr/T9SRoBJLKt99Am1fewLy46ShWaRL
+# B2Miwt+WMssDt0StDBVIUI46aReEnEUpyRNnJu/TmsZg2QOWozYdGkEswWc=
 # SIG # End signature block

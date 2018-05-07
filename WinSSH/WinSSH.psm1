@@ -14,49 +14,6 @@ foreach ($import in $Private) {
     }
 }
 
-& $PSScriptRoot\Install-PSDepend.ps1
-if (!$(Get-Module -ListAvailable NTFSSecurity)) {
-    try {
-        Install-Module NTFSSecurity -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        Write-Error "Problem installing Module $env:BHProjectName dependency Module NTFSSecurity! Module $env:BHProjectName will NOT be loaded. Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-}
-try {
-    Import-Module NTFSSecurity -ErrorAction Stop
-}
-catch {
-    Write-Error $_
-    Write-Error "Problem importing Module $env:BHProjectName dependency Module NTFSSecurity! Module $env:BHProjectName will NOT be loaded. Halting!"
-    $global:FunctionResult = "1"
-    return
-}
-
-if (!$(Get-Module -ListAvailable ProgramManagement)) {
-    try {
-        Install-Module ProgramManagement -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        Write-Error "Problem installing Module $env:BHProjectName dependency Module ProgramManagement! Module $env:BHProjectName will NOT be loaded. Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-}
-try {
-    Import-Module ProgramManagement -ErrorAction Stop
-}
-catch {
-    Write-Error $_
-    Write-Error "Problem importing Module $env:BHProjectName dependency Module ProgramManagement! Module $env:BHProjectName will NOT be loaded. Halting!"
-    $global:FunctionResult = "1"
-    return
-}
-
 
 
 <#
@@ -3002,7 +2959,7 @@ function Generate-AuthorizedPrincipalsFile {
         This parameter takes a string that represents an Organization name. This will be added to "Subject" field in the
         Certificate.
 
-    .PARAMETER OriginationalUnit
+    .PARAMETER OrganizationalUnit
         This parameter is MANDATORY.
 
         This parameter takes a string that represents an Organization's Department. This will be added to the "Subject" field
@@ -3297,6 +3254,13 @@ function Generate-AuthorizedPrincipalsFile {
 
         This parameter takes an array of strings. Each string should represent a GUID.
         Example: "f7c3ac41-b8ce-4fb4-aa58-3d1dc0e36b39","g8D4ac41-b8ce-4fb4-aa58-3d1dc0e47c48"
+
+    .PARAMETER CSRGenOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, a Certificate Signing Request (CSR) will be created, but it
+        will NOT be submitted to the Issuing Certificate Authority. This is useful for requesting
+        certificates from non-Microsoft Certificate Authorities.
 
     .EXAMPLE
         # Scenario 1: No Parameters Provided
@@ -8944,6 +8908,12 @@ function Install-SSHAgentService {
         This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
         Modules.
 
+    .PARAMETER UseChocolateyCmdLine
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via the Chocolatey CmdLine. If
+        the Chocolatey CmdLine is not already installed, it will be installed.
+
     .PARAMETER GitHubInstall
         This parameter is OPTIONAL.
 
@@ -11586,7 +11556,7 @@ function Sign-SSHHostPublicKey {
         This parameter takes a string that represents the full path to the SSH Public Key that you would like
         the Vault Server to sign. Example: "$HOME\.ssh\id_rsa.pub"
 
-    .PARAMETER PathToSSHUserPublicKeyFile
+    .PARAMETER PathToSSHUserPrivateKeyFile
         This parameter is OPTIONAL, but becomes MANDATORY if you want to add the signed Public Key Certificate to
         the ssh-agent service.
 
@@ -12961,8 +12931,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcbgPMknbjyWNpUggkCG9bIaZ
-# hS+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwdjFFVvoljgeZhhvyxqBxwWp
+# iAmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -13019,11 +12989,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOcYhzu/DG6hQvOX
-# DrspN8wt8gIDMA0GCSqGSIb3DQEBAQUABIIBAJutVCXIE4W/NK8cj/ahE9kCQDS9
-# b/jCrjdkBRyfR/Ddcf4OoscetF6fs7n3UZqIUVg0er/f5CBo9AkHHs+RmLv/N0Ns
-# re2c2qCXKV+/2/PpqhtvQsprxSoKGWghmw7qlX7iq9yAK0A+y/d5Pyvx2AIul9Ns
-# Xr2ui03kQeEyu1UNDa9k+jG/Dc3K0evNW0vNqDOnHYjlcnjt0vAOqr/ZX3i9jLEi
-# sFAmMaJaa4hdrWP4ztJPUA++1aHuroN7nz/jyGWYqmmP98cj3UhsWABZ5Yw3hl4O
-# jQlyQcy35AmYFNp91SKpt121PJ0Bi++RyuzkZYNAc4x+dX460r8o9aDLzqg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFN+hZJ4rhNYBqZo7
+# Vcv8rhi9K6OmMA0GCSqGSIb3DQEBAQUABIIBAD21e1n6dOBI3IUkn37/vy0bRV+l
+# YtJUoWpCVXPT2RosbuoNbnM3L0FNqCHCvO1RxbXQyLQ42Gvu0Jy1hrh+NGFUyKYZ
+# RkBIkNFbLtna1fsHyYI/yaExYDRb/WoCDzOUthpV//TufB8FyEjbfI95JOc/6u5K
+# psgu09yQheKrSuQ1Z58xDXezkc4y/nwIrd1pq4gB1FLvPoMZVF8KMU7mddoKa1Ar
+# oJS4uRd13KfFAxqG1VKno2B9Sr61iCyKNGk5mU/rWRRreJ90zuEyIpOftv9AN5Po
+# wlzD1l76zt0AdtIVjHZJuv0InnX3gQNhJ3IKGAI7X1E8AN3JcUgFJemfZVs=
 # SIG # End signature block

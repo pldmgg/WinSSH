@@ -27,12 +27,6 @@ if ([bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) 
 if (![bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) {
     Import-Module $env:BHPSModuleManifest -Force
 }
-$global:SudoCredentials = $null
-$global:NewSessionAndOriginalStatus = $null
-
-if ([bool]$(Get-Module -Name SudoTasks)) {
-    Remove-Module -Name SudoTasks -Force
-}
 
 $commands = Get-Command -Module (Get-Module $env:BHProjectName) -CommandType Cmdlet, Function, Workflow  # Not alias
 
@@ -178,11 +172,17 @@ foreach ($command in $commands) {
 
 
 
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU9lSpsAda7FvZ+hUpF5RMCMrZ
-# Uo6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWm4AgwbnjEHUXuYay16wXgYj
+# IXegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -239,11 +239,11 @@ foreach ($command in $commands) {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFWD6jU19TULXkXq
-# jItjx3REy98VMA0GCSqGSIb3DQEBAQUABIIBALIJtHEFV+qpaW3a9iOMQVQ8Q6Vw
-# epTYqbPY/RBL/ddcKVX5MWkc2LLFI0BMPFWmWmy05NmnOM6ho+9yQLMcM9k/9PVi
-# pVJ0g3tiJypQltFoSWRtMNPDSc1TyQi/9Zxvt9NhktpBkV7vu2Xb7OFGH+Ncl5cD
-# WgHIBskpTTZ1hTqJQqOOmFvoFwzhG+FMYoZncaz6gp6+AOeg4LPo5WCK3dHS+3Fs
-# h9o2M38n4rB69V4rOeEa6NnyOhlQoO5/TZ76p/zb+dVtGOAr//YN4HpZr0Z5O3YU
-# rtiHjhS7QJChqxMUyKfme/NqD/Avd1EJo63DHpnQCmHxiLohqZYrD5d6sJ4=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMtSAcBUbGChJp2P
+# ecEjoZM7pm74MA0GCSqGSIb3DQEBAQUABIIBAArz0mLQV3GiMqDJN8ytUGCzBPIw
+# FijnQKmlAlo5AehVOvwjTAMlqR/Z9Y/vjgacHJLX2xDAlRSlgIXsHJP7ExpuA045
+# 5Qu4ymEmYYJkiLYLUDQ9OzVrerfnCya4H5+zsUjkJ49I1+RNtArzPfvluxdW0SBM
+# pmenPdrG0gY043ndoAFU2WazUsZQRBUD9uOKd5nvjBYskk5D84uD5j4PfZO3yOyG
+# g4G+kWxeZ5DPI1hvObrADZ4P5mYhUHcfmCW68FhfG88qwOufXZ4ycxyQ8Ujx1WQz
+# mDLkYN97AXj6Y5ENSr0p5/tInBPsamJKbr+Ri2zxlZRmtpjetw+PTFHZ+l4=
 # SIG # End signature block

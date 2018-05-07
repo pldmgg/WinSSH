@@ -38,7 +38,7 @@
         This parameter takes a string that represents the full path to the SSH Public Key that you would like
         the Vault Server to sign. Example: "$HOME\.ssh\id_rsa.pub"
 
-    .PARAMETER PathToSSHUserPublicKeyFile
+    .PARAMETER PathToSSHUserPrivateKeyFile
         This parameter is OPTIONAL, but becomes MANDATORY if you want to add the signed Public Key Certificate to
         the ssh-agent service.
 
@@ -240,11 +240,17 @@ function Sign-SSHUserPublicKey {
 
 
 
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYU7+MZ6mqGvydnnguXNwKxWS
-# DLegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUduOd5I9q7iqz9VaZxTdTr4Bu
+# I0agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -301,11 +307,11 @@ function Sign-SSHUserPublicKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIUA20P/FU+IP0wV
-# KipsbiHxmuhgMA0GCSqGSIb3DQEBAQUABIIBAHfur9Mfxazgujl32PEA3WYDrb0G
-# ydwAQ9jvVTG1kR/MKJgye2urd/p/2kysgltjtEdAAvLnkHUTXlSvSdVD7jwtGspz
-# 7b5tOZv62AXqYKVfsyLMRWUlZsS1TMMFfxqO/+UVkIFGnIaQOBuJiHbeL9RTHF5c
-# 2OopUBZzZMQqvBSK1IWcNmJ67/Qp5ePV4Sy5hEaJIXdwB0+CPtB64HFz7D/DFudF
-# g80vqReO78xJxu6YEX90lKjQ7vZka/7djpK11JQfFRPKQsAI94LxiOKJanx8o89j
-# dXcmPBSqKJwwjM8mWJwVPDW8bxtRNIMeL+bmwkV9McrpbkhLjlAnCwuDXSI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFM/4W7RnjiQ2Qcux
+# BHB7pt5cvj3aMA0GCSqGSIb3DQEBAQUABIIBAESUNn1oqPqQpP7/ULB3NS2VboxM
+# a12xXAxcY4G3uNecKFU+OYqS/XVhV0cjr0suS+V8p2de9E5ihTPCqo4fYkeriOeW
+# vBUGoDg1MtHO4/P8gUVqdK2/uqrOHzjZ/Mjcc3k9MURO31g1hI3YMOCZ3VScTm64
+# sQRbqjodx+AcWuBb6usrGyAsHJOKnsRDYQBMOPYrId7KU9SfkShblIGVKuPTiL84
+# 4A19ifoLlh/NmQFa6aYrJ/ZVgjxeUtArMRAKu5rWMJCz+RhWCEjyguU2veTGUn8x
+# ZcuU9rUAreK8KbqN6QBTsWZ108pYVEpzPb78fcNOZB5X/ieyIWFyfEGuOoc=
 # SIG # End signature block

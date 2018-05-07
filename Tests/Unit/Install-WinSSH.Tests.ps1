@@ -163,10 +163,6 @@ function StartTesting {
 
     try {
         $null = Install-WinSSH @SplatParams -OutVariable "InstallWinSSHResult" -ErrorAction Stop
-
-        # Cleanup
-        # NOTE: Using -EA SilentlyContinue for Remove-SudoSession because if we error, want to be sure it's from Install-WinSSH
-        $null = Cleanup -ErrorAction SilentlyContinue
     }
     catch {
         # NOTE: Using Warning to output error message because any Error will prevent the rest of this Context block from running
@@ -176,8 +172,21 @@ function StartTesting {
     }
 
     if ($InstallWinSSHResult) {
-        switch ($SplatParamsSeriesItem.TestSeriesFunctionNames) {
-            'CommonTestSeries' { $InstallWinSSHResult | CommonTestSeries }
+        try {
+            switch ($SplatParamsSeriesItem.TestSeriesFunctionNames) {
+                'CommonTestSeries' { $InstallWinSSHResult | CommonTestSeries }
+            }
+
+            # Cleanup
+            $null = Cleanup -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Cleanup
+            $null = Cleanup -ErrorAction SilentlyContinue
+
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
         }
     }
     else {
@@ -417,11 +426,17 @@ InModuleScope WinSSH {
 
 
 
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURquF2bn9Atg3K5KmCaZKeh94
-# Zf2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUanMz6AiVnNNh6OUv/gPNqmN8
+# 8yKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -478,11 +493,11 @@ InModuleScope WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOrV7p79mmiWelRF
-# ThYUcVwUcHelMA0GCSqGSIb3DQEBAQUABIIBAJIgnk9uJ/vjZCdIfnIMNAfpsrY+
-# 4HHaNOac26kYKCdppaZswVehPsvX10u0OmU/w9jqAMedVQrGlObUd2KR1ItxE5vv
-# e6tvWVU3wBgHai+Xo/ex/yYZnonP2fjw7eWr1SSHRvb8ltmq9LfNaEk7byUst3YF
-# tD/VdoTJQdGl99RKEeTnWWM6IzEZh2ZVU5uh7AmyNE55n0bk8yt8j6jfsguQBvWs
-# W3q6bZRrHCxiJDv/xAJ1au7+agXNMlHlRz/ujE8vTFt14fzQ+OVcT+wPSbJvWMQu
-# u110xH7+1Qqa7vzWYzGUf8hgdzdwvAroa5cx2htE2lguZo51k5chkcIIv3w=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCOsjOsxJM9y6G6W
+# CUotrO8JHQ2KMA0GCSqGSIb3DQEBAQUABIIBAEdWMyTvpTJiDyvTqV/wBSD21cdo
+# rhmutOl+yQ7oIwpQztpDR4IiLbhNe+y6RhZ215crrT/9WJJi66TaBjE590xb7ACu
+# FDPn3DVHvLtKxtlyYRQ1feSPse1kSPKJzKVbG3zYyLSCVNXQa4zICMwuk7lBdt2i
+# 9zrwwyEg7W8BaUKphZk3JMaSkKHzaf9qAPUUBSe6dw3tvUjaLPxw4yDNeEN6PnyV
+# TD+ftF/RjD5YLalOLvm48mM9Q9bWtC9wsZEl3T0siqlank9tUJceBw1CClmF0f8W
+# Mqh8LOnKWJ/2c3e7hIFG9fJTKreB1VZr19Ej1oXLJgMW4dfFmE0um5aCy5o=
 # SIG # End signature block

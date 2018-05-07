@@ -108,6 +108,8 @@ catch {
 }
 
 '@
+
+    <#
     Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value '& $PSScriptRoot\Install-PSDepend.ps1'
     
     $RequiredModules = @("NTFSSecurity","ProgramManagement")
@@ -139,7 +141,7 @@ catch {
         $UpdatedModuleInstallBlock = $InstallImportRequiredModules -replace 'RequiredModuleNameMatch',$ModuleDependency -replace 'PrimaryModuleNameMatch','$env:BHProjectName'
         Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $UpdatedModuleInstallBlock
     }
-    
+    #>
 
 
     [System.Collections.ArrayList]$FunctionTextToAdd = @()
@@ -287,11 +289,17 @@ Task Deploy -Depends Build {
 
 
 
+
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjzrz4hh8EIU7IfERBKGqqpi3
-# /UWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUCz4cNqpMnfZrhsjs5Ms2ekrf
+# ktigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -348,11 +356,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKpavzWobCFc0V23
-# sLuKEAFo1RH8MA0GCSqGSIb3DQEBAQUABIIBAF1xgJt0kQrbDOd3HJUupBw6TYtK
-# G4SVb+kcwffswn0aTsAx6aJeHk9yEHvibH//aMnDN95Dc9RDzeMyjMor9/SBJAhL
-# PqoGEka9xiSuLsrYk8eDl4F9NO0bga7IPfohVKTOSjPEy3vfnrb/Ka+x/67lF+sv
-# vuD7oGLeD4ijS6ERpOMe1m/MDDv/QNh0Tiwe+RzcRRjOcH+xl/C43qIF+iBU+n/W
-# UzZQR2s0TrDfdVpRusvk9PNkDQqOaVXiYsEDYdzUIanqDdadVdRpOK2k3QoHgHzy
-# njEv4m7QKvQh/P8WymcxS9OCS2oEDRawi3hsAUiWdqBk9dYqiV7fCYSDryw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBv6H7wZ5t1MGvsQ
+# 8fQi2HNZ4L3DMA0GCSqGSIb3DQEBAQUABIIBADMVEwAAUwcph/9Mey0FYmHsn9OZ
+# HjbGMoJiQEOe8ZObv4oX6mfMvouwPwzv6gymrJqt4qf5Z1yTzLn7y97/BUWk3Xvy
+# Nbfjn3KF00g44EgU/F8OC2v6X2+xUfVCjl5NNgzU0H2zFfTY+D4r5oCw7rGPzUan
+# 1QGgg/6tk8iTT3TU4WNoJKa+6qpP5jId5STntQTk0cOGD+nHHzO0dfK8lpf3sIWi
+# XdrSzTP13nP4Q7aLJyExT5GzMT+RMJqt1IqBmThLpkP4y5LICJJepVA+6K1HAHLq
+# gfrrMGQ3OeC2RjG4Tywz78qaITy3r+8n5DlMz16Mnse5o8DlYuYvgwYubUA=
 # SIG # End signature block
