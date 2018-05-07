@@ -1,42 +1,97 @@
 <#
     .SYNOPSIS
-        Install OpenSSH-Win64. Optionally install the latest PowerShell Core Beta. Optionally create new SSH Key Pair.
+        Install OpenSSH-Win64 and the associated ssh-agent service. Optionally install SSHD server and associated
+        sshd service. Optionally install the latest PowerShell Core.
 
     .DESCRIPTION
         See .SYNOPSIS
 
+    .NOTES
+
+    .PARAMETER ConfigureSSHDOnLocalHost
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the SSHD Server and associated sshd service will be installedm
+        configured, and enabled on the local host.
+
     .PARAMETER RemoveHostPrivateKeys
-        OPTIONAL
+        This parameter is OPTIONAL.
 
         This parameter is a switch. Use it to remove the Host Private Keys after they are added to the ssh-agent during
         sshd setup/config. Default is NOT to remove the host private keys.
 
-    .PARAMETER NewSSHKeyName
-        OPTIONAL
+        This parameter should only be used in combination with the -ConfigureSSHDOnLocalHost switch.
 
-        This parameter takes a string that represents the filename of the new SSH Key pair that you would like to create.
-        This string is used in the filename of the private key file as well as the public key file (with the .pub extension).
+    .PARAMETER DefaultShell
+        This parameter is OPTIONAL.
 
-    .PARAMETER NewSSHKeyPwd
-        OPTIONAL
+        This parameter takes a string that must be one of two values: "powershell","pwsh"
 
-        This parameter takes a string that represents the password used to protect the new SSH Private Key.
+        If set to "powershell", when a Remote User connects to the local host via ssh, they will enter a
+        Windows PowerShell 5.1 shell.
 
-    .PARAMETER NewSSHKeyPurpose
-        OPTIONAL
+        If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
+        PowerShell Core 6 shell.
 
-        This parameter takes a string that represents the purpose of the new SSH Key Pair. It will be used in the
-        "-C" (i.e. "comment") parameter of ssh-keygen.
+        If this parameter is NOT used, the Default shell will be cmd.exe.
 
-    .PARAMETER SetupPowerShell6
-        OPTIONAL
+        This parameter should only be used in combination with the -ConfigureSSHDOnLocalHost switch.
 
-        This parameter is a switch. Use it to install the latest PowerShell 6 Beta.
+    .PARAMETER GiveWinSSHBinariesPathPriority
+        This parameter is OPTIONAL, but highly recommended.
 
-        IMPORTANT NOTE: PowerShell 6 Beta is installed *alongside* existing PowerShell version.
+        This parameter is a switch. If used, ssh binaries installed as part of OpenSSH-Win64 installation will get
+        priority in your $env:Path. This is especially useful if you have ssh binaries in your path from other
+        program installs (like git).
+
+    .PARAMETER UsePowerShellGet
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
+        Modules.
+
+    .PARAMETER GitHubInstall
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed by downloading the .zip
+        from https://github.com/PowerShell/Win32-OpenSSH/releases/latest/, expanding the archive, moving
+        the files to the approproiate location(s), and setting permissions appropriately.
+
+    .PARAMETER UpdatePackageManagement
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, PowerShellGet/PackageManagement Modules will be updated to their
+        latest version before installation of OpenSSH binaries.
+
+        WARNING: Using this parameter could break certain PowerShellGet/PackageManagement cmdlets. Recommend
+        using the dedicated function "Update-PackageManagemet" and starting a fresh PowerShell session after
+        it finishes.
+
+    .PARAMETER SkipWinCapabilityAttempt
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+        
+        In more recent versions of Windows (Spring 2018), OpenSSH Client and SSHD Server can be installed as
+        Windows Features using the Dism Module 'Add-WindowsCapability' cmdlet. If you run this function on
+        a more recent version of Windows, it will attempt to use 'Add-WindowsCapability' UNLESS you use
+        this switch.
+
+        As of May 2018, there are reliability issues with the 'Add-WindowsCapability' cmdlet.
+        Using this switch is highly recommend in order to avoid using 'Add-WindowsCapability'.
+
+    .PARAMETER Force
+        This parameter is a OPTIONAL.
+
+        This parameter is a switch.
+
+        If you are already running the latest version of OpenSSH, but would like to reinstall it and the
+        associated ssh-agent service, use this switch.
 
     .EXAMPLE
-        Install-WinSSH -NewSSHKeyName "testadmin-to-Debian8Jessie" -NewSSHKeyPurpose "testadmin-to-Debian8Jessie"
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Install-WinSSH -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell -GitHubInstall
 
 #>
 function Install-WinSSH {

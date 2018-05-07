@@ -1,3 +1,31 @@
+<#
+    .SYNOPSIS
+        This function creates a new SSH User/Client key pair and has the Vault Server sign the Public Key,
+        returning a '-cert.pub' file that can be used for Public Key Certificate SSH Authentication.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER HomeFolderAndSubItemsOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will only fix permissions recursively on
+        the directory '$HOME\.ssh'
+
+    .PARAMETER ProgramDataFolderAndSubItemsOnly
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, this function will only fix permissions recursively on
+        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        
+#>
 function New-SSHCredentials {
     [CmdletBinding()]
     Param (

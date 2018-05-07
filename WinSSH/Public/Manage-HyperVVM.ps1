@@ -19,20 +19,41 @@
     .PARAMETER IsoFile
         Path to the ISO image, must be set for Create/ReCreate
 
+    .PARAMETER SwitchName
+        Name of the switch you want to attatch to your new VM.
+
+    .PARAMETER VMGen
+        Generation of the VM you would like to create. Can be either 1 or 2. Defaults to 2.
+
+    .PARAMETER PreferredIntegrationServices
+        List of Hyper-V Integration Services you would like enabled for your new VM.
+        Valid values are: "Heartbeat","Shutdown","TimeSynch","GuestServiceInterface","KeyValueExchange","VSS"
+
+        Defaults to enabling: "Heartbeat","Shutdown","TimeSynch","GuestServiceInterface","KeyValueExchange"
+
+    .PARAMETER VhdPathOverride
+        By default, VHD file(s) for the new VM are stored under "C:\Users\Public\Documents\HyperV".
+
+        If you want VHD(s) stored elsewhere, provide this parameter with a full path to a directory.
+
+    .PARAMETER NoVhd
+        This parameter is a switch. Use it to create a new VM without a VHD. For situations where
+        you want to attach a VHD later.
+
     .PARAMETER Create
         Create a HyperV VM
 
-    .PARAMETER Memory
-        Memory allocated for the VM at start in MB (optional on Create, default: 2048 MB)
-
     .PARAMETER CPUs
         CPUs used in the VM (optional on Create, default: min(2, number of CPUs on the host))
+
+    .PARAMETER Memory
+        Memory allocated for the VM at start in MB (optional on Create, default: 2048 MB)
 
     .PARAMETER Destroy
         Remove a HyperV VM
 
     .PARAMETER KeepVolume
-        if passed, will not delete the vmhd on Destroy
+        If passed, will not delete the VHD on Destroy
 
     .PARAMETER Start
         Start an existing HyperV VM
@@ -41,10 +62,14 @@
         Stop a running HyperV VM
 
     .EXAMPLE
-        Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -IsoFile .\mobylinux.iso -VMGen 1 -Create
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -IsoFile .\mobylinux.iso -VMGen 1 -Create
 
     .EXAMPLE
-        Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -VHDPathOverride "C:\Win1016Serv.vhdx" -VMGen 2 -Memory 4096 -Create
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Manage-HyperVVM -VMName "TestVM" -SwitchName "ToMgmt" -VHDPathOverride "C:\Win1016Serv.vhdx" -VMGen 2 -Memory 4096 -Create
 #>
 function Manage-HyperVVM {
     [CmdletBinding()]

@@ -1,14 +1,75 @@
 <#
     .SYNOPSIS
-        The Install-SSHAgentService is, in large part, carved out of the 'install-sshd.ps1' script bundled with
+        This function installs OpenSSH-Win64 binaries and creates the ssh-agent service.
+
+        The code for this function is, in large part, carved out of the 'install-sshd.ps1' script bundled with
         an OpenSSH-Win64 install.
 
         Original authors (github accounts):
+            @manojampalam
+            @friism
+            @manojampalam
+            @bingbing8
 
-        @manojampalam - authored initial script
-        @friism - Fixed issue with invalid SDDL on Set-Acl
-        @manojampalam - removed ntrights.exe dependency
-        @bingbing8 - removed secedit.exe dependency
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+
+    .PARAMETER UseChocolateyCmdLine
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via the Chocolatey CmdLine.
+        If the Chocolatey CmdLine is not already installed, it will be installed.
+
+    .PARAMETER UsePowerShellGet
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
+        Modules.
+
+    .PARAMETER GitHubInstall
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, OpenSSH binaries will be installed by downloading the .zip
+        from https://github.com/PowerShell/Win32-OpenSSH/releases/latest/, expanding the archive, moving
+        the files to the approproiate location(s), and setting permissions appropriately.
+
+    .PARAMETER UpdatePackageManagement
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, PowerShellGet/PackageManagement Modules will be updated to their
+        latest version before installation of OpenSSH binaries.
+
+        WARNING: Using this parameter could break certain PowerShellGet/PackageManagement cmdlets. Recommend
+        using the dedicated function "Update-PackageManagemet" and starting a fresh PowerShell session after
+        it finishes.
+
+    .PARAMETER SkipWinCapabilityAttempt
+        This parameter is OPTIONAL.
+
+        This parameter is a switch.
+        
+        In more recent versions of Windows (Spring 2018), OpenSSH Client and SSHD Server can be installed as
+        Windows Features using the Dism Module 'Add-WindowsCapability' cmdlet. If you run this function on
+        a more recent version of Windows, it will attempt to use 'Add-WindowsCapability' UNLESS you use
+        this switch.
+
+        As of May 2018, there are reliability issues with the 'Add-WindowsCapability' cmdlet.
+        Using this switch is highly recommend in order to avoid using 'Add-WindowsCapability'.
+
+    .PARAMETER Force
+        This parameter is a OPTIONAL.
+
+        This parameter is a switch.
+
+        If you are already running the latest version of OpenSSH, but would like to reinstall it and the
+        associated ssh-agent service, use this switch.
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Install-SSHAgentService
 
 #>
 function Install-SSHAgentService {
