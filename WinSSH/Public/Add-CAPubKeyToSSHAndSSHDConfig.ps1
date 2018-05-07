@@ -82,7 +82,7 @@
 
         This parameter takes an array of strings, each of which represents either a Local User Account
         or a Domain User Account. Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
-        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix, if your
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix: if your
         domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
 
         These strings will be added to the file C:\ProgramData\ssh\authorized_principals, and these User Accounts

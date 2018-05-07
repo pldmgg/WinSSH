@@ -3,30 +3,70 @@
 # $sshdir/authorized_principals
 <#
     .SYNOPSIS
-        This function Sets and/or fixes NTFS filesystem permissions recursively on the directories
-        'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh' and/or '$HOME\.ssh'.
+        This function adds the specified User Accounts (both Local and Domain) to the file 
+        'C:\ProgramData\ssh\authorized_principals' on the Local Host. Adding these User Accounts
+        to the 'authorized_principals' file allows these users to ssh into the Local Host. 
 
     .DESCRIPTION
         See .SYNOPSIS
 
     .NOTES
 
-    .PARAMETER HomeFolderAndSubItemsOnly
+    .PARAMETER AuthorizedPrincipalsFileLocation
         This parameter is OPTIONAL.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directory '$HOME\.ssh'
+        This parameter takes a string that represents the full path to desired location of the newly generated
+        'authorized_principals' file. If this parameter is NOT used, the function will default to writing the
+        'authorized_principals' file to the 'C:\ProgramData\ssh' directory. If that directory does not exist,
+        then it will be written to the 'C:\Program Files\OpenSSH-Win64' directory. If that directory does not
+        exist, the function will halt.
 
-    .PARAMETER ProgramDataFolderAndSubItemsOnly
-        This parameter is OPTIONAL.
+    .PARAMETER UserGroupToAdd
+        This parameter is OPTIONAL, however, either this parameter or the -UsersToAdd parameter is REQUIRED.
 
-        This parameter is a switch. If used, this function will only fix permissions recursively on
-        the directories 'C:\Program Files\OpenSSH-Win64' and/or 'C:\ProgramData\ssh'
+        This parameter takes an array of strings. Possible string values are:
+            - AllUsers
+            - LocalAdmins
+            - LocalUsers
+            - DomainAdmins
+            - DomainUsers
+        
+        Using "LocalAdmins" will add all User Accounts that are members of the Built-In 'Administrators' Security Group
+        on the Local Host to the authorized_principals file.
+
+        Using "LocalUsers" will add all user Accounts that are members of the Built-In 'Users' Security Group on
+        the Local Host to the authorized_principals file.
+
+        Using "DomainAdmins" will add all User Accounts that are members of the "Domain Admins" Security Group in
+        Active Directory to the authorized_principals file.
+
+        Using "Domain Users" will add all User Accounts that are members of the "Domain Users" Security Group in
+        Active Directory to the authorized_principals file.
+
+        Using "AllUsers" will add User Accounts that are members of all of the above Security Groups to the
+        authorized_principals file.
+
+        You CAN use this parameter in conjunction with the -UsersToAdd parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
+
+    .PARAMETER UsersToAdd
+        This parameter is OPTIONAL, however, either this parameter or the -UserGroupToAdd parameter is REQUIRED.
+
+        This parameter takes an array of strings, each of which represents either a Local User Account
+        or a Domain User Account. Local User Accounts MUST be in the format <UserName>@<LocalHostComputerName> and
+        Domain User Accounts MUST be in the format <UserName>@<DomainPrefix>. (To clarify DomainPrefix: if your
+        domain is, for example, 'zero.lab', your DomainPrefix would be 'zero').
+
+        These strings will be added to the authorized_principals file, and these User Accounts
+        will be permitted to SSH into the Local Host.
+
+        You CAN use this parameter in conjunction with the -UserGroupToAdd parameter, and this function
+        DOES check for repeats, so don't worry about overlap.
 
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
-        PS C:\Users\zeroadmin> Fix-SSHPermissions
+        PS C:\Users\zeroadmin> $AuthorizedPrincipalsFile = Generate-AuthorizedPrincipalsFile -UserGroupToAdd @("LocalAdmins","DomainAdmins")
         
 #>
 function Generate-AuthorizedPrincipalsFile {

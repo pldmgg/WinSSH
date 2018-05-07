@@ -1,3 +1,702 @@
+<#
+    .SYNOPSIS
+        This script/function requests and receives a New Certificate from your Windows-based Issuing Certificate Authority.
+
+        When used in conjunction with the Generate-CertTemplate.ps1 script/function, all needs can be satisfied.
+        (See: https://github.com/pldmgg/misc-powershell/blob/master/Generate-CertTemplate.ps1)
+
+        IMPORTANT NOTE: By running the function without any parameters, the user will be walked through several prompts. 
+        This is the recommended way to use this function until the user feels comfortable with parameters mentioned below.
+
+    .DESCRIPTION
+        This function/script is split into the following sections (ctl-f to jump to each of these sections)
+        - Libraries and Helper Functions (~Lines 1127-2794)
+        - Initial Variable Definition and Validation (~Lines 2796-3274)
+        - Writing the Certificate Request Config File (~Lines 3276-3490)
+        - Generate Certificate Request, Submit to Issuing Certificate Authority, and Recieve Response (~Lines 3492-END)
+
+        .DEPENDENCIES
+            OPTIONAL DEPENDENCIES (One of the two will be required depending on if you use the ADCS Website)
+            1) RSAT (Windows Server Feature) - If you're not using the ADCS Website, then the Get-ADObject cmdlet is used for various purposes. This cmdlet
+            is available only if RSAT is installed on the Windows Server.
+
+            2) Win32 OpenSSL - If $UseOpenSSL = "Yes", the script/function depends on the latest Win32 OpenSSL binary that can be found here:
+            https://indy.fulgan.com/SSL/
+            Simply extract the (32-bit) zip and place the directory on your filesystem in a location to be referenced by the parameter $PathToWin32OpenSSL.
+
+            IMPORTANT NOTE 2: The above third-party Win32 OpenSSL binary is referenced by OpenSSL.org here:
+            https://wiki.openssl.org/index.php/Binaries
+
+    .PARAMETER CertGenWorking
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the full path to a directory that will contain all output
+        files.
+
+    .PARAMETER BasisTemplate
+        This parameter is OPTIONAL, but becomes MANDATORY if the -IntendedPurposeValues parameter is not used.
+
+        This parameter takes a string that represents either the CN or the displayName of the Certificate Template that you are 
+        basing this New Certificate on.
+        
+        IMPORTANT NOTE: If you are requesting the new certificate via the ADCS Web Enrollment Website, the
+        Certificate Template will ONLY appear in the Certificate Template drop-down (which makes it a valid option
+        for this parameter) if msPKITemplateSchemaVersion is "2" or "1" AND pKIExpirationPeriod is 1 year or LESS. 
+        See the Generate-CertTemplate.ps1 script/function for more details here:
+        https://github.com/pldmgg/misc-powershell/blob/master/DueForRefactor/Generate-CertTemplate.ps1
+
+    .PARAMETER CertificateCN
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name that you would like to give the New Certificate. This name will
+        appear in the following locations:
+            - "FriendlyName" field of the Certificate Request
+            - "Friendly name" field the New Certificate itself
+            - "Friendly Name" field when viewing the New Certificate in the Local Certificate Store
+            - "Subject" field of the Certificate Request
+            - "Subject" field on the New Certificate itself
+            - "Issued To" field when viewing the New Certificate in the Local Certificate Store
+
+    .PARAMETER CertificateRequestConfigFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the Certificate Request
+        Configuration file to be submitted to the Issuing Certificate Authority. File extension should be .inf.
+
+        A default value is supplied: "NewCertRequestConfig_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".inf"
+
+    .PARAMETER CertificateRequestFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the Certificate Request file to be submitted
+        to the Issuing Certificate Authority. File extension should be .csr.
+
+        A default value is supplied: "NewCertRequest_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".csr"
+
+    .PARAMETER CertFileOut
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the New Public Certificate received from the
+        Issuing Certificate Authority. The file extension should be .cer.
+
+        A default value is supplied: "NewCertificate_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".cer"
+
+    .PARAMETER CertificateChainOut
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the Chain of Public Certificates from 
+        the New Public Certificate up to the Root Certificate Authority. File extension should be .p7b.
+
+        A default value is supplied: "NewCertificateChain_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".p7b"
+
+        IMPORTANT NOTE: File extension will be .p7b even if format is actually PKCS10 (which should have extension .p10).
+        This is to ensure that Microsoft Crypto Shell Extensions recognizes the file. (Some systems do not have .p10 associated
+        with Crypto Shell Extensions by default, leading to confusion).
+
+    .PARAMETER PFXFileOut
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a file name to be used for the file containing both Public AND 
+        Private Keys for the New Certificate. File extension should be .pfx.
+
+        A default values is supplied: "NewCertificate_$CertificateCN"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".pfx"
+
+    .PARAMETER PFXPwdAsSecureString
+        This parameter is OPTIONAL.
+
+        This parameter takes a securestring.
+
+        In order to export a .pfx file from the Local Certificate Store, a password must be supplied (or permissions based on user accounts 
+        must be configured beforehand, but this is outside the scope of this script). 
+
+        IMPORTANT NOTE: This same password is applied to $ProtectedPrivateKeyOut if OpenSSL is used to create
+        Linux-compatible certificates in .pem format.
+
+    .PARAMETER ADCSWebEnrollmentURL
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the URL for the ADCS Web Enrollment website.
+        Example: https://pki.test.lab/certsrv
+
+    .PARAMETER ADCSWebAuthType
+        This parameter is OPTIONAL.
+
+        This parameter takes one of two inputs:
+        1) The string "Windows"; OR
+        2) The string "Basic"
+
+        The IIS Web Server hosting the ADCS Web Enrollment site can be configured to use Windows Authentication, Basic
+        Authentication, or both. Use this parameter to specify either "Windows" or "Basic" authentication.
+
+    .PARAMETER ADCSWebAuthUserName
+        This parameter is OPTIONAL. Do NOT use this parameter if you are using the -ADCSWebCreds parameter.
+
+        This parameter takes a string that represents a username with permission to access the ADCS Web Enrollment site.
+        
+        If $ADCSWebAuthType = "Basic", then INCLUDE the domain prefix as part of the username. 
+        Example: test2\testadmin .
+
+        If $ADCSWebAuthType = "Windows", then DO NOT INCLUDE the domain prefix as part of the username.
+        Example: testadmin
+
+        (NOTE: If you mix up the above username formatting, then the script will figure it out. This is more of an FYI.)
+
+    .PARAMETER ADCSWebAuthPass
+        This parameter is OPTIONAL. Do NOT use this parameter if you are using the -ADCSWebCreds parameter.
+
+        This parameter takes a securestring.
+
+        If $ADCSWebEnrollmentUrl is used, then this parameter becomes MANDATORY. Under this circumstance, if 
+        this parameter is left blank, the user will be prompted for secure input. If using this script as part of a larger
+        automated process, use a wrapper function to pass this parameter securely (this is outside the scope of this script).
+
+    .PARAMETER ADCSWebCreds
+        This parameter is OPTIONAL. Do NOT use this parameter if you are using the -ADCSWebAuthuserName and
+        -ADCSWebAuthPass parameters.
+
+        This parameter takes a PSCredential.
+
+        IMPORTANT NOTE: When speicfying the UserName for the PSCredential, make sure the format adheres to the
+        following:
+
+        If $ADCSWebAuthType = "Basic", then INCLUDE the domain prefix as part of the username. 
+        Example: test2\testadmin .
+
+        If $ADCSWebAuthType = "Windows", then DO NOT INCLUDE the domain prefix as part of the username.
+        Example: testadmin
+
+        (NOTE: If you mix up the above username formatting, then the script will figure it out. This is more of an FYI.)
+
+    .PARAMETER CertADCSWebResponseOutFile
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a valid file path that will contain the HTTP response after
+        submitting the Certificate Request via the ADCS Web Enrollment site.
+
+        A default value is supplied: "NewCertificate_$CertificateCN"+"_ADCSWebResponse"+$(Get-Date -format 'dd-MMM-yyyy_HHmm')+".txt"
+
+    .PARAMETER Organization
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an Organization name. This will be added to "Subject" field in the
+        Certificate.
+
+    .PARAMETER OriginationalUnit
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents an Organization's Department. This will be added to the "Subject" field
+        in the Certificate.
+
+    .PARAMETER Locality
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a City. This will be added to the "Subject" field in the Certificate.
+
+    .PARAMETER State
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a State. This will be added to the "Subject" field in the Certificate.
+
+    .PARAMETER Country
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a Country. This will be added to the "Subject" field in the Certificate.
+
+    .PARAMETER KeyLength
+        This parameter is MANDATORY.
+
+        This parameter takes a string representing a key length of either "2048" or "4096".
+
+        A default value is supplied: 2048
+
+        For more information, see:
+        https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER HashAlgorithmValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of the following values:
+        "SHA1","SHA256","SHA384","SHA512","MD5","MD4","MD2"
+
+        A default value is supplied: SHA256
+
+        For more information, see:
+        https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER EncryptionAlgorithmValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string representing an available encryption algorithm. Valid values:
+        "AES","DES","3DES","RC2","RC4"
+
+        A default value is supplied: AES
+
+    .PARAMETER PrivateKeyExportableValue
+        This parameter is MANDATORY.
+
+        The parameter takes a string with one of two values: "True", "False"
+
+        Setting the value to "True" means that the Private Key will be exportable.
+
+        A default value is supplied: True
+
+    .PARAMETER KeySpecValue
+        This parameter is MANDATORY.
+
+        The parameter takes a string that must be one of two values: "1", "2"
+
+        A default value is supplied: 1
+
+        For details about Key Spec Values, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER KeyUsageValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents a hexadecimal value.
+
+        A defult value is supplied: 80
+
+        For reference, here are some commonly used values -
+
+        A valid value is the hex sum of one or more of following:
+            CERT_DIGITAL_SIGNATURE_KEY_USAGE = 80
+            CERT_NON_REPUDIATION_KEY_USAGE = 40
+            CERT_KEY_ENCIPHERMENT_KEY_USAGE = 20
+            CERT_DATA_ENCIPHERMENT_KEY_USAGE = 10
+            CERT_KEY_AGREEMENT_KEY_USAGE = 8
+            CERT_KEY_CERT_SIGN_KEY_USAGE = 4
+            CERT_OFFLINE_CRL_SIGN_KEY_USAGE = 2
+            CERT_CRL_SIGN_KEY_USAGE = 2
+            CERT_ENCIPHER_ONLY_KEY_USAGE = 1
+        
+        Some Commonly Used Values:
+            'c0' (i.e. 80+40)
+            'a0' (i.e. 80+20)
+            'f0' (i.e. 80+40+20+10)
+            '30' (i.e. 20+10)
+            '80'
+        
+        All Valid Values:
+        "1","10","11","12","13","14","15","16","17","18","2","20","21","22","23","24","25","26","27","28","3","30","38","4","40",
+        "41","42","43","44","45","46","47","48","5","50","58","6","60","68","7","70","78","8","80","81","82","83","84","85","86","87","88","9","90",
+        "98","a","a0","a8","b","b0","b8","c","c0","c","8","d","d0","d8","e","e0","e8","f","f0","f8"
+
+        For more information see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER MachineKeySet
+        This parameter is MANDATORY.
+
+        This parameter takes a string that must be one of two values: "True", "False"
+
+        A default value is provided: "False"
+
+        If you would like the Private Key exported, use "False".
+
+        If you are creating this certificate to be used in the User's security context (like for a developer
+        to sign their code), use "False".
+        
+        If you are using this certificate for a service that runs in the Computer's security context (such as
+        a Web Server, Domain Controller, etc) and DO NOT need the Private Key exported use "True".
+
+        For more info, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER SecureEmail
+        This parameter is MANDATORY.
+
+        This parameter takes string that must be one of two values: "Yes", "No"
+        
+        A default value is provided: "No"
+
+        If the New Certificate is going to be used to digitally sign and/or encrypt emails, this parameter
+        should be set to "Yes".
+
+    .PARAMETER UserProtected
+        This parameter is MANDATORY.
+
+        This parameter takes  a string that must be one of two values: "True", "False"
+
+        A default value is provided: False
+
+        If $MachineKeySet is set to "True", then $UserProtected MUST be set to "False". If $MachineKeySet is
+        set to "False", then $UserProtected can be set to either "True" or "False". 
+
+        If $UserProtected is set to "True", a CryptoAPI password window is displayed when the key is generated
+        during the certificate request process. Once the key is protected with a password, you must enter this
+        password every time the key is accessed.
+
+        IMPORTANT NOTE: Do not set this parameter to "True" if you want this script/function to run unattended.
+
+    .PARAMETER ProviderNameValue
+        This parameter is MANDATORY.
+
+        This parameter takes a string that represents the name of the Cryptographic Provider you would like to use for the 
+        New Certificate.
+
+        A default value is provided: "Microsoft RSA SChannel Cryptographic Provider"
+        
+        Valid values are as follows:
+        "Microsoft Base Cryptographic Provider v1.0","Microsoft Base DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Base DSS Cryptographic Provider","Microsoft Base Smart Card Crypto Provider",
+        "Microsoft DH SChannel Cryptographic Provider","Microsoft Enhanced Cryptographic Provider v1.0",
+        "Microsoft Enhanced DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Enhanced RSA and AES Cryptographic Provider","Microsoft RSA SChannel Cryptographic Provider",
+        "Microsoft Strong Cryptographic Provider","Microsoft Software Key Storage Provider",
+        "Microsoft Passport Key Storage Provider"
+        
+        For more details and a list of valid values, see:
+        https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+        WARNING: The Certificate Template that this New Certificate is based on (i.e. the value provided for the parameter 
+        $BasisTemplate) COULD POTENTIALLY limit the availble Crypographic Provders for the Certificate Request. Make sure 
+        the Cryptographic Provider you use is allowed by the Basis Certificate Template.
+
+    .PARAMETER RequestTypeValue
+        This parameter is MANDATORY.
+
+        A default value is provided: PKCS10
+
+        This parameter takes a string that indicates the format of the Certificate Request. Valid values are:
+        "CMC", "PKCS10", "PKCS10-", "PKCS7"
+
+        For more details, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx
+
+    .PARAMETER IntendedPurposeValues
+        This parameter is OPTIONAL, but becomes MANDATORY if the -BasisTemplate parameter is not used.
+
+        This parameter takes an array of strings. Valid values are as follows:
+
+        "Code Signing","Document Signing","Client Authentication","Server Authentication",
+        "Remote Desktop","Private Key Archival","Directory Service Email Replication","Key Recovery Agent",
+        "OCSP Signing","Microsoft Trust List Signing","EFS","Secure E-mail","Enrollment Agent","Smart Card Logon",
+        "File Recovery","IPSec IKE Intermediate","KDC Authentication","Windows Update",
+        "Windows Third Party Application Component","Windows TCB Component","Windows Store",
+        "Windows Software Extension Verification","Windows RT Verification","Windows Kits Component",
+        "No OCSP Failover to CRL","Auto Update End Revocation","Auto Update CA Revocation","Revoked List Signer",
+        "Protected Process Verification","Protected Process Light Verification","Platform Certificate",
+        "Microsoft Publisher","Kernel Mode Code Signing","HAL Extension","Endorsement Key Certificate",
+        "Early Launch Antimalware Driver","Dynamic Code Generator","DNS Server Trust","Document Encryption",
+        "Disallowed List","Attestation Identity Key Certificate","System Health Authentication","CTL Usage",
+        "IP Security End System","IP Security Tunnel Termination","IP Security User","Time Stamping",
+        "Microsoft Time Stamping","Windows Hardware Driver Verification","Windows System Component Verification",
+        "OEM Windows System Component Verification","Embedded Windows System Component Verification","Root List Signer",
+        "Qualified Subordination","Key Recovery","Lifetime Signing","Key Pack Licenses","License Server Verification"
+
+        IMPORTANT NOTE: If this parameter is not set by user, the Intended Purpose Value(s) of the
+        Basis Certificate Template (i.e. $BasisTemplate) will be used. If $BasisTemplate is not provided, then
+        the user will be prompted.
+
+    .PARAMETER UseOpenSSL
+        This parameter is MANDATORY.
+
+        A default value is provided: "Yes"
+
+        The parameter takes a string that must be one of two values: "Yes", "No"
+
+        This parameter determines whether the Win32 OpenSSL binary should be used to extract
+        certificates/keys in a format (.pem) readily used in Linux environments.
+
+    .PARAMETER AllPublicKeysInChainOut
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        This parameter takes a string that represents a file name. This file will contain all public certificates in
+        the chain, from the New Certificate up to the Root Certificate Authority. File extension should be .pem
+
+        A default value is provided: "NewCertificate_$CertificateCN"+"_all_public_keys_in_chain"+".pem"
+
+    .PARAMETER ProtectedPrivateKeyOut
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        This parameter takes a string that represents a file name. This file will contain the password-protected private
+        key for the New Certificate. File extension should be .pem
+
+        A default value is provided: "NewCertificate_$CertificateCN"+"_protected_private_key"+".pem"
+
+    .PARAMETER UnProtectedPrivateKeyOut
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        This parameter takes a string that represents a file name. This file will contain the raw private
+        key for the New Certificate. File extension should be .key
+
+        A default value is provided: "NewCertificate_$CertificateCN"+"_unprotected_private_key"+".key"
+
+    .PARAMETER StripPrivateKeyOfPassword
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if the parameter -UseOpenSSL is "Yes"
+
+        The parameter takes a string  that must be one of two values: "Yes", "No"
+
+        This parameter removes the password from the file $ProtectedPrivateKeyOut and outputs the result to
+        $UnProtectedPrivateKeyOut.
+
+        A default value is provided: Yes
+
+    .PARAMETER SANObjectsToAdd
+        This parameter is OPTIONAL.
+
+        This parameter takes an array of strings. All possible values are: 
+        "DNS","Distinguished Name","URL","IP Address","Email","UPN","GUID"
+
+    .PARAMETER DNSSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "DNS".
+        
+        This parameter takes an array of strings. Each string represents a DNS address.
+        Example: "www.fabrikam.com","www.contoso.com"
+
+    .PARAMETER DistinguishedNameSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "Distinguished Name".
+
+        This parameter takes an array of strings. Each string represents an LDAP Path.
+        Example: "CN=www01,OU=Web Servers,DC=fabrikam,DC=com","CN=www01,OU=Load Balancers,DC=fabrikam,DC=com"
+
+    .PARAMETER URLSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "URL".
+
+        This parameter takes an array of string. Ech string represents a Url.
+        Example: "http://www.fabrikam.com","http://www.contoso.com"
+
+    .PARAMETER IPAddressSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "IP Address".
+
+        This parameter takes an array of strings. Each string represents an IP Address.
+        Example: "172.31.10.13","192.168.2.125"
+
+    .PARAMETER EmailSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "Email".
+
+        This paramter takes an array of strings. Each string should represent and Email Address.
+        Example: "mike@fabrikam.com","hazem@fabrikam.com"
+
+    .PARAMETER UPNSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "UPN".
+
+        This parameter takes an array of strings. Each string should represent a Principal Name object.
+        Example: "mike@fabrikam.com","hazem@fabrikam.com"
+
+    .PARAMETER GUIDSANObjects
+        This parameter is OPTIONAL. This parameter becomes MANDATORY if $SANObjectsToAdd includes "GUID".
+
+        This parameter takes an array of strings. Each string should represent a GUID.
+        Example: "f7c3ac41-b8ce-4fb4-aa58-3d1dc0e36b39","g8D4ac41-b8ce-4fb4-aa58-3d1dc0e47c48"
+
+    .EXAMPLE
+        # Scenario 1: No Parameters Provided
+        # Executing the script/function without any parameters will ask for input on defacto mandatory parameters.
+        # All other parameters will use default values which should be fine under the vast majority of circumstances.
+        # De facto mandatory parameters are as follows:
+        #   -CertGenWorking
+        #   -BasisTemplate
+        #   -CertificateCN
+        #   -Organization
+        #   -OrganizationalUnit
+        #   -Locality
+        #   -State
+        #   -Country
+
+        PS C:\Users\zeroadmin> Generate-Certificate
+
+    .EXAMPLE
+        # Scenario 2: Generate a Certificate for a Web Server From Machine on Same Domain As Your CA
+        # Assuming you run this function from a workstation on the same Domain as your ADCS Certificate
+        # Authorit(ies) under an account that has privileges to request new Certificates, do the following:
+
+        PS C:\Users\zeroadmin> $GenCertSplatParams = @{
+            CertGenWorking              = "$HOME\Downloads\temp"
+            BasisTemplate               = "WebServer"
+            CertificateCN               = "VaultServer"
+            Organization                = "Boop Inc"
+            OrganizationalUnit          = "DevOps"
+            Locality                    = "Philadelphia"
+            State                       = "PA"
+            Country                     = "US"
+            CertFileOut                 = "VaultServer.cer"
+            PFXFileOut                  = "VaultServer.pfx"
+            CertificateChainOut         = "VaultServerChain.p7b"
+            AllPublicKeysInChainOut     = "VaultServerChain.pem"
+            ProtectedPrivateKeyOut      = "VaultServerPwdProtectedPrivateKey.pem"
+            UnProtectedPrivateKeyOut    = "VaultServerUnProtectedPrivateKey.pem"
+            SANObjectsToAdd             = @("IP Address","DNS")
+            IPAddressSANObjects         = @("$VaultServerIP","0.0.0.0")
+            DNSSANObjects               = "VaultServer.zero.lab"
+        }
+        PS C:\Users\zeroadmin> $GenVaultCertResult = Generate-Certificate @GenCertSplatParams
+        
+    .EXAMPLE
+        # Scenario 3: Generate a Certificate for a Web Server From Machine on a Different Domain Than Your CA
+        # Assuming the ADCS Website is available -
+
+        PS C:\Users\zeroadmin> $GenCertSplatParams = @{
+            CertGenWorking              = "$HOME\Downloads\temp"
+            BasisTemplate               = "WebServer"
+            ADCSWebEnrollmentURL        = "https://pki.test2.lab/certsrv"
+            ADCSWebAuthType             = "Windows"
+            ADCSWebCreds                = [pscredential]::new("testadmin",$(Read-Host "Please enter the password for 'zeroadmin'" -AsSecureString))
+            CertificateCN               = "VaultServer"
+            Organization                = "Boop Inc"
+            OrganizationalUnit          = "DevOps"
+            Locality                    = "Philadelphia"
+            State                       = "PA"
+            Country                     = "US"
+            CertFileOut                 = "VaultServer.cer"
+            PFXFileOut                  = "VaultServer.pfx"
+            CertificateChainOut         = "VaultServerChain.p7b"
+            AllPublicKeysInChainOut     = "VaultServerChain.pem"
+            ProtectedPrivateKeyOut      = "VaultServerPwdProtectedPrivateKey.pem"
+            UnProtectedPrivateKeyOut    = "VaultServerUnProtectedPrivateKey.pem"
+            SANObjectsToAdd             = @("IP Address","DNS")
+            IPAddressSANObjects         = @("$VaultServerIP","0.0.0.0")
+            DNSSANObjects               = "VaultServer.zero.lab"
+        }
+        PS C:\Users\zeroadmin> $GenVaultCertResult = Generate-Certificate @GenCertSplatParams
+
+    .OUTPUTS
+        All outputs are written to the $CertGenWorking directory specified by the user.
+
+        ALWAYS GENERATED
+        The following outputs are ALWAYS generated by this function/script, regardless of optional parameters: 
+            - A Certificate Request Configuration File (with .inf file extension) - 
+                RELEVANT PARAMETER: $CertificateRequestConfigFile
+            - A Certificate Request File (with .csr file extenstion) - 
+                RELEVANT PARAMETER: $CertificateRequestFile
+            - A Public Certificate with the New Certificate Name (NewCertificate_$CertificateCN_[Timestamp].cer) - 
+                RELEVANT PARAMETER: $CertFileOut
+                NOTE: This file is not explicitly generated by the script. Rather, it is received from the Issuing Certificate Authority after 
+                the Certificate Request is submitted and accepted by the Issuing Certificate Authority. 
+                NOTE: If you choose to use Win32 OpenSSL to extract certs/keys from the .pfx file (see below), this file should have SIMILAR CONTENT
+                to the file $PublicKeySansChainOutFile. To clarify, $PublicKeySansChainOutFile does NOT have what appear to be extraneous newlines, 
+                but $CertFileOut DOES. Even though $CertFileOut has what appear to be extraneous newlines, Microsoft Crypto Shell Extensions will 
+                be able to read both files as if they were the same. However, Linux machines will need to use $PublicKeySansChainOutFile (Also, the 
+                file extension for $PublicKeySansChainOutFile can safely be changed from .cer to .pem without issue)
+            - A PSCustomObject with properties:
+                - FileOutputHashTable
+                - CertNamevsContentsHash
+
+                The 'FileOutputHashTable' property can help the user quickly and easily reference output 
+                files in $CertGenWorking. Example content:
+
+                    Key   : CertificateRequestFile
+                    Value : NewCertRequest_aws-coreos3-client-server-cert04-Sep-2016_2127.csr
+                    Name  : CertificateRequestFile
+
+                    Key   : IntermediateCAPublicCertFile
+                    Value : ZeroSCA_Public_Cert.pem
+                    Name  : IntermediateCAPublicCertFile
+
+                    Key   : EndPointPublicCertFile
+                    Value : aws-coreos3-client-server-cert_Public_Cert.pem
+                    Name  : EndPointPublicCertFile
+
+                    Key   : AllPublicKeysInChainOut
+                    Value : NewCertificate_aws-coreos3-client-server-cert_all_public_keys_in_chain.pem
+                    Name  : AllPublicKeysInChainOut
+
+                    Key   : CertificateRequestConfigFile
+                    Value : NewCertRequestConfig_aws-coreos3-client-server-cert04-Sep-2016_2127.inf
+                    Name  : CertificateRequestConfigFile
+
+                    Key   : EndPointUnProtectedPrivateKey
+                    Value : NewCertificate_aws-coreos3-client-server-cert_unprotected_private_key.key
+                    Name  : EndPointUnProtectedPrivateKey
+
+                    Key   : RootCAPublicCertFile
+                    Value : ZeroDC01_Public_Cert.pem
+                    Name  : RootCAPublicCertFile
+
+                    Key   : CertADCSWebResponseOutFile
+                    Value : NewCertificate_aws-coreos3-client-server-cert_ADCSWebResponse04-Sep-2016_2127.txt
+                    Name  : CertADCSWebResponseOutFile
+
+                    Key   : CertFileOut
+                    Value : NewCertificate_aws-coreos3-client-server-cert04-Sep-2016_2127.cer
+                    Name  : CertFileOut
+
+                    Key   : PFXFileOut
+                    Value : NewCertificate_aws-coreos3-client-server-cert04-Sep-2016_2127.pfx
+                    Name  : PFXFileOut
+
+                    Key   : EndPointProtectedPrivateKey
+                    Value : NewCertificate_aws-coreos3-client-server-cert_protected_private_key.pem
+                    Name  : EndPointProtectedPrivateKey
+
+                The 'CertNamevsContentHash' hashtable can help the user quickly access the content of each of the
+                aforementioned files. Example content for the 'CertNamevsContentsHash' property:
+
+                    Key   : EndPointUnProtectedPrivateKey
+                    Value : -----BEGIN RSA PRIVATE KEY-----
+                            ...
+                            -----END RSA PRIVATE KEY-----
+                    Name  : EndPointUnProtectedPrivateKey
+
+                    Key   : aws-coreos3-client-server-cert
+                    Value : -----BEGIN CERTIFICATE-----
+                            ...
+                            -----END CERTIFICATE-----
+                    Name  : aws-coreos3-client-server-cert
+
+                    Key   : ZeroSCA
+                    Value : -----BEGIN CERTIFICATE-----
+                            ...
+                            -----END CERTIFICATE-----
+                    Name  : ZeroSCA
+
+                    Key   : ZeroDC01
+                    Value : -----BEGIN CERTIFICATE-----
+                            ...
+                            -----END CERTIFICATE-----
+                    Name  : ZeroDC01
+
+        GENERATED WHEN $MachineKeySet = "False"
+        The following outputs are ONLY generated by this function/script when $MachineKeySet = "False" (this is its default setting)
+            - A .pfx File Containing the Entire Public Certificate Chain AS WELL AS the Private Key of your New Certificate (with .pfx file extension) - 
+                RELEVANT PARAMETER: $PFXFileOut
+                NOTE: The Private Key must be marked as exportable in your Certificate Request Configuration File in order for the .pfx file to
+                contain the private key. This is controlled by the parameter $PrivateKeyExportableValue = "True". The Private Key is marked as 
+                exportable by default.
+        
+        GENERATED WHEN $ADCSWebEnrollmentUrl is NOT provided
+        The following outputs are ONLY generated by this function/script when $ADCSWebEnrollmentUrl is NOT provided (this is its default setting)
+        (NOTE: Under this scenario, the workstation running the script must be part of the same domain as the Issuing Certificate Authority):
+            - A Certificate Request Response File (with .rsp file extension) 
+                NOTE: This file is not explicitly generated by the script. Rather, it is received from the Issuing Certificate Authority after 
+                the Certificate Request is submitted
+            - A Certificate Chain File (with .p7b file extension) -
+                RELEVANT PARAMETER: $CertificateChainOut
+                NOTE: This file is not explicitly generated by the script. Rather, it is received from the Issuing Certificate Authority after 
+                the Certificate Request is submitted and accepted by the Issuing Certificate Authority
+                NOTE: This file contains the entire chain of public certificates, from the requested certificate, up to the Root CA
+                WARNING: In order to parse the public certificates for each entity up the chain, you MUST use the Crypto Shell Extensions GUI,
+                otherwise, if you look at this content with a text editor, it appears as only one (1) public certificate.  Use the OpenSSL
+                Certificate Chain File ($AllPublicKeysInChainOut) optional output in order to view a text file that parses each entity's public certificate.
+        
+        GENERATED WHEN $ADCSWebEnrollmentUrl IS provided
+        The following outputs are ONLY generated by this function/script when $ADCSWebEnrollmentUrl IS provided
+        (NOTE: Under this scenario, the workstation running the script is sending a web request to the ADCS Web Enrollment website):
+            - An File Containing the HTTP Response From the ADCS Web Enrollment Site (with .txt file extension) - 
+                RELEVANT PARAMETER: $CertADCSWebResponseOutFile
+        
+        GENERATED WHEN $UseOpenSSL = "Yes"
+        The following outputs are ONLY generated by this function/script when $UseOpenSSL = "Yes"
+        (WARNING: This creates a Dependency on a third party Win32 OpenSSL binary that can be found here: https://indy.fulgan.com/SSL/
+        For more information, see the DEPENDENCIES Section below)
+            - A Certificate Chain File (ending with "all_public_keys_in_chain.pem") -
+                RELEVANT PARAMETER: $AllPublicKeysInChainOut
+                NOTE: This optional parameter differs from the aforementioned .p7b certificate chain output in that it actually parses
+                each entity's public certificate in a way that is viewable in a text editor.
+            - EACH Public Certificate in the Certificate Chain File (file name like [Certificate CN]_Public_Cert.cer)
+                - A Public Certificate with the New Certificate Name ($CertificateCN_Public_Cert.cer) -
+                    RELEVANT PARAMETER: $PublicKeySansChainOutFile
+                    NOTE: This file should have SIMILAR CONTENT to $CertFileOut referenced earlier. To clarify, $PublicKeySansChainOutFile does NOT have
+                    what appear to be extraneous newlines, but $CertFileOut DOES. Even though $CertFileOut has what appear to be extraneous newlines, Microsoft Crypto Shell Extensions will 
+                    be able to read both files as if they were the same. However, Linux machines will need to use $PublicKeySansChainOutFile (Also, the 
+                    file extension for $PublicKeySansChainOutFile can safely be changed from .cer to .pem without issue)
+                - Additional Public Certificates in Chain including [Subordinate CA CN]_Public_Cert.cer and [Root CA CN]_Public_Cert.cer
+            - A Password Protected Private Key file (ending with "protected_private_key.pem") -
+                RELEVANT PARAMETER: $ProtectedPrivateKeyOut
+                NOTE: This is the New Certificate's Private Key that is protected by a password defined by the $PFXPwdAsSecureString parameter.
+
+        GENERATED WHEN $UseOpenSSL = "Yes" AND $StripPrivateKeyOfPassword = "Yes"
+            - An Unprotected Private Key File (ends with unprotected_private_key.key) -
+                RELEVANT PARAMETER: $UnProtectedPrivateKeyOut
+
+#>
 function Generate-Certificate {
     [CmdletBinding()]
     Param(
@@ -229,7 +928,7 @@ function Generate-Certificate {
         [switch]$CSRGenOnly
     )
 
-    ##### BEGIN Helper Functions #####
+    #region >> Libraries and Helper Functions
 
     function Compare-Arrays {
         [CmdletBinding()]
@@ -1894,10 +2593,11 @@ function Generate-Certificate {
     
         $Output
     }
+    
+    #endregion >> Libraries and Helper Functions
+    
 
-    ##### END Helper Functions #####
-
-    ##### BEGIN Initial Variable Definition and Validation #####
+    #region >> Variable Definition And Validation
 
     # Make a working Directory Where Generated Certificates will be Saved
     if (Test-Path $CertGenWorking) {
@@ -2373,12 +3073,11 @@ function Generate-Certificate {
             }
         }
     }
-        
+    
+    #endregion >> Variable Definition And Validation
+    
 
-
-    ##### END Initial Variable Definition and Validation #####
-
-    ##### BEGIN Writing the Certificate Request Config File #####
+    #region >> Writing the Certificate Request Config File
 
     # This content is saved to $CertGenWorking\$CertificateRequestConfigFile
     # For more information about the contents of the config file, see: https://technet.microsoft.com/en-us/library/hh831574(v=ws.11).aspx 
@@ -2592,10 +3291,10 @@ function Generate-Certificate {
         }
     }
 
-    ##### END Writing the Certificate Request Config File #####
+    #endregion >> Writing the Certificate Request Config File
 
 
-    ##### BEGIN Generate Certificate Request and Submit to Issuing Certificate Authority #####
+    #region >> Generate Certificate Request and Submit to Issuing Certificate Authority
 
     ## Generate new Certificate Request File: ##
     # NOTE: The generation of a Certificate Request File using the below "certreq.exe -new" command also adds the CSR to the 
@@ -2902,7 +3601,7 @@ function Generate-Certificate {
     # ***IMPORTANT NOTE: If you want to write the Certificates contained in the $CertNamevsContentsHash out to files again
     # at some point in the future, make sure you use the "Out-File" cmdlet instead of the "Set-Content" cmdlet
 
-    ##### END Generate Certificate Request and Submit to Issuing Certificate Authority #####
+    #endregion >> Generate Certificate Request and Submit to Issuing Certificate Authority
 
 }
 
