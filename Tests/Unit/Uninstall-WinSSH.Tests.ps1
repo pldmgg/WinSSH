@@ -50,24 +50,40 @@ if (!$(Get-Module -ListAvailable NTFSSecurity)) {
     return
 }
 
+Remove-Module PowerShellGet -Force -ErrorAction SilentlyContinue
+Remove-Module PackageManagement -Force -ErrorAction SilentlyContinue
+try {
+    Import-Module PackageManagement -ErrorAction Stop
+}
+catch {
+    Write-Error $_
+    Write-Error "Problem importing the PowerShell Module PackageManagement! Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+try {
+    Import-Module PowerShellGet -ErrorAction Stop
+}
+catch {
+    Write-Error $_
+    Write-Error "Problem importing the PowerShell Module PowerShellGet! Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+
 $CurrentlyLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
+<#
 if (![bool]$($CurrentlyLoadedAssemblies.FullName -match "System.ServiceProcess,")) {
     Add-Type -AssemblyName "System.ServiceProcess"
 }
+#>
 
-
-$FakeInstallSSHAgentOutput = [System.ServiceProcess.ServiceController]::new()
-$FakeNewSSHDServerOutput = [pscustomobject]@{
-    SSHDServiceStatus       = [System.ServiceProcess.ServiceControllerStatus]::Running
-    SSHAgentServiceStatus   = [System.ServiceProcess.ServiceControllerStatus]::Running
-    PublicKeysPaths         = [array]@()
-    PrivateKeysPaths        = [array]@()
+$FakeUninstallWinSSHOutput = [pscustomobject]@{
+    DirectoriesThatMightNeedToBeRemoved = [array]@("C:\Python36")
+    ChocolateyInstalledProgramObjects   = [array]@([pscustomobject]@{ProgramName = "python"; Version = "3.6.0"})
+    PSGetInstalledPackageObjects        = [array]@([Microsoft.PackageManagement.Packaging.SoftwareIdentity]::new())
+    RegistryProperties                  = [array]@([pscustomobject]@{DisplayName = "Python Launcher"})
 }
-$FakeInstallWinSSHOutputPSObj = [pscustomobject]@{
-    SSHAgentInstallInfo     = $FakeInstallSSHAgentOutput
-    SSHDServerInstallInfo   = $FakeNewSSHDServerOutput
-}
-$FakeInstallWinSSHOutputService = $FakeInstallSSHAgentOutput
 
 function CommonTestSeries {
     Param (
@@ -82,70 +98,47 @@ function CommonTestSeries {
         $InputObject | Assert-NotNull
     }
 
-    it "Should return a PSCustomObject or ServiceController Object" {
-        $InputObject | Should -BeTypeOrType @("System.Management.Automation.PSCustomObject","System.ServiceProcess.ServiceController")
+    it "Should return a PSCustomObject" {
+        $InputObject | Assert-Type System.Management.Automation.PSCustomObject
     }
 
-    if ($InputObject.GetType().FullName -eq "System.Management.Automation.PSCustomObject") {
-        it "Should return a PSCustomObject with Specific Properties" {
-            [System.Collections.ArrayList][array]$ActualPropertiesArray = $($InputObject | Get-Member -MemberType NoteProperty).Name
-            [System.Collections.ArrayList][array]$ExpectedPropertiesArray = $global:MockResources['FakeInstallWinSSHOutputPSObj'].Keys
-            foreach ($Item in $ExpectedPropertiesArray) {
-                $ActualPropertiesArray -contains $Item | Assert-True
-            }
-        }
-
-        it "Should return a PSCustomObject Property SSHAgentInstallInfo of Type ServiceController" {
-            $InputObject.SSHAgentInstallInfo | Assert-Type System.ServiceProcess.ServiceController
-        }
-
-        it "Should return a PSCustomObject Property SSHDServerInstallInfo of Type PSCustomObject" {
-            $InputObject.SSHDServerInstallInfo | Assert-Type System.Management.Automation.PSCustomObject
-        }
-
-        it "Should return a PSCustomObject Property SSHDServerInstallInfo with Specific Properties" {
-            [System.Collections.ArrayList][array]$ActualPropertiesArray = $($InputObject.SSHDServerInstallInfo | Get-Member -MemberType NoteProperty).Name
-            [System.Collections.ArrayList][array]$ExpectedPropertiesArray = $global:MockResources['FakeNewSSHDServerOutput'].Keys
-            foreach ($Item in $ExpectedPropertiesArray) {
-                $ActualPropertiesArray -contains $Item | Assert-True
-            }
-        }
-
-        it "Should return SSHDServerInstallInfo Property SSHDServiceStatus of Type ServiceControllerStatus" {
-            $InputObject.SSHDServerInstallInfo.SSHDServiceStatus | Assert-Type System.ServiceProcess.ServiceControllerStatus
-        }
-
-        it "Should return SSHDServerInstallInfo Property SSHAgentServiceStatus of Type ServiceControllerStatus" {
-            $InputObject.SSHDServerInstallInfo.SSHAgentServiceStatus | Assert-Type System.ServiceProcess.ServiceControllerStatus
-        }
-
-        it "Should return SSHDServerInstallInfo Property PublicKeysPaths of Type Array" {
-            $InputObject.SSHDServerInstallInfo.PublicKeysPaths | Assert-Type System.Object[]
-        }
-        it "Should return SSHDServerInstallInfo Property PrivateKeysPaths of Type Array" {
-            $InputObject.SSHDServerInstallInfo.PrivateKeysPaths | Assert-Type System.Object[]
+    it "Should return a PSCustomObject with Specific Properties" {
+        [System.Collections.ArrayList][array]$ActualPropertiesArray = $($InputObject | Get-Member -MemberType NoteProperty).Name
+        [System.Collections.ArrayList][array]$ExpectedPropertiesArray = $global:MockResources['FakeUninstallWinSSHOutput'].Keys
+        foreach ($Item in $ExpectedPropertiesArray) {
+            $ActualPropertiesArray -contains $Item | Assert-True
         }
     }
-    if ($InputObject.GetType().FullName -eq "System.ServiceProcess.ServiceController") {
-        it "Should return a ServiceController Object with Status 'Running'" {
-            $($InputObject.Status | Out-String).Trim() | Should -Be "Running" 
-        }
+
+    <#
+    it "Should return a PSCustomObject Property DirectoriesThatMightNeedToBeRemoved of Type Object Array" {
+        $InputObject.DirectoriesThatMightNeedToBeRemoved | Assert-Type System.Object[]
     }
+
+    it "Should return a PSCustomObject Property ChocolateyInstalledProgramObjects of Type Object Array" {
+        $InputObject.ChocolateyInstalledProgramObjects | Assert-Type System.Object[]
+    }
+
+    it "Should return a PSCustomObject Property PSGetInstalledPackageObjects of Type Object Array" {
+        $InputObject.PSGetInstalledPackageObjects | Assert-Type System.Object[]
+    }
+
+    it "Should return a PSCustomObject Property RegistryProperties of Type Object Array" {
+        $InputObject.RegistryProperties | Assert-Type System.Object[]
+    }
+    #>
 }
 
 function Cleanup {
     [CmdletBinding()]
     Param ()
 
-    Uninstall-WinSSH
-
-    $CheckForPowerShellCore = Get-AllPackageInfo -ProgramName PowerShell-6
-    if ($CheckForPowerShellCore.ChocolateyInstalledProgramObjects.Count -gt 0 -or
-    $CheckForPowerShellCore.PSGetInstalledPackageObjects.Count -gt 0 -or
-    $CheckForPowerShellCore.RegistryProperties.Count -gt 0
-    ) {
-        Uninstall-Program -ProgramName PowerShell-6 -ErrorAction SilentlyContinue
+    $InstallWinSSHSplatParams = @{
+        GiveWinSSHBinariesPathPriority  = $True
+        ConfigureSSHDOnLocalHost        = $True
+        DefaultShell                    = "pwsh"
     }
+    Install-WinSSH @InstallWinSSHSplatParams
 }
 
 function StartTesting {
@@ -162,7 +155,7 @@ function StartTesting {
     $SplatParams = $SplatParamsSeriesItem.TestSeriesSplatParams
 
     try {
-        $null = Install-WinSSH @SplatParams -OutVariable "InstallWinSSHResult" -ErrorAction Stop
+        $null = Uninstall-WinSSH @SplatParams -OutVariable "UninstallWinSSHResult" -ErrorAction Stop
     }
     catch {
         # NOTE: Using Warning to output error message because any Error will prevent the rest of this Context block from running
@@ -171,10 +164,10 @@ function StartTesting {
         $null = Cleanup -ErrorAction SilentlyContinue
     }
 
-    if ($InstallWinSSHResult) {
+    if ($UninstallWinSSHResult) {
         try {
             switch ($SplatParamsSeriesItem.TestSeriesFunctionNames) {
-                'CommonTestSeries' { $InstallWinSSHResult | CommonTestSeries }
+                'CommonTestSeries' { $UninstallWinSSHResult | CommonTestSeries }
             }
 
             # Cleanup
@@ -200,149 +193,45 @@ $Functions = @(
     ${Function:StartTesting}.Ast.Extent.Text
 )
 
-# Install-WinSSH Params
+# Uninstall-WinSSH Params
 <#
 [Parameter(Mandatory=$False)]
-[switch]$ConfigureSSHDOnLocalHost,
-
-[Parameter(Mandatory=$False)]
-[switch]$RemoveHostPrivateKeys,
-
-[Parameter(Mandatory=$False)]
-[ValidateSet("powershell","pwsh")]
-[string]$DefaultShell,
-
-# For situations where there may be more than one ssh.exe available on the system that are already part of $env:Path
-# or System PATH - for example, the ssh.exe that comes with Git
-[Parameter(Mandatory=$False)]
-[switch]$GiveWinSSHBinariesPathPriority,
-
-[Parameter(Mandatory=$False)]
-[switch]$UsePowerShellGet,
-
-[Parameter(Mandatory=$False)]
-[switch]$UseChocolateyCmdLine,
-
-[Parameter(Mandatory=$False)]
-[switch]$GitHubInstall,
-
-[Parameter(Mandatory=$False)]
-[switch]$UpdatePackageManagement,
-
-[Parameter(Mandatory=$False)]
-[switch]$SkipWinCapabilityAttempt,
-
-[Parameter(Mandatory=$False)]
-[switch]$Force
+[switch]$KeepSSHAgent
 #>
 
 $TestSplatParams = @(
     @{
-        GiveWinSSHBinariesPathPriority  = $True
+        KeepSSHAgent    = $False
     }
 
     @{
-        GiveWinSSHBinariesPathPriority  = $True
-        UsePowerShellGet                = $True
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        UseChocolateyCmdLine            = $True
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        GitHubInstall                   = $True
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        ConfigureSSHDOnLocalHost        = $True
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        ConfigureSSHDOnLocalHost        = $True
-        DefaultShell                    = "powershell"
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        ConfigureSSHDOnLocalHost        = $True
-        DefaultShell                    = "pwsh"
-    }
-
-    @{
-        GiveWinSSHBinariesPathPriority  = $True
-        ConfigureSSHDOnLocalHost        = $True
-        DefaultShell                    = "pwsh"
-        Force                           = $True
+        KeepSSHAgent    = $True
     }
 )
 
 $SplatParamsSeries = @(
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority"
+        TestSeriesName          = "No Parameters"
+        TestSeriesDescription   = "Test output using: No Parameters"
         TestSeriesSplatParams   = $TestSplatParams[0]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -UsePowerShellGet"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -UsePowerShellGet"
+        TestSeriesName          = "-KeepSSHAgent"
+        TestSeriesDescription   = "Test output using: -KeepSSHAgent"
         TestSeriesSplatParams   = $TestSplatParams[1]
-        TestSeriesFunctionNames = @("CommonTestSeries")
-    }
-    [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -UseChocolateyCmdLine"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -UseChocolateyCmdLine"
-        TestSeriesSplatParams   = $TestSplatParams[2]
-        TestSeriesFunctionNames = @("CommonTestSeries")
-    }
-    [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -GitHubInstall"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -GitHubInstall"
-        TestSeriesSplatParams   = $TestSplatParams[3]
-        TestSeriesFunctionNames = @("CommonTestSeries")
-    }
-    [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost"
-        TestSeriesSplatParams   = $TestSplatParams[4]
-        TestSeriesFunctionNames = @("CommonTestSeries")
-    }
-    [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell"
-        TestSeriesSplatParams   = $TestSplatParams[5]
-        TestSeriesFunctionNames = @("CommonTestSeries")
-    }
-    [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh"
-        TestSeriesSplatParams   = $TestSplatParams[6]
-        TestSeriesFunctionNames = @("CommonTestSeries")
-    }
-    [pscustomobject]@{
-        TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh -Force"
-        TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh -Force"
-        TestSeriesSplatParams   = $TestSplatParams[7]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
 )
 
 $global:MockResources = @{
-    Functions                       = $Functions
-    SplatParamsSeries               = $SplatParamsSeries
-    FakeInstallSSHAgentOutput       = $FakeInstallSSHAgentOutput
-    FakeNewSSHDServerOutput         = $FakeNewSSHDServerOutput
-    FakeInstallWinSSHOutputPSObj    = $FakeInstallWinSSHOutputPSObj
-    FakeInstallWinSSHOutputService  = $FakeInstallWinSSHOutputService
+    Functions                   = $Functions
+    SplatParamsSeries           = $SplatParamsSeries
+    FakeUninstallWinSSHOutput   = $FakeUninstallWinSSHOutput
 }
 
 InModuleScope WinSSH {
-    Describe "Test Install-WinSSH" {
+    Describe "Test Uninstall-WinSSH" {
         Context "Non-Elevated PowerShell Session" {
             # IMPORTANT NOTE: Any functions that you'd like the 'it' blocks to use should be written in the 'Context' scope HERE!
             $global:MockResources['Functions'] | foreach { Invoke-Expression $_ }
@@ -351,13 +240,12 @@ InModuleScope WinSSH {
 
             It "Should Throw An Error" {
                 $Splat = @{
-                    GiveWinSSHBinariesPathPriority  = $True
-                    OutVariable                     = "InstallWinSSHResultShouldNotExist"
+                    OutVariable = "UninstallWinSSHResultShouldNotExist"
                 }
 
-                {Install-WinSSH @Splat} | Assert-Throw
+                {Uninstall-WinSSH @Splat} | Assert-Throw
 
-                if ($InstallWinSSHResultShouldNotExist) {
+                if ($UninstallWinSSHResultShouldNotExist) {
                     Cleanup -ErrorAction SilentlyContinue
                 }
             }

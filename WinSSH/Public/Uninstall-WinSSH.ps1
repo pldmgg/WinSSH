@@ -127,6 +127,8 @@ function Uninstall-WinSSH {
         }
     }
 
+    $UninstallOpenSSHResult
+
     #endregion >> Main Body
 }
 
