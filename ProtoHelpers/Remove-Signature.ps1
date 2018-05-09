@@ -45,7 +45,7 @@ function Remove-Signature {
                     }
                 }
 
-                Set-Content -Path $FullPath -Value $StringBuilder.ToString()
+                Set-Content -Path $FullPath -Value $StringBuilder.ToString().Trim()
             }
             catch {
                 Write-Error -Message $_.Exception.Message
@@ -54,11 +54,16 @@ function Remove-Signature {
     }
 }
 
+
+
+
+
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKYnWBori6zqVFNhvKqOienUz
-# q++gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUug5mjAxYphBuN+mYrKQjklPR
+# bX6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -115,11 +120,11 @@ function Remove-Signature {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLA2hTXRn1sdO777
-# w7QLleJjARdoMA0GCSqGSIb3DQEBAQUABIIBAI6EQfWuvqfiT/ajhhoGyiz8AZb0
-# 7eBOXsbfjhxeDyIZUE2npQwjkBtl2/tTDB4POPG6ybrWJ/5unwEaz4eX85SSVnQW
-# ZefRTaVzrQj7LXodHfz0g5vt48y2w/hmnrnO3UPgNNKmQ1pWj3gVCSQX9S1Pizdk
-# vUUW2k+YfNuvCOqCBUlvk6AsTV9rgp7IKKOXGldjqR1eNyF8ZTVZoTUiciDoXnMu
-# LxKR0cCP1V0BDQN4Q0O8dIH5qZlrAlYKMiYFWLv5uLQfkYpzo/Ds9eVTYxK/66U0
-# WIzGbS8bLvAvOy0nbaXJeGxKVT5W/MQxV273cSddqDIqqo7W6YrRVkqZhsQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFI5SLCbFQjQxrQlG
+# Jj/h6sXOMiOhMA0GCSqGSIb3DQEBAQUABIIBAGoqvhKEP1nDwV4oYMjromXNxEIz
+# RfFvzrWoobGIrHbe+ePU5eNLg6KMndoIcjeTwmevgBc1I50ASnBtrHskML+JCIrs
+# afHp2AfUuQJ3EXkiKMi4+blHARr+zyupXpPHpSaY4V58KOrSk4rbL6KW45N/LVzo
+# 14xlNNKFzHXU97147GBOgV2p8tig8pdk/D1Y0ROldmkUsX4/VPeq/RdrKAKyKgfM
+# qqgbCzeHQOBRAbt9Jd2CrRjyD2Kh/AuR74usr4HeTSFoi32M4D59SY96uuV5Qm0V
+# +sB/mjv/Iusk2wR6SC65+YSqz+Gr3dKsYMlBA8aLBC8RLtkO4tBl9lbm0HA=
 # SIG # End signature block
