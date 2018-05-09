@@ -43,72 +43,18 @@ try {
                 '-ExcludeVersion', '-NonInteractive', '-OutputDirectory', $Path
     & $NugetPath @NugetParams
     if (!$(Test-Path "$(Join-Path $Path PSDepend)\nuget.exe")) {
-        Copy-Item -Path $NugetPath -Destination "$(Join-Path $Path PSDepend)\nuget.exe" -Force
+        Move-Item -Path $NugetPath -Destination "$(Join-Path $Path PSDepend)\nuget.exe" -Force
     }
 }
 finally {
     $ProgressPreference = $ExistingProgressPreference
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU9yx/syWu2yekhhvqeoZjVzHQ
-# Trigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJ//AYikWsBMhbDm7LUKiqjh/
+# j76gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -165,11 +111,11 @@ finally {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDYjsdCdibyQNj49
-# C5V6fA2uel4MMA0GCSqGSIb3DQEBAQUABIIBAIRhNp/cItITWUE0BN+7t3A3dmwT
-# BGiDWbax/e01ZDIdU9966Q8IFB1dJ9mm+KAXE899VRQZ5mo/h91DDsze7qpue5rA
-# NRGZPrX+pACrLMPa3xhGwazkM67ln5WPzpQSlo8kFIHlpckoNeB0xBbPPijhcmIk
-# bNe7GBlqbB36lAG/bfJ6j21W/lQf4xlDFMdQ4iBS9FP88cBs2cK3gn1RiXGay57Z
-# fiRenirmSgnkgiFing0kaLH9LZi2e3yJWZXg8ZQJ3fyjuADHx1xqoOzRnaQCiGCZ
-# b0WFbbpBMSOVEofxaX+FlI82PKrHygd0mjLnUloyxFsOog0f+BnxwXA8vuw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDpiCL1cXisASO48
+# 5mySXK67CdCSMA0GCSqGSIb3DQEBAQUABIIBAMMPdsrw6z7l03DuVdeOIgIq45wA
+# hp1fTfDnZofHgb1CfSVWiqqkrzyvRVjitk5W754f9XiJa2584L8q6Z2ajm9E4MY8
+# 264wvNFoKrG1dBjWN3CwGQ1MW0UPrXxecpkDRgU5uH/uSOdYUKMFm+q4EPbUVomt
+# ubd1RAmZgYl2x9cf4o7efgpLKnjDWsb0FM2OidrrRv85nDdoRB3NgMC1i0rKsbd0
+# a6O+y4UupcC9MxPT1hDf6lg41mhhpNfTiicC9WIwsnc5WBK3n6CSIElQVCRsqW3J
+# 5te61/hnvfOid/0AFpqRvXCrHbxZ9pylTn3vW8YOgl5quLZm/WWz73hhgtQ=
 # SIG # End signature block

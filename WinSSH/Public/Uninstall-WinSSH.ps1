@@ -2,7 +2,10 @@
     .SYNOPSIS
         This function uninstalls OpenSSH-Win64 binaries, removes ssh-agent and sshd services (if they exist),
         and deletes (recursively) the directories "C:\Program Files\OpenSSH-Win64" and "C:\ProgramData\ssh"
-        (if they exist) 
+        (if they exist).
+
+        Outputs an array of strings describing the actions taken. Possible string values are:
+        "sshdUninstalled","sshAgentUninstalled","sshBinariesUninstalled"
 
     .DESCRIPTION
         See .SYNOPSIS
@@ -38,25 +41,33 @@ function Uninstall-WinSSH {
     
     $OpenSSHProgramFilesPath = "C:\Program Files\OpenSSH-Win64"
     $OpenSSHProgramDataPath = "C:\ProgramData\ssh"
+    <#
     $UninstallLogDir = "$HOME\OpenSSHUninstallLogs"
     $etwman = "$UninstallLogDir\openssh-events.man"
     if (!$(Test-Path $UninstallLogDir)) {
         $null = New-Item -ItemType Directory -Path $UninstallLogDir
     }
+    #>
 
     #endregion >> Prep
 
 
     #region >> Main Body
-    
+    [System.Collections.ArrayList]$Output = @()
+
     if (Get-Service sshd -ErrorAction SilentlyContinue)  {
         try {
             Stop-Service sshd
             sc.exe delete sshd 1>$null
             Write-Host -ForegroundColor Green "sshd successfully uninstalled"
+            $null = $Output.Add("sshdUninstalled")
 
             # unregister etw provider
-            wevtutil um `"$etwman`"
+            <#
+            if (Test-Path $etwman) {
+                wevtutil um `"$etwman`"
+            }
+            #>
         }
         catch {
             Write-Error $_
@@ -74,6 +85,7 @@ function Uninstall-WinSSH {
                 Stop-Service ssh-agent
                 sc.exe delete ssh-agent 1>$null
                 Write-Host -ForegroundColor Green "ssh-agent successfully uninstalled"
+                $null = $Output.Add("sshAgentUninstalled")
             }
             catch {
                 Write-Error $_
@@ -84,111 +96,60 @@ function Uninstall-WinSSH {
         else {
             Write-Host -ForegroundColor Yellow "ssh-agent service is not installed"
         }
-    }
 
-    if (!$(Get-Module ProgramManagement)) {
+        if (!$(Get-Module ProgramManagement)) {
+            try {
+                Import-Module ProgramManagement -ErrorAction Stop
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+    
         try {
-            Import-Module ProgramManagement -ErrorAction Stop
+            $UninstallOpenSSHResult = Uninstall-Program -ProgramName openssh -ErrorAction Stop
+            $null = $Output.Add("sshBinariesUninstalled")
         }
         catch {
             Write-Error $_
             $global:FunctionResult = "1"
             return
         }
-    }
-
-    try {
-        $UninstallOpenSSHResult = Uninstall-Program -ProgramName openssh -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        $global:FunctionResult = "1"
-        return
-    }
-
-    if (Test-Path $OpenSSHProgramFilesPath) {
-        try {
-            Remove-Item $OpenSSHProgramFilesPath -Recurse -Force
+    
+        if (Test-Path $OpenSSHProgramFilesPath) {
+            try {
+                Remove-Item $OpenSSHProgramFilesPath -Recurse -Force
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
         }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-    if (Test-Path $OpenSSHProgramDataPath) {
-        try {
-            Remove-Item $OpenSSHProgramDataPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
+        if (Test-Path $OpenSSHProgramDataPath) {
+            try {
+                Remove-Item $OpenSSHProgramDataPath -Recurse -Force
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
         }
     }
 
-    $UninstallOpenSSHResult
+    [System.Collections.ArrayList][array]$Output
 
     #endregion >> Main Body
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+vqEaosiIsN5kgiUcuGlf7OJ
-# KTSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZy7rGuibEYUI9jTZoSnj5V+h
+# TRKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -245,11 +206,11 @@ function Uninstall-WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHBdRwR84Cs9NMdS
-# vIR56f64gEzDMA0GCSqGSIb3DQEBAQUABIIBABhyXCESYwdPkRCpNOLVdRkL9Js/
-# vNWKj2CFgJx7G9v9edUCDuOHGMZB1a1JrlZvlffOqxKUU16aIHsvja7weTmb+GHE
-# mDlYKDVrSpPXdipLx8lDsMRKm+O034U1CMz1l+HF3dOC6vcKPfTRRhkZ81hWAa99
-# QsndfDLAFIeufpdgvzOr1wpw/KVdiGAk8oE+5hNHMzX1dBp83uk4kdg6MYrw9Prp
-# GYIm5kiEvDhNTePQi3NsYwTWJg+KsfD6Bl8UPU6xHvfR7+er7qi6taznekQTvQpY
-# OpYEmKoVjqo+ht6OLJ+k933pGDz9D92y677CuSZuQNM5tkQ5Ob06Zwq2J10=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGY4Q5jI/va5YVj/
+# lrrSsZUIldjJMA0GCSqGSIb3DQEBAQUABIIBALknigNCbv0A+w/q8U36d2MatLv/
+# fyBueD62FNzoFQl2L0TBWcCkidhl+TI8Di589CC5VQqqXnzJ3XwzUY1wQJ2y/3ZC
+# oIjXafuN4Egm9+Pul/HBtTUk0bXgFypXk0SVb7B1WHXBvs2ZQaKP2G7j6i5jQhqj
+# hQh4JrOvDIRWSB+FFq2dfXIGjZh7wY+DSNlWFa6xsmGPUSuD41/V+g5wYoJBxhmC
+# on0NT2GNiw99xyCJ+TaGxiTtMtefqgx3r6KTKhYZjuQW3QGFL/p/8/tTVahAcoSF
+# pIcvfTBRNnrVUiieCHHIfIxNp/q5mhZbwgqcpIaQ4GwptOayyP7VVDJiWZE=
 # SIG # End signature block

@@ -141,32 +141,6 @@ if ($Cert) {
     }
 }
 
-if (!$(Get-Module -ListAvailable PSDepend)) {
-    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
-}
-try {
-    Import-Module PSDepend
-    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
-
-    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
-    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
-    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
-    # This is more a problem with PowerShellGet than PSDeploy.
-    Remove-Module PSDeploy
-    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
-    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
-    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
-    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
-    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
-    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
-    Import-Module PSDeploy
-}
-catch {
-    Write-Error $_
-    $global:FunctionResult = "1"
-    return
-}
-
 Set-BuildEnvironment -Force -Path $PSScriptRoot -ErrorAction SilentlyContinue
 
 # Now the following Environment Variables with similar values should be available to use...
@@ -206,13 +180,16 @@ if ($Cert) {
     # NOTE: We don't want to sign build.ps1, Remove-Signature.ps1, or Helper functions because we just did that above...
     $HelperFilesToSignNameRegex = $HelperFilestoSign.Name | foreach {[regex]::Escape($_)}
     $RemoveSignatureFilePathRegex = [regex]::Escape($RemoveSignatureFilePath)
-    $FilesToSign = Get-ChildItem $env:BHProjectPath -Recurse -File | Where-Object {
+    [System.Collections.ArrayList][array]$FilesToSign = Get-ChildItem $env:BHProjectPath -Recurse -File | Where-Object {
         $_.Extension -match '\.ps1|\.psm1|\.psd1|\.ps1xml' -and
         $_.Name -notmatch "^$env:BHProjectName\.ps[d|m]1$" -and
+        $_.Name -notmatch "^module\.requirements\.psd1" -and
+        $_.Name -notmatch "^build\.requirements\.psd1" -and
         $_.Name -notmatch "^build\.ps1$" -and
         $_.Name -notmatch $($HelperFilesToSignNameRegex -join '|') -and
         $_.Name -notmatch $RemoveSignatureFilePathRegex
     }
+    $null = $FilesToSign.Add($(Get-Item $env:BHModulePath\Install-PSDepend.ps1))
 
     Remove-Signature -FilePath $FilesToSign.FullName
 
@@ -232,6 +209,32 @@ if ($Cert) {
         $global:FunctionResult = "1"
         return
     }
+}
+
+if (!$(Get-Module -ListAvailable PSDepend)) {
+    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
+}
+try {
+    Import-Module PSDepend
+    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
+
+    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
+    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
+    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
+    # This is more a problem with PowerShellGet than PSDeploy.
+    Remove-Module PSDeploy -ErrorAction SilentlyContinue
+    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
+    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
+    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
+    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
+    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
+    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
+    Import-Module PSDeploy
+}
+catch {
+    Write-Error $_
+    $global:FunctionResult = "1"
+    return
 }
 
 if ([bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) {
@@ -284,15 +287,11 @@ exit ( [int]( -not $psake.build_success ) )
 
 ##### END PSAKE Build #####
 
-
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUORjmkwCoOQZxcVaZfQe/fkzB
-# HXCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7Z3Z+gvxtlRW1rL2WMUnJvDt
+# phmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -349,11 +348,11 @@ exit ( [int]( -not $psake.build_success ) )
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFB0Rxc27uWkjiiWn
-# rqp63FhLQMnaMA0GCSqGSIb3DQEBAQUABIIBABDZs6Np30jQWwrHaUneg63Dm12v
-# hMDLP3PKWZUkhVNgkVR8euwlSu/VLhok7rC49rWRG74jgmyPHSmUqNjX5uVlIk18
-# 4KyUsP7i/E/oldLjgZLjVqhH4/vhuEO6c1WS2tzACCvIrPBQnCS/6bC47DOwBl0+
-# vUaC1YMAcJELI7eTvQLqeHSpiZNAoL0Aydr8C7r0Zl453uWeBPHBZB3mQQBuqnjO
-# EELNLT3zeSvfS7T5vmdLU0TePDsiwRzf5SJ2N3UVJR2FOOqbnigcdoRB479XR2o2
-# hQXYT1immjq+PBGP1oFpkE+9ocaGGRCe41Wj/2JxcPR+Y+gMt0Hod9M73QQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJqxqqdDNGNn8F4j
+# 3VyQmo94c0thMA0GCSqGSIb3DQEBAQUABIIBAF3sAryTi/0OHHwChSIXGi0Z9czd
+# Ilv9Ms/ZYVBTG5ZNrAc0X8g5m4l+4FJLeIfYBmODhxvyxaBMKHlR9s7YEN09OCy9
+# vLr14udE9w98z2pnBlC3ls1cFvMWj9EDJXweRINmbt7SMvCxm59rmfxF302OyJjr
+# 5GIL4M0GUeoNophlkXTP1AYrAt0uVqfakp0z5R9mnTAO/+kOkg7jMhfd/eFqsOWQ
+# RoBRMTxmH/SgrqZ4zlu3s2D4nZcdPbw6jr2LGxYa/JsMCI0EfTFzzDODwiVD1Ujc
+# JUL/OsvevFEeebyHrkbMDgpmSNQMdmn8bus+xFGuA6QJ7ajdpBTn+9kAgiA=
 # SIG # End signature block

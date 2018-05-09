@@ -71,6 +71,22 @@ catch {
     return
 }
 
+# Make sure OpenSSH is intalled before we start testing the Uninstall-WinSSH Function
+$InstallWinSSHSplatParams = @{
+    GiveWinSSHBinariesPathPriority  = $True
+    ConfigureSSHDOnLocalHost        = $True
+    DefaultShell                    = "pwsh"
+}
+try {
+    $null = Install-WinSSH @InstallWinSSHSplatParams -ErrorAction Stop
+}
+catch {
+    Write-Error $_
+    Write-Error "There was a problem installing WinSSH prior to beginning tests for the Uninstall-WinSSH function! Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+
 $CurrentlyLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
 <#
 if (![bool]$($CurrentlyLoadedAssemblies.FullName -match "System.ServiceProcess,")) {
@@ -98,8 +114,8 @@ function CommonTestSeries {
         $InputObject | Assert-NotNull
     }
 
-    it "Should return a PSCustomObject" {
-        $InputObject | Assert-Type System.Management.Automation.PSCustomObject
+    it "Should return an ArrayList or String" {
+        $InputObject | Should -BeTypeorType @("System.Collections.ArrayList","System.String")
     }
 
     it "Should return a PSCustomObject with Specific Properties" {
@@ -183,7 +199,9 @@ function StartTesting {
         }
     }
     else {
-        Write-Warning "Unable to run 'CommonTestSeries' in Context...`n    '$ContextString'`nbecause the 'Install-WinSSH' function failed to output an object!"
+        $ErrorMsg = "Unable to run 'CommonTestSeries' in Context...`n    '$ContextString'`nbecause " +
+        "the '$($SplatParamsSeriesItem.FunctionName)' function failed to output an object!"
+        Write-Error $ErrorMsg
     }
 }
 
@@ -208,15 +226,17 @@ $TestSplatParams = @(
         KeepSSHAgent    = $True
     }
 )
-
+$FunctionName = "Uninstall-WinSSH"
 $SplatParamsSeries = @(
     [pscustomobject]@{
+        FunctionName            = $FunctionName
         TestSeriesName          = "No Parameters"
         TestSeriesDescription   = "Test output using: No Parameters"
         TestSeriesSplatParams   = $TestSplatParams[0]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $FunctionName
         TestSeriesName          = "-KeepSSHAgent"
         TestSeriesDescription   = "Test output using: -KeepSSHAgent"
         TestSeriesSplatParams   = $TestSplatParams[1]
@@ -269,63 +289,11 @@ InModuleScope WinSSH {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJuNa8jiUzweQnrDZ5TdDShi8
-# sLWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUz6aHq5C1tfhgu9V5ItoJYFzM
+# 7Q6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -382,11 +350,11 @@ InModuleScope WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLzHzbGTT8m3DzAQ
-# o/NFz/oQCOi+MA0GCSqGSIb3DQEBAQUABIIBAGY3Zs5b3X/5Ey8g01VyGbjWoYjl
-# t4gHaPifm/8QzMXlNDOOVS9Glbyedvk+GfIJqSyXFerg5z+jV/MYAljz713wDCEQ
-# Jg3kdW83ZpTf8nZM2KzEMNhuBeTmUk9t6nl/c3lz6OpyGiezU7rYSWv6jaJKvIkb
-# 0UNx9tpYvMhjjhUKtwEDgNTOG3pnMdMZm9q2tDNyvO5fm8OTKHya0cdfkwi/9219
-# 97Tz3PGm3SaVfx4yWk+GATO8QaNy2ddnh0bg2zrHLU6w0xLn1L50T6A4y7/xh+ah
-# HWk2FrzcZTdIaEPKgncnb1RU/fP/HzzeItKhGHLTh1VX0PCRm0kmAGzCxB4=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMKg/ZduYAqIC1D8
+# xZdGO0ZCXgh6MA0GCSqGSIb3DQEBAQUABIIBAF+2nhMyuhW/ZMw0C0+9Vwb1L3dy
+# YhXSkHClLMbqUEealYMgvgi7VZ1SpqOPcDBsSoMjGRV2Er6LpxJAPGxytft3IELd
+# d2cYNnECyuBM4URU/hBEuc8JInMlX8MM5MPYa+Hyd6hBqUz4/2pvEDYWWyPFfhFe
+# 9MndxPzDp6DJDotMfD9Kv0SO/Pb6vVY/2cPPu8GnQ0DQuu8D7++r2x6cPhobdCcX
+# 7l7bnDrq4PEn3zY8XJDDE645j6rtyZIgtPJ1vWRtqgG1uAPim1NAHaJM2yiN+2Hf
+# AMY5ro8vE2KbF5dTxiJNmNNQFMz/35jqIX/0w+S8o8PRZhc3S5hVPlVrEaU=
 # SIG # End signature block

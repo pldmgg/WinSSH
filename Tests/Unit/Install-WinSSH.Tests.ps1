@@ -50,11 +50,34 @@ if (!$(Get-Module -ListAvailable NTFSSecurity)) {
     return
 }
 
+# Make sure OpenSSH is NOT intalled before we start testing the Uninstall-WinSSH Function
+try {
+    $CheckForOpenSSH = Get-AllPackageInfo -ProgramName openssh -ErrorAction SilentlyContinue
+
+    if ($CheckForOpenSSH.ChocolateyInstalledProgramObjects.Count -gt 0 -or
+    $CheckForOpenSSH.PSGetInstalledPackageObjects.Count -gt 0 -or
+    $CheckForOpenSSH.RegistryProperties.Count -gt 0) {
+        $null = Uninstall-WinSSH -ErrorAction Stop
+    }
+
+    $CheckForPowerShellCore = Get-AllPackageInfo -ProgramName PowerShell-6 -ErrorAction SilentlyContinue
+
+    if ($CheckForPowerShellCore.ChocolateyInstalledProgramObjects.Count -gt 0 -or
+    $CheckForPowerShellCore.PSGetInstalledPackageObjects.Count -gt 0 -or
+    $CheckForPowerShellCore.RegistryProperties.Count -gt 0
+    ) {
+        $null = Uninstall-Program -ProgramName PowerShell-6 -ErrorAction Stop
+    }
+}
+catch {
+    Write-Warning $($_ | Out-String)
+}
+
+
 $CurrentlyLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
 if (![bool]$($CurrentlyLoadedAssemblies.FullName -match "System.ServiceProcess,")) {
     Add-Type -AssemblyName "System.ServiceProcess"
 }
-
 
 $FakeInstallSSHAgentOutput = [System.ServiceProcess.ServiceController]::new()
 $FakeNewSSHDServerOutput = [pscustomobject]@{
@@ -190,7 +213,9 @@ function StartTesting {
         }
     }
     else {
-        Write-Warning "Unable to run 'CommonTestSeries' in Context...`n    '$ContextString'`nbecause the 'Install-WinSSH' function failed to output an object!"
+        $WrnMsg = "Unable to run 'CommonTestSeries' in Context...`n    '$ContextString'`nbecause " +
+        "the '$($SplatParamsSeriesItem.FunctionName)' function failed to output an object!"
+        Write-Warning $WrnMsg
     }
 }
 
@@ -283,24 +308,28 @@ $TestSplatParams = @(
 
 $SplatParamsSeries = @(
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority"
         TestSeriesSplatParams   = $TestSplatParams[0]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority -UsePowerShellGet"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -UsePowerShellGet"
         TestSeriesSplatParams   = $TestSplatParams[1]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority -UseChocolateyCmdLine"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -UseChocolateyCmdLine"
         TestSeriesSplatParams   = $TestSplatParams[2]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority -GitHubInstall"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -GitHubInstall"
         TestSeriesSplatParams   = $TestSplatParams[3]
@@ -313,18 +342,21 @@ $SplatParamsSeries = @(
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell powershell"
         TestSeriesSplatParams   = $TestSplatParams[5]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh"
         TestSeriesSplatParams   = $TestSplatParams[6]
         TestSeriesFunctionNames = @("CommonTestSeries")
     }
     [pscustomobject]@{
+        FunctionName            = $env:BHProjectName
         TestSeriesName          = "-GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh -Force"
         TestSeriesDescription   = "Test output using: -GiveWinSSHBinariesPathPriority -ConfigureSSHDOnLocalHost -DefaultShell pwsh -Force"
         TestSeriesSplatParams   = $TestSplatParams[7]
@@ -381,63 +413,11 @@ InModuleScope WinSSH {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJuNa8jiUzweQnrDZ5TdDShi8
-# sLWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpdBp5vcmb6kQ1uuIgK4mgoLE
+# lxOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -494,11 +474,11 @@ InModuleScope WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLzHzbGTT8m3DzAQ
-# o/NFz/oQCOi+MA0GCSqGSIb3DQEBAQUABIIBAGY3Zs5b3X/5Ey8g01VyGbjWoYjl
-# t4gHaPifm/8QzMXlNDOOVS9Glbyedvk+GfIJqSyXFerg5z+jV/MYAljz713wDCEQ
-# Jg3kdW83ZpTf8nZM2KzEMNhuBeTmUk9t6nl/c3lz6OpyGiezU7rYSWv6jaJKvIkb
-# 0UNx9tpYvMhjjhUKtwEDgNTOG3pnMdMZm9q2tDNyvO5fm8OTKHya0cdfkwi/9219
-# 97Tz3PGm3SaVfx4yWk+GATO8QaNy2ddnh0bg2zrHLU6w0xLn1L50T6A4y7/xh+ah
-# HWk2FrzcZTdIaEPKgncnb1RU/fP/HzzeItKhGHLTh1VX0PCRm0kmAGzCxB4=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLBoRjqNBJ0huiip
+# kxCZzvMhL1epMA0GCSqGSIb3DQEBAQUABIIBAG5FsUJk06ynVCrGaMCHtXbQmaGd
+# VgmhnFygK4fE/TuESJ35FEwF0nFpZZTJOTNXWswP8Fm1cgXpjTellQmbocwdhway
+# xQz7p8kYfI8L6OySqU2ukqRwiGpBW4UNpKcyzkRFox2KctWTjSX14Y5omMyQGU/i
+# CcQhDxbC1gpKGaH6bK+wFbuTb7J+C4+r7CnqFTouk1Dyx/B363iBo6MiGFvzCYJe
+# r1c8JRBKbOSqletkbU+k9F9FN/ZUSSFmtcfTpKrQVvILmk+6rK1UHC8UXiqHGgGq
+# CGI6TCk6y0uSJkYjCc5K0n7/EjlKRymakeJSO8Eor6HHplNYoG4HED/kqnI=
 # SIG # End signature block

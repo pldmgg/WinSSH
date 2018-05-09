@@ -90,7 +90,7 @@ try {
 catch {
     Remove-Module WinSSH -ErrorAction SilentlyContinue
     Write-Error $_
-    Write-Error "Installing the PSDepend Module failed! The WinSSH Module will not be loaded. Halting!
+    Write-Error "Installing the PSDepend Module failed! The WinSSH Module will not be loaded. Halting!"
     $global:FunctionResult = "1"
     return
 }
@@ -108,6 +108,8 @@ catch {
 }
 
 '@
+
+    Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $PSDependOperations
 
     <#
     Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value '& $PSScriptRoot\Install-PSDepend.ps1'
@@ -243,65 +245,11 @@ Task Deploy -Depends Build {
     Invoke-PSDeploy @Verbose @Params
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPp3BgYdCKscRE1ARPvuLp75I
-# HQWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUettdrzuG+r8ooM3yYVlFg628
+# ViWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -358,11 +306,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDWi/+KRB0jKdn2a
-# w2Of+dA8UrJsMA0GCSqGSIb3DQEBAQUABIIBAEFb2uLo6B4tOWLqiXLYz4EgyrwB
-# 6/Ip5SExmJuKbFh0vrH5ZMj21c08Vv2HW366kutpWD3Xb35Wdq4jJwS9rAdjjeW+
-# Ql66u+Peh9dUYd1T9ky13mm6tzBm3ZOQAqzTjH6foLHW3JZfECIIXMY0p4Q20AOV
-# p7HmQSVnNrC17ReS3wYyLFAff6xupn1FYXYexTT8L370BgHsdl/LJzc0SReGTeQC
-# ppl6TxsX/23qR5q3hA9Q7i076rAgn/P/QeWcvFbC0EElt+MlC8p2Wse/SVKmKGWA
-# Vf9WapqRJB6AJCYlwwGEFmWBy2RsJpgT8icSPb6Rb7coOeqF5/4G4dfMi34=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFd7ugBV/slwoylK
+# XNCtMPVv9cekMA0GCSqGSIb3DQEBAQUABIIBAFRLCvTVl20wOVDqYJE3NUTDfL7J
+# GWZWLcWT3Gpd13PeewcBuSuT9VRbdip6zRrOM5SrH9NEbCZe5FsR8o2tMOp3246n
+# qEgG8KNQgB0EDrLj5Zk5qUXh00bYLxjAXL7TYjT2lrbbpfR0fv/iPv5as6PKw8rk
+# +XK6eOzq6OPTci6Rm/+ufxE0q52OSTrqUWML7+q2DyvVBzYuPrcSpvQUIj7o/s9G
+# CmYwyDxIJ9iXOHgvYPsPrl9cY4p2y3xnuW9jClJTFmEfvdKbCxaF3/+atpU/7rDv
+# eKCA6/bEMnAVRM8AQ44gO9Ed6wX9uhtBhhfOSz47LZkVg2Emfx/XYRKvtTk=
 # SIG # End signature block

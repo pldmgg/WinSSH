@@ -14,6 +14,29 @@ foreach ($import in $Private) {
     }
 }
 
+try {
+    & "$PSScriptRoot\Install-PSDepend.ps1"
+}
+catch {
+    Remove-Module WinSSH -ErrorAction SilentlyContinue
+    Write-Error $_
+    Write-Error "Installing the PSDepend Module failed! The WinSSH Module will not be loaded. Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+
+try {
+    Import-Module PSDepend
+    $null = Invoke-PSDepend -Path "$PSScriptRoot\module.requirements.psd1" -Install -Import -Force
+}
+catch {
+    Remove-Module WinSSH -ErrorAction SilentlyContinue
+    Write-Error $_
+    Write-Error "Problem with PSDepend Installing/Importing Module Dependencies! The WinSSH Module will not be loaded. Halting!"
+    $global:FunctionResult = "1"
+    return
+}
+
 
 
 <#
@@ -11722,7 +11745,10 @@ function Sign-SSHUserPublicKey {
     .SYNOPSIS
         This function uninstalls OpenSSH-Win64 binaries, removes ssh-agent and sshd services (if they exist),
         and deletes (recursively) the directories "C:\Program Files\OpenSSH-Win64" and "C:\ProgramData\ssh"
-        (if they exist) 
+        (if they exist).
+
+        Outputs an array of strings describing the actions taken. Possible string values are:
+        "sshdUninstalled","sshAgentUninstalled","sshBinariesUninstalled"
 
     .DESCRIPTION
         See .SYNOPSIS
@@ -11758,25 +11784,33 @@ function Uninstall-WinSSH {
     
     $OpenSSHProgramFilesPath = "C:\Program Files\OpenSSH-Win64"
     $OpenSSHProgramDataPath = "C:\ProgramData\ssh"
+    <#
     $UninstallLogDir = "$HOME\OpenSSHUninstallLogs"
     $etwman = "$UninstallLogDir\openssh-events.man"
     if (!$(Test-Path $UninstallLogDir)) {
         $null = New-Item -ItemType Directory -Path $UninstallLogDir
     }
+    #>
 
     #endregion >> Prep
 
 
     #region >> Main Body
-    
+    [System.Collections.ArrayList]$Output = @()
+
     if (Get-Service sshd -ErrorAction SilentlyContinue)  {
         try {
             Stop-Service sshd
             sc.exe delete sshd 1>$null
             Write-Host -ForegroundColor Green "sshd successfully uninstalled"
+            $null = $Output.Add("sshdUninstalled")
 
             # unregister etw provider
-            wevtutil um `"$etwman`"
+            <#
+            if (Test-Path $etwman) {
+                wevtutil um `"$etwman`"
+            }
+            #>
         }
         catch {
             Write-Error $_
@@ -11794,6 +11828,7 @@ function Uninstall-WinSSH {
                 Stop-Service ssh-agent
                 sc.exe delete ssh-agent 1>$null
                 Write-Host -ForegroundColor Green "ssh-agent successfully uninstalled"
+                $null = $Output.Add("sshAgentUninstalled")
             }
             catch {
                 Write-Error $_
@@ -11804,48 +11839,51 @@ function Uninstall-WinSSH {
         else {
             Write-Host -ForegroundColor Yellow "ssh-agent service is not installed"
         }
-    }
 
-    if (!$(Get-Module ProgramManagement)) {
+        if (!$(Get-Module ProgramManagement)) {
+            try {
+                Import-Module ProgramManagement -ErrorAction Stop
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+    
         try {
-            Import-Module ProgramManagement -ErrorAction Stop
+            $UninstallOpenSSHResult = Uninstall-Program -ProgramName openssh -ErrorAction Stop
+            $null = $Output.Add("sshBinariesUninstalled")
         }
         catch {
             Write-Error $_
             $global:FunctionResult = "1"
             return
         }
+    
+        if (Test-Path $OpenSSHProgramFilesPath) {
+            try {
+                Remove-Item $OpenSSHProgramFilesPath -Recurse -Force
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+        if (Test-Path $OpenSSHProgramDataPath) {
+            try {
+                Remove-Item $OpenSSHProgramDataPath -Recurse -Force
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+        }
     }
 
-    try {
-        $UninstallOpenSSHResult = Uninstall-Program -ProgramName openssh -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        $global:FunctionResult = "1"
-        return
-    }
-
-    if (Test-Path $OpenSSHProgramFilesPath) {
-        try {
-            Remove-Item $OpenSSHProgramFilesPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-    if (Test-Path $OpenSSHProgramDataPath) {
-        try {
-            Remove-Item $OpenSSHProgramDataPath -Recurse -Force
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
+    [System.Collections.ArrayList][array]$Output
 
     #endregion >> Main Body
 }
@@ -12931,8 +12969,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUV9DqzvUN2uOzpLBb43bT/szn
-# GCOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUai+a9961TX0K+jj/79gtYW+p
+# 1cSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -12989,11 +13027,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDroqLOPOzxvhj9U
-# 1Am7CcMmEo7AMA0GCSqGSIb3DQEBAQUABIIBAB7G35M5QyBVmeXy8TI6YjNDsYVJ
-# y7UOZre+q44DuciGAxVUVm4mo5ZNcuEod3CQHnbervwYGQpm9cg8T8dxVWt2BVLP
-# UOmRBhOTUcSfY1rytgNvFmnK4YmYI2lWUxHTGjfIWjfPNDgpn2/lkZAga66Y6A8B
-# ESkWWZ0uNVBNbQQeow9Po1f+zlX+DLib94f/nFypmaGbY/LHIVdDQMzXopAXMcpf
-# 0F4/5KnZokbgyZrAzCND0dz62qcge3R9UwVltjrbDzCxhQGnwC5tvOVFLidmyDtM
-# UDyaLE8xbgTQphxowvwH3vXdbkpJlSR/Yyj8mnba8qsDf3lNXqw+gW1yHZs=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFI1m/AaD0ZWNU8g/
+# 5Ldqz7rjd5jHMA0GCSqGSIb3DQEBAQUABIIBACMHIGgHbcXUac3RixB7B/3ARMYy
+# N9nYpZI0XdYGDeaczHY40LKGUz8R+lMKV73q4wdo79T9MAkuehLlKqyuXNqpCctm
+# cYnsV3ZXdVILZtRl6HGM2Nivk7r1OLmA3EC5nUC8OU+SSQ3wwCaHNKSbYxrU0Tdl
+# FbQgL78H6PYv6vcOryypynsVqT9s/n8rEwfzSW7OzKMMImGJHW884d7rT49M5TGe
+# 4K8RsinULngBB8mtidwebPdIwa3r3f7Song1H5dmRunCMV7Pp8WkKRpMiy4hD3jg
+# L90Y18MlsnaDnevTR4aVXLIfvZmoGy1fWn0lQmLJrXSIClHOOlhKsIuifIg=
 # SIG # End signature block
