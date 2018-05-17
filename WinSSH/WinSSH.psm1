@@ -2036,6 +2036,9 @@ function Deploy-HyperVVagrantBoxManually {
         [ValidatePattern("[\w]+\/[\w]+")]
         [string]$VagrantBox,
 
+        [Parameter(Mandatory=$False)]
+        [string]$BoxFilePath,
+
         [Parameter(Mandatory=$True)]
         [ValidateSet("hyperv")]
         [string]$VagrantProvider,
@@ -2044,10 +2047,18 @@ function Deploy-HyperVVagrantBoxManually {
         [string]$VMName,
 
         [Parameter(Mandatory=$True)]
+        [ValidateSet(1024,2048,4096,8192,12288,16384,32768)]
+        [int]$Memory = 2048,
+
+        [Parameter(Mandatory=$True)]
+        [ValidateSet(1,2)]
+        [int]$CPUs = 1,
+
+        [Parameter(Mandatory=$True)]
         [string]$VMDestinationDirectory,
 
         [Parameter(Mandatory=$False)]
-        [string]$TemporaryDownloadDirectory = "$HOME\Downloads",
+        [string]$TemporaryDownloadDirectory,
 
         [Parameter(Mandatory=$False)]
         [switch]$AllowRestarts,
@@ -2103,6 +2114,41 @@ function Deploy-HyperVVagrantBoxManually {
         $VMDestinationDirectory = $VMDestinationDirectory | Split-Path -Parent
     }
 
+    if (!$TemporaryDownloadDirectory) {
+        $TemporaryDownloadDirectory = "$VMDestinationDirectory\BoxDownloads"
+    }
+
+    try {
+        $VMs = Get-VM
+    }
+    catch {
+        Write-Error "Problem with the 'Get-VM' cmdlet! Is Hyper-V installed? Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    try {
+        $NewVMName = NewUniqueString -ArrayOfStrings $VMs.Name -PossibleNewUniqueString $VMName
+        $VMFinalLocationDir = "$VMDestinationDirectory\$NewVMName"    
+        if (!$(Test-Path $VMDestinationDirectory)) {
+            $null = New-Item -ItemType Directory -Path $VMDestinationDirectory
+        }
+        if (!$(Test-Path $TemporaryDownloadDirectory)) {
+            $null = New-Item -ItemType Directory -Path $TemporaryDownloadDirectory
+        }
+        if (!$(Test-Path $VMFinalLocationDir)) {
+            $null = New-Item -ItemType Directory -Path $VMFinalLocationDir
+        }
+        if ($(Get-ChildItem -Path $VMFinalLocationDir).Count -gt 0) {
+            throw "The directory '$VMFinalLocationDir' is not empty! Do you already have a VM deployed with the same name? Halting!"
+        }
+    }
+    catch {
+        Write-Error $_
+        $global:FunctionResult = "1"
+        return
+    }
+
     # Set some other variables that we will need
     $NextHop = $(Get-NetRoute -AddressFamily IPv4 | Where-Object {$_.NextHop -ne "0.0.0.0"} | Sort-Object RouteMetric)[0].NextHop
     $PrimaryIP = $(Find-NetRoute -RemoteIPAddress $NextHop | Where-Object {$($_ | Get-Member).Name -contains "IPAddress"}).IPAddress
@@ -2138,36 +2184,42 @@ function Deploy-HyperVVagrantBoxManually {
 
     #region >> Main Body
 
-    $GetVagrantBoxSplatParams = @{
-        VagrantBox          = $VagrantBox
-        VagrantProvider     = $VagrantProvider
-        DownloadDirectory   = $TemporaryDownloadDirectory
-        ErrorAction         = "SilentlyContinue"
-        ErrorVariable       = "GVBMDErr"
-    }
-    if ($Repository) {
-        $GetVagrantBoxSplatParams.Add("Repository",$Repository)
-    }
-
-    try {
-        $DownloadedBoxFilePath = Get-VagrantBoxManualDownload @GetVagrantBoxSplatParams
-        if (!$DownloadedBoxFilePath) {throw "The Get-VagrantBoxManualDownload function failed! Halting!"}
-    }
-    catch {
-        Write-Error $_
-        Write-Host "Errors for the Get-VagrantBoxManualDownload function are as follows:"
-        Write-Error $($GVBMDErr | Out-String)
-        if ($($_ | Out-String) -eq $null -and $($GVBMDErr | Out-String) -eq $null) {
-            Write-Error "The Get-VagrantBoxManualDownload function failed to download the .box file!"
+    if (!$BoxFilePath) {
+        $GetVagrantBoxSplatParams = @{
+            VagrantBox          = $VagrantBox
+            VagrantProvider     = $VagrantProvider
+            DownloadDirectory   = $TemporaryDownloadDirectory
+            ErrorAction         = "SilentlyContinue"
+            ErrorVariable       = "GVBMDErr"
         }
-        $global:FunctionResult = "1"
-        return
+        if ($Repository) {
+            $GetVagrantBoxSplatParams.Add("Repository",$Repository)
+        }
+
+        try {
+            $DownloadedBoxFilePath = Get-VagrantBoxManualDownload @GetVagrantBoxSplatParams
+            if (!$DownloadedBoxFilePath) {throw "The Get-VagrantBoxManualDownload function failed! Halting!"}
+        }
+        catch {
+            Write-Error $_
+            Write-Host "Errors for the Get-VagrantBoxManualDownload function are as follows:"
+            Write-Error $($GVBMDErr | Out-String)
+            if ($($_ | Out-String) -eq $null -and $($GVBMDErr | Out-String) -eq $null) {
+                Write-Error "The Get-VagrantBoxManualDownload function failed to download the .box file!"
+            }
+            $global:FunctionResult = "1"
+            return
+        }
+    
+        $BoxFilePath = $DownloadedBoxFilePath
     }
-
-    $BoxFilePath = $DownloadedBoxFilePath
-
-    $VMs = Get-VM
-    $NewVMName = NewUniqueString -ArrayOfStrings $VMs.Name -PossibleNewUniqueString $VMName
+    else {
+        if (!$(Test-Path $BoxFilePath)) {
+            Write-Error "The path $BoxFilePath was not found! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
 
     # Extract the .box File
     $DownloadedVMDir = "$TemporaryDownloadDirectory\$NewVMName"
@@ -2180,22 +2232,18 @@ function Deploy-HyperVVagrantBoxManually {
     }
     catch {
         Write-Error $_
-        Remove-Item $BoxFilePath -Force
+        #Remove-Item $BoxFilePath -Force
         $global:FunctionResult = "1"
         return
     }
     Pop-Location
 
     try {
-        $VMFinalLocationDir = "$VMDestinationDirectory\$NewVMName"
-        
-        if (!$(Test-Path $VMDestinationDirectory)) {
-            $null = New-Item -ItemType Directory -Path $VMDestinationDirectory
+        Write-Host "Moving decompressed VM from '$DownloadedVMDir' to '$VMDestinationDirectory'..."
+        if (Test-Path "$VMDestinationDirectory\$($DownloadedVMDir | Split-Path -Leaf)") {
+            Remove-Item -Path "$VMDestinationDirectory\$($DownloadedVMDir | Split-Path -Leaf)" -Recurse -Force
         }
-        if (Test-Path $VMFinalLocationDir) {
-            throw "The directory '$VMFinalLocationDir' already exists! Do you already have a VM deployed with the same name? Halting!"
-        }
-        Move-Item -Path $DownloadedVMDir -Destination $VMDestinationDirectory -ErrorAction Stop
+        Move-Item -Path $DownloadedVMDir -Destination $VMDestinationDirectory -Force -ErrorAction Stop
 
         # Determine the External vSwitch that is associated with the Host Machine's Primary IP
         $ExternalvSwitches = Get-VMSwitch -SwitchType External
@@ -2226,8 +2274,6 @@ function Deploy-HyperVVagrantBoxManually {
 
         $SwitchName = $vSwitchToUse.Name
         $VMGen = 1
-        $Memory = 1024
-        $CPUs = 1
 
         # Create the NEW VM
         $NewTempVMParams = @{
@@ -2249,7 +2295,7 @@ function Deploy-HyperVVagrantBoxManually {
         Write-Error $_
         
         # Cleanup
-        Remove-Item $BoxFilePath -Force
+        #Remove-Item $BoxFilePath -Force
         Remove-Item $DownloadedVMDir -Recurse -Force
         
         if ($(Get-VM).Name -contains $NewVMName) {
@@ -12969,8 +13015,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUai+a9961TX0K+jj/79gtYW+p
-# 1cSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUaEUPaQa8ZbOdU1KsGZIgwcD
+# P8mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -13027,11 +13073,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFI1m/AaD0ZWNU8g/
-# 5Ldqz7rjd5jHMA0GCSqGSIb3DQEBAQUABIIBACMHIGgHbcXUac3RixB7B/3ARMYy
-# N9nYpZI0XdYGDeaczHY40LKGUz8R+lMKV73q4wdo79T9MAkuehLlKqyuXNqpCctm
-# cYnsV3ZXdVILZtRl6HGM2Nivk7r1OLmA3EC5nUC8OU+SSQ3wwCaHNKSbYxrU0Tdl
-# FbQgL78H6PYv6vcOryypynsVqT9s/n8rEwfzSW7OzKMMImGJHW884d7rT49M5TGe
-# 4K8RsinULngBB8mtidwebPdIwa3r3f7Song1H5dmRunCMV7Pp8WkKRpMiy4hD3jg
-# L90Y18MlsnaDnevTR4aVXLIfvZmoGy1fWn0lQmLJrXSIClHOOlhKsIuifIg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDJsBd2sTJrk1/F7
+# ehrYLbiqBu/cMA0GCSqGSIb3DQEBAQUABIIBAKD0Iy0NiQLaC46ZpnSRpQbakJ7Q
+# 5vnBRQYxy+M+0ZWPUvOV/gfWNmBg9cHZzpmAoOy0AH93efYgDMXUR7KMKtv1EUZU
+# +fH3AVyFeHm0YRPdw91CSqqKsiyrOqFm5SV0JoYysfh9OwGfDvHru7JNl8G0XSP2
+# p6lplRkNQltwrLSaAwwPN334fgUyEKDdau0R7xi+0tXCpIjKjbcdPZTTm3GQLfmN
+# mR2H0SAGVToL3s9G+wmiAbx0M64giz7RNTv3jcuwQ/pdnL4tTLJTtl89sGeP8FFr
+# xxwPAv/Y5Pw5BgnOovgxyCNQmgc3qqLbhgujMiCwVIGcobMGUqRPe/lrnlQ=
 # SIG # End signature block

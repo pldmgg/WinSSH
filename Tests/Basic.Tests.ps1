@@ -105,6 +105,9 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Uninstall-WinSSH' | Should Be $True
         $Commands -contains 'Update-PowerShellCore' | Should Be $True
         $Commands -contains 'Validate-SSHPrivateKey' | Should Be $True
+        $Commands -contains 'Create-TwoTierPKI' | Should Be $True
+        $Commands -contains 'New-SelfSignedCertificateEx' | Should Be $True
+        $Commands -contains 'Get-DSCEncryptionCert' | Should Be $True
     }
 
     It "Module '$env:BHProjectName' Private Functions Are Available in Internal Scope" {
