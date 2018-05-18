@@ -48,7 +48,7 @@ function Create-TwoTierPKI {
     $null = Install-PackageProvider -Name Nuget -Force -Confirm:$False
     $null = Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
     $NeededDSCResources = @(
-        "xComputerManagement"
+        "ComputerManagementDsc"
         "xActiveDirectory"
         "xAdcsDeployment"
         "xPSDesiredStateConfiguration"
@@ -190,7 +190,7 @@ function Create-TwoTierPKI {
             # Copy the DSC PowerShell Modules to the Remote Host
             $ProgramFilesPSModulePath = "C:\Program Files\WindowsPowerShell\Modules"
             foreach ($ModuleDirPath in $DSCModulesToTransfer) {
-                Copy-Item -Path $ModuleDirPath -Recurse -Destination "$ProgramFilesPSModulePath\$($ModuleDirPath | Split-Path -Leaf)" -ToSession $PSObj.PSSession
+                Copy-Item -Path $ModuleDirPath -Recurse -Destination "$ProgramFilesPSModulePath\$($ModuleDirPath | Split-Path -Leaf)" -ToSession $PSObj.PSSession -Force
             }
 
             $FunctionsForRemoteUse = @(
@@ -210,18 +210,14 @@ function Create-TwoTierPKI {
                     $env:PSModulePath = $using:ProgramFilesPSModulePath + ";" + $env:PSModulePath
                 }
 
-                if (!$(Test-Path "$using:RemoteDSCDir\$($using:PSObj.HostName)")) {
-                    $null = New-Item -ItemType Directory -Path "$using:RemoteDSCDir\$($using:PSObj.HostName)"
-                }
-
-                $DSCEncryptionCACertInfo = Get-DSCEncryptionCert -MachineName $($using:PSObj.HostName) -ExportDirectory "$using:RemoteDSCDir\$($using:PSObj.HostName)"
+                $DSCEncryptionCACertInfo = Get-DSCEncryptionCert -MachineName $($using:PSObj.HostName) -ExportDirectory $using:RemoteDSCDir
                 $DSCEncryptionCACertInfo
             }
 
             $InvCmdResult = Invoke-Command -Session $PSObj.PSSession -ScriptBlock $DSCPrepSB
             $PSObj | Add-Member -Type NoteProperty -Name CertProperties -Value $InvCmdResult
 
-            Copy-Item -Path "$RemoteDSCDir\$($PSObj.HostName)" -Recurse -Destination $CertDownloadDirectory -FromSession $PSObj.PSSession
+            Copy-Item -Path "$RemoteDSCDir\DSCEncryption.cer" -Recurse -Destination $CertDownloadDirectory -FromSession $PSObj.PSSession -Force
         }
         catch {
             Write-Error $_
@@ -232,13 +228,10 @@ function Create-TwoTierPKI {
 
     # Apply the DSC Configurations to the CA Servers
     $PSDSCVersion = $(Get-Module -ListAvailable -Name PSDesiredStateConfiguration).Version[-1].ToString()
-    $xComputerManagementVersion = $(Get-Module -ListAvailable -Name xComputerManagement).Version[-1].ToString()
+    $ComputerManagementDscVersion = $(Get-Module -ListAvailable -Name ComputerManagementDsc).Version[-1].ToString()
     $GenJoinDomainConfigAsStringPrep = @'
 Configuration GenerateJoinDomainConfig {
     param (
-        [Parameter(Mandatory=$True)]
-        [System.Management.Automation.PSModuleInfo[]]$RequiredModules,
-
         [Parameter(Mandatory=$True)]
         [pscredential]$DomainAdminCredentials,
 
@@ -249,7 +242,7 @@ Configuration GenerateJoinDomainConfig {
 '@ + @"
 
     Import-DscResource -ModuleName PSDesiredStateConfiguration -ModuleVersion $PSDSCVersion
-    Import-DscResource -ModuleName xComputerManagement -ModuleVersion $xComputerManagementVersion
+    Import-DscResource -ModuleName ComputerManagementDsc -ModuleVersion $ComputerManagementDscVersion
 
 "@ + @'
 
@@ -263,8 +256,8 @@ Configuration GenerateJoinDomainConfig {
         }
 
         # Join this Server to the Domain
-        xComputer JoinDomain {
-            Name       = $Node.NodeName
+        Computer JoinDomain {
+            Name       = $Node.HostName
             DomainName = $Node.DomainToJoin
             Credential = $DomainAdminCredentials
         }
@@ -274,39 +267,81 @@ Configuration GenerateJoinDomainConfig {
     $GenJoinDomainConfigAsString = [scriptblock]::Create($GenJoinDomainConfigAsStringPrep).ToString()
 
     foreach ($PSObj in $CAServerInfo) {
-        $ConfigData = @{
-            AllNodes = @(
-                @{
-                    NodeName = $PSObj.HostName
-                    DomainToJoin = $DomainToJoin
-                    CertificateFile = $PSObj.CertProperties.CertFile.FullName
-                    Thumbprint = $PSObj.CertProperties.CertInfo.Thumbprint
-                }
-            )
-        }
-
         $JoinDomainSB = {
+            #### Configure the Local Configuration Manager (LCM) ####
+            if (Test-Path "$using:RemoteDSCDir\$($using:PSObj.HostName).meta.mof") {
+                Remove-Item "$using:RemoteDSCDir\$($using:PSObj.HostName).meta.mof" -Force
+            }
+            Configuration LCMConfig {
+                Node "localhost" {
+                    LocalConfigurationManager {
+                        ConfigurationMode = "ApplyAndAutoCorrect"
+                        RefreshFrequencyMins = 30
+                        ConfigurationModeFrequencyMins = 15
+                        RefreshMode = "PUSH"
+                        RebootNodeIfNeeded = $True
+                        ActionAfterReboot = "ContinueConfiguration"
+                        CertificateId = $using:PSObj.CertProperties.CertInfo.Thumbprint
+                    }
+                }
+            }
+            # Create the .meta.mof file
+            $LCMMetaMOFFileItem = LCMConfig -OutputPath $using:RemoteDSCDir
+            if (!$LCMMetaMOFFileItem) {
+                Write-Error "Problem creating the .meta.mof file for $($using:PSObj.HostName)!"
+                return
+            }
+            # Make sure the .mof file is directly under $usingRemoteDSCDir alongside the encryption Cert
+            if ($LCMMetaMOFFileItem.FullName -ne "$using:RemoteDSCDir\$($LCMMetaMOFFileItem.Name)") {
+                Copy-Item -Path $LCMMetaMOFFileItem.FullName -Destination "$using:RemoteDSCDir\$($LCMMetaMOFFileItem.Name)" -Force
+            }
+            
+            #### Apply the DSC Configuration ####
             # Load the GenerateJoinDomainConfig DSC Configuration function
             $using:GenJoinDomainConfigAsString | Invoke-Expression
 
+            # IMPORTANT NOTE: In the below $ConfigData 'Name' refers to the desired HostName (it will be changed if it doesn't match)
+            $ConfigData = @{
+                AllNodes = @(
+                    @{
+                        NodeName = "localhost"
+                        HostName = $using:PSObj.HostName
+                        DomainToJoin = $using:DomainToJoin
+                        CertificateFile = $using:PSObj.CertProperties.CertFile.FullName
+                        Thumbprint = $using:PSObj.CertProperties.CertInfo.Thumbprint
+                    }
+                )
+            }
             # IMPORTANT NOTE: The resulting .mof file (representing the DSC configuration), will be in the
             # directory "$using:RemoteDSCDir\GenerateJoinDomainConfig"
+            if (Test-Path "$using:RemoteDSCDir\$($using:PSObj.HostName).mof") {
+                Remove-Item "$using:RemoteDSCDir\$($using:PSObj.HostName).mof" -Force
+            }
             $GenJoinDomainConfigSplatParams = @{
                 DomainAdminCredentials      = $using:DomainAdminCredentials
                 OutputPath                  = $using:RemoteDSCDir
-                ConfigurationData           = $using:ConfigData
+                ConfigurationData           = $ConfigData
             }
             $MOFFileItem = GenerateJoinDomainConfig @GenJoinDomainConfigSplatParams
+            if (!$MOFFileItem) {
+                Write-Error "Problem creating the .mof file for $($using:PSObj.HostName)!"
+                return
+            }
 
             # Make sure the .mof file is directly under $usingRemoteDSCDir alongside the encryption Cert
-            Copy-Item -Path $MOFFileItem.FullName -Destination "$using:RemoteDSCDir\$($MOFFileItem.Name)"
+            if ($MOFFileItem.FullName -ne "$using:RemoteDSCDir\$($MOFFileItem.Name)") {
+                Copy-Item -Path $MOFFileItem.FullName -Destination "$using:RemoteDSCDir\$($MOFFileItem.Name)" -Force
+            }
 
-            Start-DscConfiguration -Path $using:RemoteDSCDir
+            # Apply the .meta.mof (i.e. LCM Settings) and .mof (i.e. join $env:ComputerName to the Domain)
+            Set-DscLocalConfigurationManager -Path $using:RemoteDSCDir -Force
+            Start-DscConfiguration -Path $using:RemoteDSCDir -Force
         }
 
         Invoke-Command -Session $PSObj.PSSession -ScriptBlock $JoinDomainSB
     }
 
+    <#
     Write-Host "Sleeping for 60 seconds..."
     Start-Sleep -Seconds 60
 
@@ -330,6 +365,7 @@ Configuration GenerateJoinDomainConfig {
         Write-Host "Can't reach RootCA or SubCA yet. Sleeping for 10 seconds..."
         Start-Sleep -Seconds 10
     }
+    #>
 
     # Cleanup
     Remove-PSSession -Name ToRootCA -ErrorAction SilentlyContinue
@@ -338,14 +374,11 @@ Configuration GenerateJoinDomainConfig {
     Write-Host "Done" -ForegroundColor Green
 }
 
-
-
-
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdfts9DzwpQt2DomASUwmWVrF
-# UVagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmQ/C2rr689d7djGjg0GZQ7ba
+# i86gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -402,11 +435,11 @@ Configuration GenerateJoinDomainConfig {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFC1chXvlpBJVaQvS
-# yOiLSRiBYFcLMA0GCSqGSIb3DQEBAQUABIIBAEZC9m33Ui8+Fnu6sFlu5jxxJW0h
-# ht/TmYI5gdBcRweO9w+8/Pk43tp66XuoMlxaSsXfj62UfCAwqN1BLPtj+HGaZLPM
-# UvoZwO9pV1Q+0Xpwnk2z0pcUe/X/x9uM5m3W7DFro98sqSxkM9M/72qlMGJs44Ed
-# XLe4KRT5xqC3ZYrHsbZVKy2HCbpoDJJUZ5z4oq5qnNPW63m1ElIkCGyQitBoCak/
-# N8h+8k8bj0QU6NTbkGdTBCfLY6xzWlTlJQVeEv3WPcVOYm9FixR/Np2nNa/Auurs
-# khhGj4ZOzGETAxOFsGtkyPKFK8KIZUZVV/ucBnDOD4+qHD8cDyHsfnADdsE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJrcIq+rbJcd+Hrk
+# GlzHl+T2LyhSMA0GCSqGSIb3DQEBAQUABIIBAHbdQVWBtrYrc/gxQJ7zuYUcuKjS
+# 1fkUoCKpeSkIoeAonWNiX9Jq/MBee4WMyNKbf7rwNQDsZa/MyVs2dIf7LHSh9m3E
+# G+sMvg9I1fVxw1gU5iG4Xw3uft0LwcMPWHTNeHv0ue9WCLVV4wrV50YEFVfr8NAJ
+# 48WGRQfE816HDMvxxc2b3mGOS9AvVkgAUxza85Np10IdLOxU+QLOpQPpZ/KXkITF
+# HRMDWTIZuiGnklOX6o0lGw135zXanpfJZ4vwc6eK3NOxNN8+D6hlcbwI/YU6d0OG
+# PZATDflSSo9Jy7V1oRT2aP9kLDxg0ha1V3iPJ08lf1bkoWB/EMq9cQ27ys4=
 # SIG # End signature block

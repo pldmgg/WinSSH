@@ -1939,6 +1939,383 @@ function Configure-VaultServerForSSHManagement {
 }
 
 
+function Create-TwoTierPKI {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$False)]
+        [switch]$CreateNewVMs,
+
+        [Parameter(Mandatory=$False)]
+        [string]$IPofServerToBeRootCA,
+
+        [Parameter(Mandatory=$False)]
+        [string]$IPofServerToBeSubCA,
+
+        [Parameter(Mandatory=$True)]
+        [string]$DomainToJoin,
+
+        [Parameter(Mandatory=$True)]
+        [pscredential]$DomainAdminCredentials,
+
+        [Parameter(Mandatory=$True)]
+        [pscredential]$LocalAdminCredentials,
+
+        [Parameter(Mandatory=$False)]
+        [string]$CertDownloadDirectory = "$HOME\Downloads\DSCEncryptionCertsForCAServers"
+    )
+
+    #region >> Helper Functions
+    
+    function Test-IsValidIPAddress([string]$IPAddress) {
+        [boolean]$Octets = (($IPAddress.Split(".")).Count -eq 4) 
+        [boolean]$Valid  =  ($IPAddress -as [ipaddress]) -as [boolean]
+        Return  ($Valid -and $Octets)
+    }
+
+    #endregion >> Helper Functions
+
+    # Make sure we can resolve $DomainToJoin
+    if (![bool]$(Resolve-DnsName $DomainToJoin -ErrorAction SilentlyContinue)) {
+        Write-Error "Unable to resolve Domain '$DomainToJoin'! Check DNS. Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    if (!$(Test-Path $CertDownloadDirectory)) {
+        $null = New-Item -ItemType Directory -Path $CertDownloadDirectory
+    }
+
+    # Get the needed DSC Resources in preparation for copying them to the Remote Hosts
+    $null = Install-PackageProvider -Name Nuget -Force -Confirm:$False
+    $null = Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+    $NeededDSCResources = @(
+        "ComputerManagementDsc"
+        "xActiveDirectory"
+        "xAdcsDeployment"
+        "xPSDesiredStateConfiguration"
+        "xNetworking"
+    )
+    [System.Collections.ArrayList]$FailedDSCResourceInstall = @()
+    foreach ($DSCResource in $NeededDSCResources) {
+        try {
+            $null = Install-Module $DSCResource -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $null = $FailedDSCResourceInstall.Add($DSCResource)
+            continue
+        }
+    }
+    if ($FailedDSCResourceInstall.Count -gt 0) {
+        Write-Error "Problem installing the following DSC Modules:`n$($FailedDSCResourceInstall -join "`n")"
+        $global:FunctionResult = "1"
+        return
+    }
+    $DSCModulesToTransfer = foreach ($DSCResource in $NeededDSCResources) {
+        $Module = Get-Module -ListAvailable $DSCResource
+        "$($($Module.ModuleBase -split $DSCResource)[0])\$DSCResource"
+    }
+
+    # Create the new VMs if desired
+    if ($CreateNewVMs) {
+        $Windows2016VagrantBox = "StefanScherer/windows_2016"
+        $DeployRootCABoxSplatParams = @{
+            VagrantBox              = $Windows2016VagrantBox
+            CPUs                    = 2
+            Memory                  = 2048
+            VagrantProvider         = "hyperv"
+            VMName                  = "RootCA"
+            VMDestinationDirectory  = "E:\VMs"
+        }
+        $DeployRootCABoxResult = Deploy-HyperVVagrantBoxManually @DeployRootCABoxSplatParams
+
+        $DeploySubCABoxSplatParams = @{
+            VagrantBox              = $Windows2016VagrantBox
+            BoxFilePath             = $DeployRootCABoxResult.BoxFileLocation
+            CPUs                    = 2
+            Memory                  = 2048
+            VagrantProvider         = "hyperv"
+            VMName                  = "SubCA"
+            VMDestinationDirectory  = "E:\VMs"
+        }
+        $DeploySubCABoxResult = Deploy-HyperVVagrantBoxManually @DeploySubCABoxSplatParams
+
+        $IPofServerToBeRootCA = $DeployRootCABoxResult.VMIPAddress
+        $IPofServerToBeSubCA = $DeploySubCABoxResult.VMIPAddress
+    }
+
+    if (!$CreateNewVMs) {
+        if (!$IPofServerToBeRootCA) {
+            $IPofServerToBeRootCA = Read-Host -Prompt "Please enter the IP Address of the Windows 2012R2/2016 Server that will become the Root CA"
+        }
+        if (!$IPofServerToBeSubCA) {
+            $IPofServerToBeSubCA = Read-Host -Prompt "Please enter the IP Address of the Windows 2012R2/2016 Server that will become the Subordinate/Issuing CA"
+        }
+
+        while (!$(Test-IsValidIPAddress -IPAddress $IPofServerToBeRootCA)) {
+            Write-Warning "The IP '$IPofServerToBeRootCA' is NOT a valid IP Address!"
+            $IPofServerToBeRootCA = Read-Host -Prompt "Please enter the IP Address of the Windows 2012R2/2016 Server that will become the Root CA"
+        }
+        while (!$(Test-IsValidIPAddress -IPAddress $IPofServerToBeSubCA)) {
+            Write-Warning "The IP '$IPofServerToBeSubCA' is NOT a valid IP Address!"
+            $IPofServerToBeSubCA = Read-Host -Prompt "Please enter the IP Address of the Windows 2012R2/2016 Server that will become the Subordinate/Issuing CA"
+        }
+    }
+
+    # Create PSObjects with IP and HostName info
+    [System.Collections.ArrayList]$CAServerInfo = @(
+        [pscustomobject]@{
+            HostName    = "RootCA"
+            IPAddress   = $IPofServerToBeRootCA
+        }
+        [pscustomobject]@{
+            HostName    = "SubCA"
+            IPAddress   = $IPofServerToBeSubCA
+        }
+    )
+
+    # Make sure WinRM in Enabled and Running on $env:ComputerName
+    try {
+        $null = Enable-PSRemoting -Force -ErrorAction Stop
+    }
+    catch {
+        $null = Get-NetConnectionProfile | Where-Object {$_.NetworkCategory -eq 'Public'} | Set-NetConnectionProfile -NetworkCategory 'Private'
+
+        try {
+            $null = Enable-PSRemoting -Force
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem with Enabble-PSRemoting WinRM Quick Config! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    # If $env:ComputerName is not part of a Domain, we need to add this registry entry to make sure WinRM works as expected
+    if (!$(Get-CimInstance Win32_Computersystem).PartOfDomain) {
+        $null = reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
+    }
+
+    # Add the New Server's IP Addresses to $env:ComputerName's TrustedHosts
+    $CurrentTrustedHosts = $(Get-Item WSMan:\localhost\Client\TrustedHosts).Value
+    [System.Collections.ArrayList][array]$CurrentTrustedHostsAsArray = $CurrentTrustedHosts -split ','
+
+    $IPsToAddToWSMANTrustedHosts = @($IPofServerToBeRootCA,$IPofServerToBeSubCA)
+    foreach ($IPAddr in $IPsToAddToWSMANTrustedHosts) {
+        if ($CurrentTrustedHostsAsArray -notcontains $IPAddr) {
+            $null = $CurrentTrustedHostsAsArray.Add($IPAddr)
+        }
+    }
+    $UpdatedTrustedHostsString = $CurrentTrustedHostsAsArray -join ','
+    Set-Item WSMan:\localhost\Client\TrustedHosts $UpdatedTrustedHostsString -Force
+
+    # Create the WinRM Sessions...
+    foreach ($PSObj in $CAServerInfo) {
+        try {
+            New-PSSession -ComputerName $PSObj.IPAddress -Credential $LocalAdminCredentials -Name "To$($PSObj.HostName)" -ErrorAction Stop
+            $PSObj | Add-Member -Type NoteProperty -Name PSSession -Value $(Get-PSSession -Name "To$($PSObj.HostName)")
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem creating PSSession "To$($PSObj.HostName)"! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    # Prep the Remote Hosts for DSC Config
+    $RemoteDSCDir = "C:\DSCConfigs"
+    foreach ($PSObj in $CAServerInfo) {
+        try {
+            # Copy the DSC PowerShell Modules to the Remote Host
+            $ProgramFilesPSModulePath = "C:\Program Files\WindowsPowerShell\Modules"
+            foreach ($ModuleDirPath in $DSCModulesToTransfer) {
+                Copy-Item -Path $ModuleDirPath -Recurse -Destination "$ProgramFilesPSModulePath\$($ModuleDirPath | Split-Path -Leaf)" -ToSession $PSObj.PSSession -Force
+            }
+
+            $FunctionsForRemoteUse = @(
+                ${Function:Get-DSCEncryptionCert}.Ast.Extent.Text
+                ${Function:New-SelfSignedCertificateEx}.Ast.Extent.Text
+            )
+
+            $DSCPrepSB = {
+                # Load the functions we packed up:
+                $using:FunctionsForRemoteUse | foreach { Invoke-Expression $_ }
+
+                if (!$(Test-Path $using:RemoteDSCDir)) {
+                    $null = New-Item -ItemType Directory -Path $using:RemoteDSCDir -Force
+                }
+
+                if ($($env:PSModulePath -split ";") -notcontains $using:ProgramFilesPSModulePath) {
+                    $env:PSModulePath = $using:ProgramFilesPSModulePath + ";" + $env:PSModulePath
+                }
+
+                $DSCEncryptionCACertInfo = Get-DSCEncryptionCert -MachineName $($using:PSObj.HostName) -ExportDirectory $using:RemoteDSCDir
+                $DSCEncryptionCACertInfo
+            }
+
+            $InvCmdResult = Invoke-Command -Session $PSObj.PSSession -ScriptBlock $DSCPrepSB
+            $PSObj | Add-Member -Type NoteProperty -Name CertProperties -Value $InvCmdResult
+
+            Copy-Item -Path "$RemoteDSCDir\DSCEncryption.cer" -Recurse -Destination $CertDownloadDirectory -FromSession $PSObj.PSSession -Force
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    # Apply the DSC Configurations to the CA Servers
+    $PSDSCVersion = $(Get-Module -ListAvailable -Name PSDesiredStateConfiguration).Version[-1].ToString()
+    $ComputerManagementDscVersion = $(Get-Module -ListAvailable -Name ComputerManagementDsc).Version[-1].ToString()
+    $GenJoinDomainConfigAsStringPrep = @'
+Configuration GenerateJoinDomainConfig {
+    param (
+        [Parameter(Mandatory=$True)]
+        [pscredential]$DomainAdminCredentials,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$LocalAdminCredentials
+    )
+
+'@ + @"
+
+    Import-DscResource -ModuleName PSDesiredStateConfiguration -ModuleVersion $PSDSCVersion
+    Import-DscResource -ModuleName ComputerManagementDsc -ModuleVersion $ComputerManagementDscVersion
+
+"@ + @'
+
+    Node $AllNodes.NodeName {
+        # Assemble the Local Admin Credentials
+        if ($Node.LocalAdminPassword) {
+            [PSCredential]$LocalAdminCredential = New-Object System.Management.Automation.PSCredential ("Administrator", (ConvertTo-SecureString $Node.LocalAdminPassword -AsPlainText -Force))
+        }
+        if ($Node.DomainAdminPassword) {
+            [PSCredential]$DomainAdminCredential = New-Object System.Management.Automation.PSCredential ("$($Node.DomainName)\Administrator", (ConvertTo-SecureString $Node.DomainAdminPassword -AsPlainText -Force))
+        }
+
+        # Join this Server to the Domain
+        Computer JoinDomain {
+            Name       = $Node.HostName
+            DomainName = $Node.DomainToJoin
+            Credential = $DomainAdminCredentials
+        }
+    }
+}
+'@
+    $GenJoinDomainConfigAsString = [scriptblock]::Create($GenJoinDomainConfigAsStringPrep).ToString()
+
+    foreach ($PSObj in $CAServerInfo) {
+        $JoinDomainSB = {
+            #### Configure the Local Configuration Manager (LCM) ####
+            if (Test-Path "$using:RemoteDSCDir\$($using:PSObj.HostName).meta.mof") {
+                Remove-Item "$using:RemoteDSCDir\$($using:PSObj.HostName).meta.mof" -Force
+            }
+            Configuration LCMConfig {
+                Node "localhost" {
+                    LocalConfigurationManager {
+                        ConfigurationMode = "ApplyAndAutoCorrect"
+                        RefreshFrequencyMins = 30
+                        ConfigurationModeFrequencyMins = 15
+                        RefreshMode = "PUSH"
+                        RebootNodeIfNeeded = $True
+                        ActionAfterReboot = "ContinueConfiguration"
+                        CertificateId = $using:PSObj.CertProperties.CertInfo.Thumbprint
+                    }
+                }
+            }
+            # Create the .meta.mof file
+            $LCMMetaMOFFileItem = LCMConfig -OutputPath $using:RemoteDSCDir
+            if (!$LCMMetaMOFFileItem) {
+                Write-Error "Problem creating the .meta.mof file for $($using:PSObj.HostName)!"
+                return
+            }
+            # Make sure the .mof file is directly under $usingRemoteDSCDir alongside the encryption Cert
+            if ($LCMMetaMOFFileItem.FullName -ne "$using:RemoteDSCDir\$($LCMMetaMOFFileItem.Name)") {
+                Copy-Item -Path $LCMMetaMOFFileItem.FullName -Destination "$using:RemoteDSCDir\$($LCMMetaMOFFileItem.Name)" -Force
+            }
+            
+            #### Apply the DSC Configuration ####
+            # Load the GenerateJoinDomainConfig DSC Configuration function
+            $using:GenJoinDomainConfigAsString | Invoke-Expression
+
+            # IMPORTANT NOTE: In the below $ConfigData 'Name' refers to the desired HostName (it will be changed if it doesn't match)
+            $ConfigData = @{
+                AllNodes = @(
+                    @{
+                        NodeName = "localhost"
+                        HostName = $using:PSObj.HostName
+                        DomainToJoin = $using:DomainToJoin
+                        CertificateFile = $using:PSObj.CertProperties.CertFile.FullName
+                        Thumbprint = $using:PSObj.CertProperties.CertInfo.Thumbprint
+                    }
+                )
+            }
+            # IMPORTANT NOTE: The resulting .mof file (representing the DSC configuration), will be in the
+            # directory "$using:RemoteDSCDir\GenerateJoinDomainConfig"
+            if (Test-Path "$using:RemoteDSCDir\$($using:PSObj.HostName).mof") {
+                Remove-Item "$using:RemoteDSCDir\$($using:PSObj.HostName).mof" -Force
+            }
+            $GenJoinDomainConfigSplatParams = @{
+                DomainAdminCredentials      = $using:DomainAdminCredentials
+                OutputPath                  = $using:RemoteDSCDir
+                ConfigurationData           = $ConfigData
+            }
+            $MOFFileItem = GenerateJoinDomainConfig @GenJoinDomainConfigSplatParams
+            if (!$MOFFileItem) {
+                Write-Error "Problem creating the .mof file for $($using:PSObj.HostName)!"
+                return
+            }
+
+            # Make sure the .mof file is directly under $usingRemoteDSCDir alongside the encryption Cert
+            if ($MOFFileItem.FullName -ne "$using:RemoteDSCDir\$($MOFFileItem.Name)") {
+                Copy-Item -Path $MOFFileItem.FullName -Destination "$using:RemoteDSCDir\$($MOFFileItem.Name)" -Force
+            }
+
+            # Apply the .meta.mof (i.e. LCM Settings) and .mof (i.e. join $env:ComputerName to the Domain)
+            Set-DscLocalConfigurationManager -Path $using:RemoteDSCDir -Force
+            Start-DscConfiguration -Path $using:RemoteDSCDir -Force
+        }
+
+        Invoke-Command -Session $PSObj.PSSession -ScriptBlock $JoinDomainSB
+    }
+
+    <#
+    Write-Host "Sleeping for 60 seconds..."
+    Start-Sleep -Seconds 60
+
+    while (!$CanReachRootAAndSubCA) {
+        [System.Collections.ArrayList]$PingSuccess = @()
+        foreach ($IPAddr in $IPsToAddToWSMANTrustedHosts) {
+            $Ping = [System.Net.NetworkInformation.Ping]::new()
+            $PingResult =$Ping.Send($IPAddr,1000)
+            if ($PingResult.Status.ToString() -eq "Success") {
+                $null = $PingSuccess.Add($IPAddr)
+            }
+        }
+
+        if ($PingSuccess.Count -eq 2) {
+            $CanReachRootAAndSubCA = $True
+        }
+        else {
+            $CanReachRootAAndSubCA = $False
+        }
+
+        Write-Host "Can't reach RootCA or SubCA yet. Sleeping for 10 seconds..."
+        Start-Sleep -Seconds 10
+    }
+    #>
+
+    # Cleanup
+    Remove-PSSession -Name ToRootCA -ErrorAction SilentlyContinue
+    Remove-PSSession -Name ToSUbCA -ErrorAction SilentlyContinue
+
+    Write-Host "Done" -ForegroundColor Green
+}
+
+
 <#
     .SYNOPSIS
         This function downloads the specified Vagrant Virtual Machine from https://app.vagrantup.com
@@ -6560,6 +6937,64 @@ function Generate-SSHUserDirFileInfo {
 }
 
 
+function Get-DSCEncryptionCert {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$True)]
+        [string]$MachineName,
+
+        [Parameter(Mandatory=$True)]
+        [string]$ExportDirectory
+    )
+
+    if (!$(Test-Path $ExportDirectory)) {
+        Write-Error "The path '$ExportDirectory' was not found! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    $CertificateFriendlyName = "DSC Credential Encryption"
+    $Cert = Get-ChildItem -Path "Cert:\LocalMachine\My" | Where-Object {
+        $_.FriendlyName -eq $CertificateFriendlyName
+    } | Select-Object -First 1
+
+    if (!$Cert) {
+        $NewSelfSignedCertExSplatParams = @{
+            Subject             = "CN=$Machinename"
+            EKU                 = @('1.3.6.1.4.1.311.80.1','1.3.6.1.5.5.7.3.1','1.3.6.1.5.5.7.3.2')
+            KeyUsage            = 'DigitalSignature, KeyEncipherment, DataEncipherment'
+            SAN                 = $MachineName
+            FriendlyName        = $CertificateFriendlyName
+            Exportable          = $True
+            StoreLocation       = 'LocalMachine'
+            StoreName           = 'My'
+            KeyLength           = 2048
+            ProviderName        = 'Microsoft Enhanced Cryptographic Provider v1.0'
+            AlgorithmName       = "RSA"
+            SignatureAlgorithm  = "SHA256"
+        }
+
+        New-SelfsignedCertificateEx @NewSelfSignedCertExSplatParams
+
+        # There is a slight delay before new cert shows up in Cert:
+        # So wait for it to show.
+        while (!$Cert) {
+            $Cert = Get-ChildItem -Path "Cert:\LocalMachine\My" | Where-Object {$_.FriendlyName -eq $CertificateFriendlyName}
+        }
+    }
+
+    $null = Export-Certificate -Type CERT -Cert $Cert -FilePath "$ExportDirectory\DSCEncryption.cer"
+
+    $CertInfo = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
+    $CertInfo.Import("$ExportDirectory\DSCEncryption.cer")
+
+    [pscustomobject]@{
+        CertFile        = Get-Item "$ExportDirectory\DSCEncryption.cer"
+        CertInfo        = $CertInfo
+    }
+}
+
+
 <#
     .SYNOPSIS
         This function gets the TLS certificate used by the LDAP server on the specified Port.
@@ -9854,6 +10289,399 @@ function Manage-HyperVVM {
 
 
 <#
+    .Synopsis
+        This cmdlet generates a self-signed certificate.
+    .Description
+        This cmdlet generates a self-signed certificate with the required data.
+    .NOTES
+        New-SelfSignedCertificateEx.ps1
+        Version 1.0
+        
+        Creates self-signed certificate. This tool is a base replacement
+        for deprecated makecert.exe
+        
+        Vadims Podans (c) 2013
+        http://en-us.sysadmins.lv/
+
+    .Parameter Subject
+        Specifies the certificate subject in a X500 distinguished name format.
+        Example: CN=Test Cert, OU=Sandbox
+    .Parameter NotBefore
+        Specifies the date and time when the certificate become valid. By default previous day
+        date is used.
+    .Parameter NotAfter
+        Specifies the date and time when the certificate expires. By default, the certificate is
+        valid for 1 year.
+    .Parameter SerialNumber
+        Specifies the desired serial number in a hex format.
+        Example: 01a4ff2
+    .Parameter ProviderName
+        Specifies the Cryptography Service Provider (CSP) name. You can use either legacy CSP
+        and Key Storage Providers (KSP). By default "Microsoft Enhanced Cryptographic Provider v1.0"
+        CSP is used.
+    .Parameter AlgorithmName
+        Specifies the public key algorithm. By default RSA algorithm is used. RSA is the only
+        algorithm supported by legacy CSPs. With key storage providers (KSP) you can use CNG
+        algorithms, like ECDH. For CNG algorithms you must use full name:
+        ECDH_P256
+        ECDH_P384
+        ECDH_P521
+        
+        In addition, KeyLength parameter must be specified explicitly when non-RSA algorithm is used.
+    .Parameter KeyLength
+        Specifies the key length to generate. By default 2048-bit key is generated.
+    .Parameter KeySpec
+        Specifies the public key operations type. The possible values are: Exchange and Signature.
+        Default value is Exchange.
+    .Parameter EnhancedKeyUsage
+        Specifies the intended uses of the public key contained in a certificate. You can
+        specify either, EKU friendly name (for example 'Server Authentication') or
+        object identifier (OID) value (for example '1.3.6.1.5.5.7.3.1').
+    .Parameter KeyUsages
+        Specifies restrictions on the operations that can be performed by the public key contained in the certificate.
+        Possible values (and their respective integer values to make bitwise operations) are:
+        EncipherOnly
+        CrlSign
+        KeyCertSign
+        KeyAgreement
+        DataEncipherment
+        KeyEncipherment
+        NonRepudiation
+        DigitalSignature
+        DecipherOnly
+        
+        you can combine key usages values by using bitwise OR operation. when combining multiple
+        flags, they must be enclosed in quotes and separated by a comma character. For example,
+        to combine KeyEncipherment and DigitalSignature flags you should type:
+        "KeyEncipherment, DigitalSignature".
+        
+        If the certificate is CA certificate (see IsCA parameter), key usages extension is generated
+        automatically with the following key usages: Certificate Signing, Off-line CRL Signing, CRL Signing.
+    .Parameter SubjectAlternativeName
+        Specifies alternative names for the subject. Unlike Subject field, this extension
+        allows to specify more than one name. Also, multiple types of alternative names
+        are supported. The cmdlet supports the following SAN types:
+        RFC822 Name
+        IP address (both, IPv4 and IPv6)
+        Guid
+        Directory name
+        DNS name
+    .Parameter IsCA
+        Specifies whether the certificate is CA (IsCA = $true) or end entity (IsCA = $false)
+        certificate. If this parameter is set to $false, PathLength parameter is ignored.
+        Basic Constraints extension is marked as critical.
+    .PathLength
+        Specifies the number of additional CA certificates in the chain under this certificate. If
+        PathLength parameter is set to zero, then no additional (subordinate) CA certificates are
+        permitted under this CA.
+    .CustomExtension
+        Specifies the custom extension to include to a self-signed certificate. This parameter
+        must not be used to specify the extension that is supported via other parameters. In order
+        to use this parameter, the extension must be formed in a collection of initialized
+        System.Security.Cryptography.X509Certificates.X509Extension objects.
+    .Parameter SignatureAlgorithm
+        Specifies signature algorithm used to sign the certificate. By default 'SHA1'
+        algorithm is used.
+    .Parameter FriendlyName
+        Specifies friendly name for the certificate.
+    .Parameter StoreLocation
+        Specifies the store location to store self-signed certificate. Possible values are:
+        'CurrentUser' and 'LocalMachine'. 'CurrentUser' store is intended for user certificates
+        and computer (as well as CA) certificates must be stored in 'LocalMachine' store.
+    .Parameter StoreName
+        Specifies the container name in the certificate store. Possible container names are:
+        AddressBook
+        AuthRoot
+        CertificateAuthority
+        Disallowed
+        My
+        Root
+        TrustedPeople
+        TrustedPublisher
+    .Parameter Path
+        Specifies the path to a PFX file to export a self-signed certificate.
+    .Parameter Password
+        Specifies the password for PFX file.
+    .Parameter AllowSMIME
+        Enables Secure/Multipurpose Internet Mail Extensions for the certificate.
+    .Parameter Exportable
+        Marks private key as exportable. Smart card providers usually do not allow
+        exportable keys.
+    .Example
+        New-SelfsignedCertificateEx -Subject "CN=Test Code Signing" -EKU "Code Signing" -KeySpec "Signature" `
+        -KeyUsage "DigitalSignature" -FriendlyName "Test code signing" -NotAfter [datetime]::now.AddYears(5)
+        
+        Creates a self-signed certificate intended for code signing and which is valid for 5 years. Certificate
+        is saved in the Personal store of the current user account.
+    .Example
+        New-SelfsignedCertificateEx -Subject "CN=www.domain.com" -EKU "Server Authentication", "Client authentication" `
+        -KeyUsage "KeyEcipherment, DigitalSignature" -SAN "sub.domain.com","www.domain.com","192.168.1.1" `
+        -AllowSMIME -Path C:\test\ssl.pfx -Password (ConvertTo-SecureString "P@ssw0rd" -AsPlainText -Force) -Exportable `
+        -StoreLocation "LocalMachine"
+        
+        Creates a self-signed SSL certificate with multiple subject names and saves it to a file. Additionally, the
+        certificate is saved in the Personal store of the Local Machine store. Private key is marked as exportable,
+        so you can export the certificate with a associated private key to a file at any time. The certificate
+        includes SMIME capabilities.
+    .Example
+        New-SelfsignedCertificateEx -Subject "CN=www.domain.com" -EKU "Server Authentication", "Client authentication" `
+        -KeyUsage "KeyEcipherment, DigitalSignature" -SAN "sub.domain.com","www.domain.com","192.168.1.1" `
+        -StoreLocation "LocalMachine" -ProviderName "Microsoft Software Key Storae Provider" -AlgorithmName ecdh_256 `
+        -KeyLength 256 -SignatureAlgorithm sha256
+        
+        Creates a self-signed SSL certificate with multiple subject names and saves it to a file. Additionally, the
+        certificate is saved in the Personal store of the Local Machine store. Private key is marked as exportable,
+        so you can export the certificate with a associated private key to a file at any time. Certificate uses
+        Ellyptic Curve Cryptography (ECC) key algorithm ECDH with 256-bit key. The certificate is signed by using
+        SHA256 algorithm.
+    .Example
+        New-SelfsignedCertificateEx -Subject "CN=Test Root CA, OU=Sandbox" -IsCA $true -ProviderName `
+        "Microsoft Software Key Storage Provider" -Exportable
+        
+        Creates self-signed root CA certificate.
+#>
+function New-SelfSignedCertificateEx {
+    [CmdletBinding(DefaultParameterSetName = '__store')]
+	param (
+		[Parameter(Mandatory = $true, Position = 0)]
+		[string]$Subject,
+		[Parameter(Position = 1)]
+		[datetime]$NotBefore = [DateTime]::Now.AddDays(-1),
+		[Parameter(Position = 2)]
+		[datetime]$NotAfter = $NotBefore.AddDays(365),
+		[string]$SerialNumber,
+		[Alias('CSP')]
+		[string]$ProviderName = "Microsoft Enhanced Cryptographic Provider v1.0",
+		[string]$AlgorithmName = "RSA",
+		[int]$KeyLength = 2048,
+		[validateSet("Exchange","Signature")]
+		[string]$KeySpec = "Exchange",
+		[Alias('EKU')]
+		[Security.Cryptography.Oid[]]$EnhancedKeyUsage,
+		[Alias('KU')]
+		[Security.Cryptography.X509Certificates.X509KeyUsageFlags]$KeyUsage,
+		[Alias('SAN')]
+		[String[]]$SubjectAlternativeName,
+		[bool]$IsCA,
+		[int]$PathLength = -1,
+		[Security.Cryptography.X509Certificates.X509ExtensionCollection]$CustomExtension,
+		[ValidateSet('MD5','SHA1','SHA256','SHA384','SHA512')]
+		[string]$SignatureAlgorithm = "SHA1",
+		[string]$FriendlyName,
+		[Parameter(ParameterSetName = '__store')]
+		[Security.Cryptography.X509Certificates.StoreLocation]$StoreLocation = "CurrentUser",
+		[Parameter(ParameterSetName = '__store')]
+		[Security.Cryptography.X509Certificates.StoreName]$StoreName = "My",
+		[Parameter(Mandatory = $true, ParameterSetName = '__file')]
+		[Alias('OutFile','OutPath','Out')]
+		[IO.FileInfo]$Path,
+		[Parameter(Mandatory = $true, ParameterSetName = '__file')]
+		[Security.SecureString]$Password,
+		[switch]$AllowSMIME,
+		[switch]$Exportable
+	)
+
+	$ErrorActionPreference = "Stop"
+	if ([Environment]::OSVersion.Version.Major -lt 6) {
+		$NotSupported = New-Object NotSupportedException -ArgumentList "Windows XP and Windows Server 2003 are not supported!"
+		throw $NotSupported
+	}
+	$ExtensionsToAdd = @()
+
+    #region >> Constants
+	# contexts
+	New-Variable -Name UserContext -Value 0x1 -Option Constant
+	New-Variable -Name MachineContext -Value 0x2 -Option Constant
+	# encoding
+	New-Variable -Name Base64Header -Value 0x0 -Option Constant
+	New-Variable -Name Base64 -Value 0x1 -Option Constant
+	New-Variable -Name Binary -Value 0x3 -Option Constant
+	New-Variable -Name Base64RequestHeader -Value 0x4 -Option Constant
+	# SANs
+	New-Variable -Name OtherName -Value 0x1 -Option Constant
+	New-Variable -Name RFC822Name -Value 0x2 -Option Constant
+	New-Variable -Name DNSName -Value 0x3 -Option Constant
+	New-Variable -Name DirectoryName -Value 0x5 -Option Constant
+	New-Variable -Name URL -Value 0x7 -Option Constant
+	New-Variable -Name IPAddress -Value 0x8 -Option Constant
+	New-Variable -Name RegisteredID -Value 0x9 -Option Constant
+	New-Variable -Name Guid -Value 0xa -Option Constant
+	New-Variable -Name UPN -Value 0xb -Option Constant
+	# installation options
+	New-Variable -Name AllowNone -Value 0x0 -Option Constant
+	New-Variable -Name AllowNoOutstandingRequest -Value 0x1 -Option Constant
+	New-Variable -Name AllowUntrustedCertificate -Value 0x2 -Option Constant
+	New-Variable -Name AllowUntrustedRoot -Value 0x4 -Option Constant
+	# PFX export options
+	New-Variable -Name PFXExportEEOnly -Value 0x0 -Option Constant
+	New-Variable -Name PFXExportChainNoRoot -Value 0x1 -Option Constant
+	New-Variable -Name PFXExportChainWithRoot -Value 0x2 -Option Constant
+    #endregion >> Constants
+	
+    #region >> Subject Processing
+	# http://msdn.microsoft.com/en-us/library/aa377051(VS.85).aspx
+	$SubjectDN = New-Object -ComObject X509Enrollment.CX500DistinguishedName
+	$SubjectDN.Encode($Subject, 0x0)
+    #endregion >> Subject Processing
+
+    #region >> Extensions
+
+    #region >> Enhanced Key Usages Processing
+	if ($EnhancedKeyUsage) {
+		$OIDs = New-Object -ComObject X509Enrollment.CObjectIDs
+		$EnhancedKeyUsage | %{
+			$OID = New-Object -ComObject X509Enrollment.CObjectID
+			$OID.InitializeFromValue($_.Value)
+			# http://msdn.microsoft.com/en-us/library/aa376785(VS.85).aspx
+			$OIDs.Add($OID)
+		}
+		# http://msdn.microsoft.com/en-us/library/aa378132(VS.85).aspx
+		$EKU = New-Object -ComObject X509Enrollment.CX509ExtensionEnhancedKeyUsage
+		$EKU.InitializeEncode($OIDs)
+		$ExtensionsToAdd += "EKU"
+	}
+    #endregion >> Enhanced Key Usages Processing
+
+    #region >> Key Usages Processing
+	if ($KeyUsage -ne $null) {
+		$KU = New-Object -ComObject X509Enrollment.CX509ExtensionKeyUsage
+		$KU.InitializeEncode([int]$KeyUsage)
+		$KU.Critical = $true
+		$ExtensionsToAdd += "KU"
+	}
+    #endregion >> Key Usages Processing
+
+    #region >> Basic Constraints Processing
+	if ($PSBoundParameters.Keys.Contains("IsCA")) {
+		# http://msdn.microsoft.com/en-us/library/aa378108(v=vs.85).aspx
+		$BasicConstraints = New-Object -ComObject X509Enrollment.CX509ExtensionBasicConstraints
+		if (!$IsCA) {$PathLength = -1}
+		$BasicConstraints.InitializeEncode($IsCA,$PathLength)
+		$BasicConstraints.Critical = $IsCA
+		$ExtensionsToAdd += "BasicConstraints"
+	}
+    #endregion >> Basic Constraints Processing
+
+    #region >> SAN Processing
+	if ($SubjectAlternativeName) {
+		$SAN = New-Object -ComObject X509Enrollment.CX509ExtensionAlternativeNames
+		$Names = New-Object -ComObject X509Enrollment.CAlternativeNames
+		foreach ($altname in $SubjectAlternativeName) {
+			$Name = New-Object -ComObject X509Enrollment.CAlternativeName
+			if ($altname.Contains("@")) {
+				$Name.InitializeFromString($RFC822Name,$altname)
+			} else {
+				try {
+					$Bytes = [Net.IPAddress]::Parse($altname).GetAddressBytes()
+					$Name.InitializeFromRawData($IPAddress,$Base64,[Convert]::ToBase64String($Bytes))
+				} catch {
+					try {
+						$Bytes = [Guid]::Parse($altname).ToByteArray()
+						$Name.InitializeFromRawData($Guid,$Base64,[Convert]::ToBase64String($Bytes))
+					} catch {
+						try {
+							$Bytes = ([Security.Cryptography.X509Certificates.X500DistinguishedName]$altname).RawData
+							$Name.InitializeFromRawData($DirectoryName,$Base64,[Convert]::ToBase64String($Bytes))
+						} catch {$Name.InitializeFromString($DNSName,$altname)}
+					}
+				}
+			}
+			$Names.Add($Name)
+		}
+		$SAN.InitializeEncode($Names)
+		$ExtensionsToAdd += "SAN"
+	}
+    #endregion >> SAN Processing
+
+    #region >> Custom Extensions
+	if ($CustomExtension) {
+		$count = 0
+		foreach ($ext in $CustomExtension) {
+			# http://msdn.microsoft.com/en-us/library/aa378077(v=vs.85).aspx
+			$Extension = New-Object -ComObject X509Enrollment.CX509Extension
+			$EOID = New-Object -ComObject X509Enrollment.CObjectId
+			$EOID.InitializeFromValue($ext.Oid.Value)
+			$EValue = [Convert]::ToBase64String($ext.RawData)
+			$Extension.Initialize($EOID,$Base64,$EValue)
+			$Extension.Critical = $ext.Critical
+			New-Variable -Name ("ext" + $count) -Value $Extension
+			$ExtensionsToAdd += ("ext" + $count)
+			$count++
+		}
+	}
+    #endregion >> Custom Extensions
+
+    #endregion >> Extensions
+
+    #region >> Private Key
+	# http://msdn.microsoft.com/en-us/library/aa378921(VS.85).aspx
+	$PrivateKey = New-Object -ComObject X509Enrollment.CX509PrivateKey
+	$PrivateKey.ProviderName = $ProviderName
+	$AlgID = New-Object -ComObject X509Enrollment.CObjectId
+	$AlgID.InitializeFromValue(([Security.Cryptography.Oid]$AlgorithmName).Value)
+	$PrivateKey.Algorithm = $AlgID
+	# http://msdn.microsoft.com/en-us/library/aa379409(VS.85).aspx
+	$PrivateKey.KeySpec = switch ($KeySpec) {"Exchange" {1}; "Signature" {2}}
+	$PrivateKey.Length = $KeyLength
+	# key will be stored in current user certificate store
+	switch ($PSCmdlet.ParameterSetName) {
+		'__store' {
+			$PrivateKey.MachineContext = if ($StoreLocation -eq "LocalMachine") {$true} else {$false}
+		}
+		'__file' {
+			$PrivateKey.MachineContext = $false
+		}
+	}
+	$PrivateKey.ExportPolicy = if ($Exportable) {1} else {0}
+	$PrivateKey.Create()
+    #endregion >> Private Key
+
+	# http://msdn.microsoft.com/en-us/library/aa377124(VS.85).aspx
+	$Cert = New-Object -ComObject X509Enrollment.CX509CertificateRequestCertificate
+	if ($PrivateKey.MachineContext) {
+		$Cert.InitializeFromPrivateKey($MachineContext,$PrivateKey,"")
+	} else {
+		$Cert.InitializeFromPrivateKey($UserContext,$PrivateKey,"")
+	}
+	$Cert.Subject = $SubjectDN
+	$Cert.Issuer = $Cert.Subject
+	$Cert.NotBefore = $NotBefore
+	$Cert.NotAfter = $NotAfter
+	foreach ($item in $ExtensionsToAdd) {$Cert.X509Extensions.Add((Get-Variable -Name $item -ValueOnly))}
+	if (![string]::IsNullOrEmpty($SerialNumber)) {
+		if ($SerialNumber -match "[^0-9a-fA-F]") {throw "Invalid serial number specified."}
+		if ($SerialNumber.Length % 2) {$SerialNumber = "0" + $SerialNumber}
+		$Bytes = $SerialNumber -split "(.{2})" | ?{$_} | %{[Convert]::ToByte($_,16)}
+		$ByteString = [Convert]::ToBase64String($Bytes)
+		$Cert.SerialNumber.InvokeSet($ByteString,1)
+	}
+	if ($AllowSMIME) {$Cert.SmimeCapabilities = $true}
+	$SigOID = New-Object -ComObject X509Enrollment.CObjectId
+	$SigOID.InitializeFromValue(([Security.Cryptography.Oid]$SignatureAlgorithm).Value)
+	$Cert.SignatureInformation.HashAlgorithm = $SigOID
+	# completing certificate request template building
+	$Cert.Encode()
+	
+	# interface: http://msdn.microsoft.com/en-us/library/aa377809(VS.85).aspx
+	$Request = New-Object -ComObject X509Enrollment.CX509enrollment
+	$Request.InitializeFromRequest($Cert)
+	$Request.CertificateFriendlyName = $FriendlyName
+	$endCert = $Request.CreateRequest($Base64)
+	$Request.InstallResponse($AllowUntrustedCertificate,$endCert,$Base64,"")
+	switch ($PSCmdlet.ParameterSetName) {
+		'__file' {
+			$PFXString = $Request.CreatePFX(
+				[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)),
+				$PFXExportEEOnly,
+				$Base64
+			)
+			Set-Content -Path $Path -Value ([Convert]::FromBase64String($PFXString)) -Encoding Byte
+		}
+	}
+}
+
+
+<#
     .SYNOPSIS
         This function creates a new SSH User/Client key pair and has the Vault Server sign the Public Key,
         returning a '-cert.pub' file that can be used for Public Key Certificate SSH Authentication.
@@ -13015,8 +13843,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUaEUPaQa8ZbOdU1KsGZIgwcD
-# P8mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+gOmcnJPu0t/zDXwYBSL8lH+
+# mASgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -13073,11 +13901,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDJsBd2sTJrk1/F7
-# ehrYLbiqBu/cMA0GCSqGSIb3DQEBAQUABIIBAKD0Iy0NiQLaC46ZpnSRpQbakJ7Q
-# 5vnBRQYxy+M+0ZWPUvOV/gfWNmBg9cHZzpmAoOy0AH93efYgDMXUR7KMKtv1EUZU
-# +fH3AVyFeHm0YRPdw91CSqqKsiyrOqFm5SV0JoYysfh9OwGfDvHru7JNl8G0XSP2
-# p6lplRkNQltwrLSaAwwPN334fgUyEKDdau0R7xi+0tXCpIjKjbcdPZTTm3GQLfmN
-# mR2H0SAGVToL3s9G+wmiAbx0M64giz7RNTv3jcuwQ/pdnL4tTLJTtl89sGeP8FFr
-# xxwPAv/Y5Pw5BgnOovgxyCNQmgc3qqLbhgujMiCwVIGcobMGUqRPe/lrnlQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNYIVrd4Qo+w7od/
+# DeRi2dxMEhzNMA0GCSqGSIb3DQEBAQUABIIBAHBAFIAFotD2l4XKDaK4AfiChnlV
+# SVTakQQ6D8pw58cjwtajoJC1iAeQAzGs18Kx8weuIeVCiaVlm0Dn61EG6sueXq8X
+# cPB0dJGB6vDUd58yZZIAralu0FYLiDl4D1v+6RqMp9FteAvjHoFkYuuHJWKS6JqD
+# q4n9DX1Ggg/TBPpQXKsZJD5S9COqk9hi0ihKVFuc/2QiUNmYwtckpRo6QzwrHwbp
+# 3Vfs5WT2nOkzuGC986UFMMKBmZk5VIBkkIvLgdBSG1I9fD+kaqinFTEKRWPTj6ac
+# k0NnrClvsxaAToQBFkbbubW4Er0VIpfFhR+2BunvyNq806wy987Lq5y4Gtk=
 # SIG # End signature block
