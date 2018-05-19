@@ -13,6 +13,9 @@ function Create-TwoTierPKI {
         [Parameter(Mandatory=$True)]
         [string]$DomainToJoin,
 
+        [Parameter(Mandatory=$False)]
+        [string]$PrimaryDCLocation,
+
         [Parameter(Mandatory=$True)]
         [pscredential]$DomainAdminCredentials,
 
@@ -35,6 +38,137 @@ function Create-TwoTierPKI {
         [boolean]$Octets = (($IPAddress.Split(".")).Count -eq 4) 
         [boolean]$Valid  =  ($IPAddress -as [ipaddress]) -as [boolean]
         Return  ($Valid -and $Octets)
+    }
+
+    function Resolve-Host {
+        [CmdletBinding()]
+        Param(
+            [Parameter(Mandatory=$True)]
+            [string]$HostNameOrIP
+        )
+    
+        ##### BEGIN Main Body #####
+    
+        $RemoteHostNetworkInfoArray = @()
+        if (!$(Test-IsValidIPAddress -IPAddress $HostNameOrIP)) {
+            try {
+                $HostNamePrep = $HostNameOrIP
+                [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                $IPv4AddressFamily = "InterNetwork"
+                $IPv6AddressFamily = "InterNetworkV6"
+    
+                $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostNamePrep)
+                $ResolutionInfo.AddressList | Where-Object {
+                    $_.AddressFamily -eq $IPv4AddressFamily
+                } | foreach {
+                    if ($RemoteHostArrayOfIPAddresses -notcontains $_.IPAddressToString) {
+                        $null = $RemoteHostArrayOfIPAddresses.Add($_.IPAddressToString)
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostNameOrIP when treated as a Host Name (as opposed to IP Address)!"
+            }
+        }
+        if (Test-IsValidIPAddress -IPAddress $HostNameOrIP) {
+            try {
+                $HostIPPrep = $HostNameOrIP
+                [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                $null = $RemoteHostArrayOfIPAddresses.Add($HostIPPrep)
+    
+                $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostIPPrep)
+    
+                [System.Collections.ArrayList]$RemoteHostFQDNs = @() 
+                $null = $RemoteHostFQDNs.Add($ResolutionInfo.HostName)
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostNameOrIP when treated as an IP Address (as opposed to Host Name)!"
+            }
+        }
+    
+        if ($RemoteHostArrayOfIPAddresses.Count -eq 0) {
+            Write-Error "Unable to determine IP Address of $HostNameOrIP! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    
+        # At this point, we have $RemoteHostArrayOfIPAddresses...
+        [System.Collections.ArrayList]$RemoteHostFQDNs = @()
+        foreach ($HostIP in $RemoteHostArrayOfIPAddresses) {
+            try {
+                $FQDNPrep = [System.Net.Dns]::GetHostEntry($HostIP).HostName
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostIP. No PTR Record? Please check your DNS config."
+                continue
+            }
+            if ($RemoteHostFQDNs -notcontains $FQDNPrep) {
+                $null = $RemoteHostFQDNs.Add($FQDNPrep)
+            }
+        }
+    
+        if ($RemoteHostFQDNs.Count -eq 0) {
+            $null = $RemoteHostFQDNs.Add($ResolutionInfo.HostName)
+        }
+    
+        [System.Collections.ArrayList]$HostNameList = @()
+        [System.Collections.ArrayList]$DomainList = @()
+        foreach ($fqdn in $RemoteHostFQDNs) {
+            $PeriodCheck = $($fqdn | Select-String -Pattern "\.").Matches.Success
+            if ($PeriodCheck) {
+                $HostName = $($fqdn -split "\.")[0]
+                $Domain = $($fqdn -split "\.")[1..$($($fqdn -split "\.").Count-1)] -join '.'
+            }
+            else {
+                $HostName = $fqdn
+                $Domain = "Unknown"
+            }
+    
+            $null = $HostNameList.Add($HostName)
+            $null = $DomainList.Add($Domain)
+        }
+    
+        if ($RemoteHostFQDNs[0] -eq $null -and $HostNameList[0] -eq $null -and $DomainList -eq "Unknown" -and $RemoteHostArrayOfIPAddresses) {
+            [System.Collections.ArrayList]$SuccessfullyPingedIPs = @()
+            # Test to see if we can reach the IP Addresses
+            foreach ($ip in $RemoteHostArrayOfIPAddresses) {
+                if ([bool]$(Test-Connection $ip -Count 1 -ErrorAction SilentlyContinue)) {
+                    $null = $SuccessfullyPingedIPs.Add($ip)
+                }
+            }
+    
+            if ($SuccessfullyPingedIPs.Count -eq 0) {
+                Write-Error "Unable to resolve $HostNameOrIP! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+    
+        $FQDNPrep = if ($RemoteHostFQDNs) {$RemoteHostFQDNs[0]} else {$null}
+        if ($FQDNPrep -match ',') {
+            $FQDN = $($FQDNPrep -split ',')[0]
+        }
+        else {
+            $FQDN = $FQDNPrep
+        }
+    
+        $DomainPrep = if ($DomainList) {$DomainList[0]} else {$null}
+        if ($DomainPrep -match ',') {
+            $Domain = $($DomainPrep -split ',')[0]
+        }
+        else {
+            $Domain = $DomainPrep
+        }
+    
+        [pscustomobject]@{
+            IPAddressList   = [System.Collections.ArrayList]@($(if ($SuccessfullyPingedIPs) {$SuccessfullyPingedIPs} else {$RemoteHostArrayOfIPAddresses}))
+            FQDN            = $FQDN
+            HostName        = if ($HostNameList) {$HostNameList[0].ToLowerInvariant()} else {$null}
+            Domain          = $Domain
+        }
+    
+        ##### END Main Body #####
+    
     }
 
     function Get-DomainController {
@@ -95,7 +229,7 @@ function Create-TwoTierPKI {
         ##### BEGIN Main Body #####
     
         if (!$PartOfDomain -and !$Domain) {
-            Write-Error "$env:Computer is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
+            Write-Error "$env:ComputerName is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
             $global:FunctionResult = "1"
             return
         }
@@ -208,16 +342,32 @@ function Create-TwoTierPKI {
     }
 
     # Locate the Primary Domain Controller
-    try {
-        $DomainControllerInfo = Get-DomainController -Domain $DomainToJoin -ErrorAction Stop
-        $PrimaryDCFQDN = $DomainControllerInfo.PrimaryDomainController
-        if (!$DomainControllerInfo) {throw "The Get-DomainController function did not return any information!"}
+    if (!$PrimaryDCLocation) {
+        try {
+            $DomainControllerInfo = Get-DomainController -Domain $DomainToJoin
+            $PrimaryDCFQDN = $DomainControllerInfo.PrimaryDomainController
+            if (!$DomainControllerInfo -or $DomainControllerInfo.FoundDomainControllers.Count -eq 0) {
+                throw "The Get-DomainController function did not return any information!"
+            }
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Unable to find the Primary Domain Controller for domain '$DomainToJoin'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
     }
-    catch {
-        Write-Error $_
-        Write-Error "Unable to find the Primary Domain Controller for domain '$DomainToJoin'! Halting!"
-        $global:FunctionResult = "1"
-        return
+    else {
+        try {
+            $DomainControllerNetworkInfo = Resolve-Host -HostNameOrIP $PrimaryDCLocation
+            $PrimaryDCFQDN = "$($DomainControllerNetworkInfo.HostName).$DomainToJoin"
+            if (!$PrimaryDCFQDN) {throw "Unable to Resolve-Host '$PrimaryDCLocation'! Halting!"}
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
     }
 
     if (!$(Test-Path $CertDownloadDirectory)) {
@@ -357,7 +507,7 @@ function Create-TwoTierPKI {
         }
         catch {
             Write-Error $_
-            Write-Error "Problem creating PSSession "To$($PSObj.HostName)"! Halting!"
+            Write-Error "Problem creating PSSession To$($PSObj.HostName)! Halting!"
             $global:FunctionResult = "1"
             return
         }
@@ -629,7 +779,12 @@ Configuration STANDALONE_ROOTCA {
                     & "$($ENV:SystemRoot)\System32\certutil.exe" -setreg CA\AuditFilter $($Using:Node.AuditFilter)
                 }
                 Restart-Service -Name CertSvc
-                Add-Content -Path 'c:\windows\setup\scripts\certutil.log' -Value "Certificate Service Restarted ..."
+'@ + @"
+
+                Add-Content -Path '$RemoteDSCDir\certutil.log' -Value "Certificate Service Restarted ..."
+
+"@ + @'
+
             }
             GetScript  = {
                 Return @{
@@ -938,7 +1093,7 @@ Configuration MEMBER_SUBCA {
         }
 
         # Install the Web Enrollment Service
-        WindowsFeature WebEnrollmentCA {
+        WindowsFeature ADCSWebEnrollment {
             Name = 'ADCS-Web-Enrollment'
             Ensure = 'Present'
             DependsOn = "[WindowsFeature]ADCSCA"
@@ -981,7 +1136,7 @@ Configuration MEMBER_SUBCA {
             WindowsFeature EnrollmentWebPol {
                 Name = 'ADCS-Enroll-Web-Pol'
                 Ensure = 'Present'
-                DependsOn = "[WindowsFeature]WebEnrollmentCA"
+                DependsOn = "[WindowsFeature]ADCSWebEnrollment"
             }
         }
 
@@ -1083,7 +1238,7 @@ Configuration MEMBER_SUBCA {
             Ensure = 'Present'
             IsSingleInstance = 'Yes'
             CAConfig = 'CertSrv'
-            Credential = $LocalAdminCredential
+            Credential = $LocalAdminCredentials
             DependsOn = '[xADCSCertificationAuthority]ConfigCA'
         }
 
@@ -1165,7 +1320,13 @@ Configuration MEMBER_SUBCA {
                     & "$($ENV:SystemRoot)\System32\certutil.exe" -setreg CA\CACertPublicationURLs $($Using:Node.CACertPublicationURLs)
                 }
                 Restart-Service -Name CertSvc
-                Add-Content -Path 'c:\windows\setup\scripts\certutil.log' -Value "Certificate Service Restarted ..."
+
+'@ + @"
+
+                Add-Content -Path '$RemoteDSCDir\certutil.log' -Value "Certificate Service Restarted ..."
+
+"@ + @'
+
             }
             GetScript = {
                 Return @{
@@ -1198,7 +1359,7 @@ Configuration MEMBER_SUBCA {
             xADCSOnlineResponder ConfigOnlineResponder {
                 Ensure = 'Present'
                 IsSingleInstance  = 'Yes'
-                Credential = $LocalAdminCredential
+                Credential = $LocalAdminCredentials
                 DependsOn = '[Script]ADCSAdvConfig'
             }
 
@@ -1299,8 +1460,8 @@ Configuration MEMBER_SUBCA {
     #region >> Monitor DNS to ensure that the Root and Subordinate CA Servers can find each other
 
     $Counter = 0
-    while ($(!$(Resolve-DNSName "$RootCAHostName.$DomainToJoin" -ErrorAction SilentlyContinue) -or 
-    !$(Resolve-DNSName "$SubCAHostName.$DomainToJoin" -ErrorAction SilentlyContinue)) -and
+    while ($(![bool]$(Resolve-DNSName "$RootCAHostName.$DomainToJoin" -ErrorAction SilentlyContinue) -or 
+    ![bool]$(Resolve-DNSName "$SubCAHostName.$DomainToJoin" -ErrorAction SilentlyContinue)) -and
     $Counter -le 5
     ) {
         Write-Host "Sleeping for 5 minutes to give '$RootCAHostName' and '$SubCAHostName' a chance to join the '$DomainToJoin' and update DNS records..."
@@ -1309,11 +1470,11 @@ Configuration MEMBER_SUBCA {
         if ($Counter -eq 5) {
             # Make sure DNS is configured to find the new RootCA and SubCA Servers
             $ConfigureDNSSB = {
-                if (!$(Get-DnsServerResourceRecord -ComputerName $env:ComputerName -ZoneName $DomainToJoin -Name $RootCAHostName)) {
-                    Add-DnsServerResourceRecordA -ComputerName $env:ComputerName -Name $RootCAHostName -ZoneName $DomainToJoin -AllowUpdateAny -IPv4Address $IPofServerToBeRootCA
+                if (!$(Get-DnsServerResourceRecord -ComputerName $env:ComputerName -ZoneName $using:DomainToJoin -Name $using:RootCAHostName)) {
+                    Add-DnsServerResourceRecordA -ComputerName $env:ComputerName -Name $using:RootCAHostName -ZoneName $using:DomainToJoin -AllowUpdateAny -IPv4Address $using:IPofServerToBeRootCA
                 }
                 if (!$(Get-DnsServerResourceRecord -ComputerName $env:ComputerName -ZoneName $DomainToJoin -Name $SubCAHostName)) {
-                    Add-DnsServerResourceRecordA -ComputerName $env:ComputerName -Name $SubCAHostName -ZoneName $DomainToJoin -AllowUpdateAny -IPv4Address $IPofServerToBeSubCA
+                    Add-DnsServerResourceRecordA -ComputerName $env:ComputerName -Name $using:SubCAHostName -ZoneName $using:DomainToJoin -AllowUpdateAny -IPv4Address $using:IPofServerToBeSubCA
                 }
             }
             try {
@@ -1370,8 +1531,8 @@ Configuration MEMBER_SUBCA {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVJl//IOjymmXdAGkQJdCrk5X
-# D62gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUAx6+4JttSI3OrpiZjLS62rIA
+# 0qygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -1428,11 +1589,11 @@ Configuration MEMBER_SUBCA {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCbuHFSvb5fYAILj
-# dQ2v9FJZqngSMA0GCSqGSIb3DQEBAQUABIIBAJBMUsDmnAnU3GBOciC6DC0BecGT
-# dVsd13e86hUD063g5bIUZZ48r4KeGXts40Ud9bvVK5hf4/fqvqNjLTI+YYXWJQ6h
-# +zLn3JRfMG6vHRx+RY0vdaNqL/Rhvmv/c6FzCtwO89fspqLaVQ+AHGX7QVZ9z+C4
-# e6NFaFjiUzzllowHEOImcyn0xZa7cGsZ3qN0KIqppGii1z7gBSTJHiRjPf6XkSvp
-# xH7qH0cL04cQ8FOsAx9VgwHuf5VSy51mcxvZkWKsOXdCqq0q3g5PoZUJWzhgrQU9
-# 8rucQhLHlfh0Zq71w7ZWc5z4JH/PMDnAgTyiZlcMcuGHB5mR4fbQe+fUI4c=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEWsmWx3CidfUChm
+# Nd6MzyY2IRDMMA0GCSqGSIb3DQEBAQUABIIBAGljw46YtOM60lDOAx9x1ro7WAp6
+# BQjrNNlbC8HVDWvZWCFueZgT1b+cN6EZ2cqof4XcOYMKICxmP+Ttqt2NbE7yukkm
+# SnLSVWwdUj0QYaM8YapcZwuuDOgImrmQJPlPGudfV7YSXB38i5xMKeGAJz9C+0Pk
+# UPreiN13Fv4FL98O4IoW/F1LdnRMQrjqU+YDD702KuM36kHlKoffKEqPTpSoB3fT
+# bU9gaJZ1a0uuyTzOYzSUL7pu3VHhbDijjMT6CcllLEVXPi8s1CfNtuaz6qEgQSTD
+# t4TZUCH19PbxKmVCyb8ToYN3AOvxbHwErUDX/Ap2dW5/6YpsBU/IYK0oMis=
 # SIG # End signature block

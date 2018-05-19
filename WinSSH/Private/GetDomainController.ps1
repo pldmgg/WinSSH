@@ -58,7 +58,7 @@ function GetDomainController {
     ##### BEGIN Main Body #####
 
     if (!$PartOfDomain -and !$Domain) {
-        Write-Error "$env:Computer is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
+        Write-Error "$env:ComputerName is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
         $global:FunctionResult = "1"
         return
     }
@@ -164,8 +164,8 @@ function GetDomainController {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/x6y/rQpBsNKd1Wq6egtjawF
-# 8f2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0K5IfP3cS3ng/s9vx5NIi7fM
+# hrugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -222,11 +222,11 @@ function GetDomainController {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKsQRLBVan6kw85V
-# so1gKFnhuGLwMA0GCSqGSIb3DQEBAQUABIIBACSIFAfs4k56gszg/L2Sro0ngmA+
-# HFbiBFSNkxvvhQhgmMXrcGooqbYjtYSGw/+5zEt75qKWkp+s8jgWjd/EJ6zdTuYy
-# GsveGPH7Rts1CUpaR6TTJX+U498mHbIqIx4mIr+G7BZ/SDp9+50PuPgfPUdbUZGn
-# vvAGscLqJhEfUAQtPcsNsP1QfyZSjggwyCmWBoLfSRpZnZFBlnFqX7FKhDmQy2QW
-# rYJqzuBkKlP96w2/Z9wGBmmDv6q1hlWYQn9Leqlouf6xE2MyJLEKf6rb/KlDjbxM
-# jZ1yNiX/eyBxL2U+69HytdHaHpFBuhuoNDpChpFJomnGZYzZBTOFl6YnRjQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHrvoKROlQUCMSaI
+# LYMqeGv+H+fVMA0GCSqGSIb3DQEBAQUABIIBABKw/5GM8FGX3A+Ez1r4YY5Wwg4r
+# k/t1gZhpsYMxPjHDdJsXy8G0ULYbntO1eQivU0tfA2vGLDK/Xj83ru/sr0Z29twd
+# Bzg5ZrNHk1eTYD/ErTrE4eWbJgY7k8qZ+rnYAZo2h1khHAJgGdvlcGo7nWI/51d5
+# PlR5dGzl3hOoAw1pcaVaapZXiEg8CZ4su8Rh2VAr++OIPIGfrOcIN77McIqEpM8n
+# lLNk9VUVu8NOBICgnNoJvS8BdEENB6GrPd66qJxThnWqq9MAwNxJ8r2TF8G6671O
+# 8pzfoGbZ81CZZoLQewkojX8fBc+tzBXmZ9deTpK9TNf2c+gunEB8aKjO3L8=
 # SIG # End signature block
