@@ -378,6 +378,7 @@ function Create-TwoTierPKI {
     $null = Install-PackageProvider -Name Nuget -Force -Confirm:$False
     $null = Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
     $NeededDSCResources = @(
+        "PSDesiredStateConfiguration"
         "ComputerManagementDsc"
         "xActiveDirectory"
         "xAdcsDeployment"
