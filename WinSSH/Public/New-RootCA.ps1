@@ -5,7 +5,7 @@ function New-RootCA {
         [pscredential]$DomainAdminCredentials,
 
         [Parameter(Mandatory=$False)]
-        [string]$RootCAFQDN,
+        [string]$RootCAIPOrFQDN,
 
         [Parameter(Mandatory=$False)]
         #[ValidateSet("EnterpriseRootCa","StandaloneRootCa")]
@@ -305,21 +305,26 @@ function New-RootCA {
             return
         }
 
-        try {
-            $null = Add-WindowsFeature Adcs-Cert-Authority -IncludeManagementTools
-        }
-        catch {
-            Write-Error "Problem with 'Add-WindowsFeature Adcs-Cert-Authority -IncludeManagmementTools'! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
-        try {
-            $null = Add-WindowsFeature RSAT-AD-Tools
-        }
-        catch {
-            Write-Error "Problem with 'Add-WindowsFeature RSAT-AD-Tools'! Halting!"
-            $global:FunctionResult = "1"
-            return
+        $WindowsFeaturesToAdd = @(
+            "Adcs-Cert-Authority"
+            "RSAT-AD-Tools"
+        )
+        foreach ($FeatureName in $WindowsFeaturesToAdd) {
+            $SplatParams = @{
+                Name    = $FeatureName
+            }
+            if ($FeatureName -eq "Adcs-Cert-Authority") {
+                $SplatParams.Add("IncludeManagementTools",$True)
+            }
+
+            try {
+                $null = Add-WindowsFeature @SplatParams
+            }
+            catch {
+                Write-Error "Problem with 'Add-WindowsFeature $FeatureName'! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
         }
 
         $RelevantRootCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "RootCA"}
@@ -394,6 +399,11 @@ function New-RootCA {
             Write-Error "Problem with 'Restart-Service certsvc'! Halting!"
             $global:FunctionResult = "1"
             return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
         }
 
         #endregion >> Install ADCSCA
@@ -515,16 +525,15 @@ function New-RootCA {
         ldifde -i -k -f "$FileOutputDirectory\$NewWebServerTemplateCommonName.ldf"
         #>
 
-        # Generate New CRL and Copy Contents of CertEnroll to C CertEnroll-Exports
+        # Generate New CRL and Copy Contents of CertEnroll to $FileOutputDirectory
         # NOTE: The below 'certutil -crl' outputs the new .crl file to "C:\Windows\System32\CertSrv\CertEnroll"
         # which happens to contain some other important files that we'll need
         $null = certutil -crl
         Copy-Item -Path "C:\Windows\System32\CertSrv\CertEnroll\*" -Recurse -Destination $FileOutputDirectory -Force
         # Convert RootCA .crt DER Certificate to Base64 Just in Case You Want to Use With Linux
-        $CrtFiles = Get-ChildItem -Path $FileOutputDirectory -File -Recurse -Filter "*.crt"
-        foreach ($CrtFileItem in $CrtFiles) {
-            $null = certutil -encode $($CrtFileItem.FullName) $($CrtFileItem.FullName -replace '\.crt','_base64.cer')
-        }
+        $CrtFileItem = Get-ChildItem -Path $FileOutputDirectory -File -Recurse | Where-Object {$_.Name -match "$env:ComputerName\.crt"}
+        $null = certutil -encode $($CrtFileItem.FullName) $($CrtFileItem.FullName -replace '\.crt','_base64.cer')
+
         # Make $FileOutputDirectory a Network Share until the Subordinate CA can download the files
         # IMPORTANT NOTE: The below -CATimeout parameter should be in Seconds. So after 12000 seconds, the SMB Share
         # will no longer be available
@@ -555,10 +564,10 @@ function New-RootCA {
     $PrimaryIP = $(Find-NetRoute -RemoteIPAddress $NextHop | Where-Object {$($_ | Get-Member).Name -contains "IPAddress"}).IPAddress
 
     [System.Collections.ArrayList]$NetworkLocationObjsToResolve = @()
-    if ($PSBoundParameters['RootCAFQDN']) {
+    if ($PSBoundParameters['RootCAIPOrFQDN']) {
         $SubCAPSObj = [pscustomobject]@{
             ServerPurpose       = "RootCA"
-            NetworkLocation     = $RootCAFQDN
+            NetworkLocation     = $RootCAIPOrFQDN
         }
     }
     else {
@@ -567,7 +576,7 @@ function New-RootCA {
             NetworkLocation     = $env:ComputerName + "." + $(Get-CimInstance win32_computersystem).Domain
         }
     }
-    $null = $NetworkLocationsToResolve.Add($RootCAPSObj)
+    $null = $NetworkLocationObjsToResolve.Add($RootCAPSObj)
 
     [System.Collections.ArrayList]$NetworkInfoPSObjects = @()
     foreach ($NetworkLocationObj in $NetworkLocationObjsToResolve) {
@@ -672,10 +681,10 @@ function New-RootCA {
         $KeyAlgorithmValue = "RSA"
     }
     if (!$CDPUrl) {
-        $CDPUrl = "http://$RootCAFQDN/certdata/<CaName><CRLNameSuffix>.crl"
+        $CDPUrl = "http://pki.$($RelevantRootCANetworkInfo.DomainName)/certdata/<CaName><CRLNameSuffix>.crl"
     }
     if (!$AIAUrl) {
-        $AIAUrl = "http://$RootCAFQDN/certdata/<CaName><CertificateName>.crt"
+        $AIAUrl = "http://pki.$($RelevantRootCANetworkInfo.DomainName)/certdata/<CaName><CertificateName>.crt"
     }
 
     # Create SetupRootCA Helper Function Splat Parameters
@@ -751,8 +760,8 @@ function New-RootCA {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYqEMGmuDkp81adn/GYa8ps36
-# jyCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUx+LJLJSL8G3OsZW/25f+0aq6
+# Uw+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -809,11 +818,11 @@ function New-RootCA {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOe6TwTOLv0ADBE4
-# 6v6sESYWDNSgMA0GCSqGSIb3DQEBAQUABIIBAMQLPQtspsXabFHH3fmhR2oCnmA8
-# PyksMdqoWN7Fc2Vts81lU5mXdXZd7dhO7OSErnik8NVbHEfuonWLbmgulOb3wMdO
-# oHW23CAr2LTH6DP7YFzkRZ5VQLiny01P3wCa6ijWsng9b2VD4K2Ms5swydNxDDUA
-# 2fidKiGMQrqmSonyxh0Lg7eG4Q+Z8h8fw7sXAYi00Btk8OPpDKaDG3rfA2NMq+J1
-# m31bJAiCnSNxK+J+xvUOjdn164JlN2he2OTF8EMmW2yF23PpQr+vxM7Phk/2/wKS
-# E99MTYBeQ68Tsg8Wxr1eD0Sl/l72yknhOD47qyExz3z0f0wzttJzyepY8Ao=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAnoxksrg2dcXBdL
+# edqTN+ZG2NaTMA0GCSqGSIb3DQEBAQUABIIBAGV22Pb+DKFOLBsWyInjIHN/QnU5
+# NgPKwi+ebBII+1MUHHf1xO1IXKmpXVt8KHxcFpuojdTwRzs/cG4aKzs6sxyxirjB
+# 2XF9ViHXEH/kum2EeHCmiU24ixd9YnOvj1Tg5XbQP5a+YY4ywWd4Nx7FbqUzor+f
+# X+9+TcfchmFy8TZIfCiHaHJKLuMupx6EG7VVTMrWjHBejrNfuBeEErOCYAWXIjwU
+# RYOuCd9y57x9qzFZZR5DoeVuj4npvJvqOvooHY7d1U2F3rdjOYUQxYFQ25Dpe5Uw
+# fY08FYVCLDf4RVvUleKNJdi0VHJ1Y4lTTDFCiB6FvkmY9SXizcPC9J9l4qo=
 # SIG # End signature block

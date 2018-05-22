@@ -2,13 +2,13 @@ function New-SubordinateCA {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$True)]
-        [string]$RootCAFQDN,
+        [string]$RootCAIPOrFQDN,
 
         [Parameter(Mandatory=$True)]
         [pscredential]$DomainAdminCredentials,
 
         [Parameter(Mandatory=$False)]
-        [string]$SubCAFQDN,
+        [string]$SubCAIPOrFQDN,
 
         [Parameter(Mandatory=$False)]
         #[ValidateSet("EnterpriseRootCa","StandaloneRootCa")]
@@ -309,9 +309,8 @@ function New-SubordinateCA {
             }
         }
 
-        $SubCAWorkingDir = "C:\SubCAWorkingDir"
-        if (!$(Test-Path $SubCAWorkingDir)) {
-            $null = New-Item -ItemType Directory -Path $SubCAWorkingDir -Force
+        if (!$(Test-Path $FileOutputDirectory)) {
+            $null = New-Item -ItemType Directory -Path $FileOutputDirectory 
         }
         
         try {
@@ -335,145 +334,314 @@ function New-SubordinateCA {
             return
         }
 
-        try {
-            $null = Add-WindowsFeature Adcs-Cert-Authority -IncludeManagementTools
-        }
-        catch {
-            Write-Error "Problem with 'Add-WindowsFeature Adcs-Cert-Authority -IncludeManagmementTools'! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
-        try {
-            $null = Add-WindowsFeature RSAT-AD-Tools
-        }
-        catch {
-            Write-Error "Problem with 'Add-WindowsFeature RSAT-AD-Tools'! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
-
-        <#
-        default['adcs']['crypto']['provider']         = "RSA#Microsoft Software Key Storage Provider"
-        default['adcs']['crypto']['key_length']       = "2048"
-        default['adcs']['crypto']['hash_algorithm']   = "SHA256"
-        default['adcs']['certsrv_alias']              = "pki"
-        default['adcs']['cdp_url']                    = "http://#{default['adcs']['certsrv_alias']}/certdata/<CaName><CRLNameSuffix>.crl"
-        default['adcs']['aia_url']                    = "http://#{default['adcs']['certsrv_alias']}/certdata/<CaName><CertificateName>.crt"
-        default['adcs']['certs_share']['windows']     = "#{default[:common][:mount][:windows_mountpoint]}\\certs"
-        default['adcs']['certs_share']['linux']       = "#{default[:common][:mount][:linux_mountpoint]}/certs"
-        default['adcs']['domainlocation']             = "test2.lab"
-        default['adcs']['certgenworking']             = "CertGenWorking"
-        default['adcs']['newcerttemplates']           = "NewCertTemplates"
-        default['adcs']['certenrollexports']          = "CertEnrollExports"
-        # END COMMON SETTINGS ###########################
-
-
-        # ROOT CA SETTINGS ###############################
-        default['adcs']['root_ca']['ca_type']         = "EnterpriseRootCa"
-        default['adcs']['root_ca']['cn']              = "Maverick2"
-        default['adcs']['root_ca']['dn_suffix']       = "O=TEST2,C=LAB"
-        default['adcs']['root_ca']['dn_suffix1']      = "DC=TEST2,DC=LAB"
-        default['adcs']['root_ca']['validity']        = "years"
-        default['adcs']['root_ca']['validity_units']  = "20"
-        default['adcs']['root_ca']['newcompcerttemp'] = "TestComputer"
-        default['adcs']['root_ca']['newwebservcerttemp'] = "TestWebServ"
-        default['adcs']['root_ca']['subcatempl']      = "SubCA"
-        # END ROOT CA SETTINGS ##########################
-
-
-        # Subordinate CA SETTINGS #######################
-        # Naming conventions for Subordinate CA:
-        # Common Name:  <ENV>-SCA
-        # Distinguished Name Suffix:  DC=<DOMAIN>, DC=<DOMAIN>
-        # The Install-AdcsCertificationAuthority command REQUIRES backslashes \\ instead of / or it WILL error out.
-        default['adcs']['subo_ca']['ca_type']       = "EnterpriseSubordinateCA"
-        default['adcs']['subo_ca']['cn']            = "Maverick-SCA2"
-        default['adcs']['subo_ca']['dn_suffix']     = "DC=TEST2,DC=LAB"
-        default['adcs']['subo_ca']['inf_file']      = "#{default['adcs']['subo_ca']['cn']}.#{default['adcs']['domainlocation']}_#{default['adcs']['subo_ca']['cn']}.inf"
-        default['adcs']['subo_ca']['csr_file']      = "#{default['adcs']['subo_ca']['cn']}.#{default['adcs']['domainlocation']}_#{default['adcs']['subo_ca']['cn']}.csr"
-        default['adcs']['subo_ca']['cer_file']      = "#{default['adcs']['subo_ca']['cn']}.#{default['adcs']['domainlocation']}_#{default['adcs']['subo_ca']['cn']}.cer"
-        default['adcs']['subo_ca']['p7b_file']      = "#{default['adcs']['subo_ca']['cn']}.#{default['adcs']['domainlocation']}_#{default['adcs']['subo_ca']['cn']}.p7b"
-        default['adcs']['subo_ca']['certdata_dir']  = "C:\\inetpub\\wwwroot\\certdata"
-        default['adcs']['subo_ca']['webcert_subject_suffix']  = "OU=TestOrgUnit,O=TestOrg,L=Springfield,S=VA,C=US"
-        default['adcs']['subo_ca']['caorg']         = "TestOrg"
-        default['adcs']['subo_ca']['caorgunit']     = "TestOrgUnit"
-        default['adcs']['subo_ca']['calocality']    = "Springfield"
-        default['adcs']['subo_ca']['castate']       = "VA"
-        default['adcs']['subo_ca']['cacountry']     = "US"
-        default['adcs']['subo_ca']['rootcalocation']     = "Maverick2.test2.lab\\Maverick2"
-        default['adcs']['subo_ca']['subcalocation']      = "Maverick-SCA2.test2.lab\\Maverick-SCA2"
-        #>
-        
-        Install-AdcsCertificationAuthority `
-        -CAType                     "#{node['adcs']['subo_ca']['ca_type']}" `
-        -CryptoProviderName         "#{node['adcs']['crypto']['provider']}" `
-        -KeyLength                  "#{node['adcs']['crypto']['key_length']}" `
-        -HashAlgorithmName          "#{node['adcs']['crypto']['hash_algorithm']}" `
-        -CACommonName               "#{node['adcs']['subo_ca']['cn']}" `
-        -CADistinguishedNameSuffix  "#{node['adcs']['subo_ca']['dn_suffix']}" `
-        -OutputCertRequestFile      "C:\\#{node['adcs']['certgenworking']}\\#{node['adcs']['subo_ca']['csr_file']}" `
-        -Force
-        EOH
-        end
-
-        powershell_script "Add Enrollment Web Service and CA Web Enrollment features" do
-        code <<-EOH
-            Import-Module ServerManager
-            Add-WindowsFeature Adcs-Enroll-Web-Svc,Adcs-Web-Enrollment,Web-Mgmt-Console
-        EOH
-        end
-
-        powershell_script "Copy RootCA .crt and .crl From Network Share to SubCA CertEnroll Directory" do
-        code <<-EOH
-        Copy-Item "#{node['adcs']['certs_share']['windows']}\\*" "C:\\Windows\\System32\\CertSrv\\CertEnroll\\"
-        EOH
-        end
-
-        powershell_script "Copy RootCA .crt and .crl From Network Share to C CertGen-Working Directory" do
-        code <<-EOH
-        Copy-Item "#{node['adcs']['certs_share']['windows']}\\*" "C:\\#{node['adcs']['certgenworking']}\\"
-        EOH
-        end
-
-        powershell_script "Install RootCA .crt" do
-        code <<-EOH
-        certutil -addstore "Root" "C:\\#{node['adcs']['certgenworking']}\\#{node['adcs']['root_ca']['cn']}.#{node['adcs']['domainlocation']}_#{node['adcs']['root_ca']['cn']}.crt"
-        EOH
-        end
-
-        powershell_script "Install RootCA .crl" do
-        code <<-EOH
-        certutil -addstore "Root" "C:\\#{node['adcs']['certgenworking']}\\#{node['adcs']['root_ca']['cn']}.crl"
-        EOH
-        end
-
-        directory "Certdata IIS folder" do
-        path "#{node['adcs']['subo_ca']['certdata_dir']}"
-        action :create
-        end
-
-        powershell_script "Stage certdata IIS site, enable dir browsing" do
-        code <<-EOH
-            Copy-Item "#{node['adcs']['certs_share']['windows']}\\#{node['adcs']['certenrollexports']}\\*" "#{node['adcs']['subo_ca']['certdata_dir']}" -Force
-            Set-Location C:\\Windows\\system32\\inetsrv
-            .\\appcmd.exe set config "Default Web Site/certdata" /section:directoryBrowse /enabled:true
-        EOH
-        end
-
-        powershell_script "Update DNS Alias" do
-        code <<-EOH
-            Invoke-Command -ComputerName $($env:LOGONSERVER.replace("\\","")) -Command { `
-            Add-DnsServerResourceRecordCname `
-                -Name "#{node['adcs']['certsrv_alias']}" `
-                -HostnameAlias "#{node['fqdn']}" `
-                -ZoneName "#{node['adcs']['domainlocation']}"
+        $WindowsFeaturesToAdd = @(
+            "Adcs-Cert-Authority"
+            "Adcs-Web-Enrollment"
+            "Web-Mgmt-Console"
+            "RSAT-AD-Tools"
+        )
+        foreach ($FeatureName in $WindowsFeaturesToAdd) {
+            $SplatParams = @{
+                Name    = $FeatureName
             }
-        EOH
-        end
+            if ($FeatureName -eq "Adcs-Cert-Authority") {
+                $SplatParams.Add("IncludeManagementTools",$True)
+            }
+
+            try {
+                $null = Add-WindowsFeature @SplatParams
+            }
+            catch {
+                Write-Error "Problem with 'Add-WindowsFeature $FeatureName'! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        #region >> Install ADCSCA
+        try {
+            $CertRequestFile = $FileOutputDirectory + "\" + $RelevantSubCANetworkInfo.FQDN + "_" + $RelevantSubCANetworkInfo.HostName + ".csr"
+            $InstallADCSCertAuthSplatParams = @{
+                Credential                  = $DomainAdminCredentials
+                CAType                      = $CAType
+                CryptoProviderName          = $FinalCryptoProvider
+                KeyLength                   = $KeyLength
+                HashAlgorithmName           = $HashAlgorithm
+                CACommonName                = $env:ComputerName
+                CADistinguishedNameSuffix   = $RelevantSubCANetworkInfo.DomainLDAPString
+                OutputCertRequestFile       = $CertRequestFile
+                Force                       = $True
+                ErrorAction                 = "Stop"
+            }
+            Install-AdcsCertificationAuthority @InstallADCSCertAuthSplatParams
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem with Install-AdcsCertificationAuthority cmdlet! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Copy RootCA .crt and .crl From Network Share to SubCA CertEnroll Directory
+        Copy-Item -Path "$($RootCASMBShareMount.Name)`:\*" -Recurse -Destination "C:\Windows\System32\CertSrv\CertEnroll" -Force
+
+        # Copy RootCA .crt and .crl From Network Share to the $FileOutputDirectory
+        Copy-Item -Path "$($RootCASMBShareMount.Name)`:\*" -Recurse -Destination $FileOutputDirectory -Force
+
+        # Install the RootCA .crt to the Certificate Store
+        [array]$RootCACrtFile = Get-ChildItem -Path $FileOutputDirectory -Filter "*.crt"
+        if ($RootCACrtFile.Count -eq 0) {
+            Write-Error "Unable to find RootCA .crt file under the directory '$FileOutputDirectory'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($RootCACrtFile.Count -gt 1) {
+            $RootCACrtFile = $RootCACrtFile | Where-Object {$_.Name -eq $($RelevantRootCANetworkInfo.FQDN + "_" + $RelevantRootCANetworkInfo.HostName + '.crt')}
+        }
+        if ($RootCACrtFile -eq 1) {
+            $RootCACrtFile = $RootCACrtFile[0]
+        }
+        certutil -addstore "Root" "$($RootCACrtFile.FullName)"
+
+        # Install RootCA .crl
+        [array]$RootCACrlFile = Get-ChildItem -Path $FileOutputDirectory -Filter "*.crl"
+        if ($RootCACrlFile.Count -eq 0) {
+            Write-Error "Unable to find RootCA .crl file under the directory '$FileOutputDirectory'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($RootCACrlFile.Count -gt 1) {
+            $RootCACrlFile = $RootCACrlFile | Where-Object {$_.Name -eq $($RelevantRootCANetworkInfo.FQDN + "_" + $RelevantRootCANetworkInfo.HostName + '.crl')}
+        }
+        if ($RootCACrlFile -eq 1) {
+            $RootCACrlFile = $RootCACrlFile[0]
+        }
+        certutil -addstore "Root" "$($RootCACrlFile.FullName)"
+
+        # Create the Certdata IIS folder
+        $CertDataIISFolder = "C:\inetpub\wwwroot\certdata"
+        if (!$(Test-Path $CertDataIISFolder)) {
+            $null = New-Item -Path $CertDataIISFolder -Force
+        }
+
+        # Stage certdata IIS site and enable directory browsing
+        Copy-Item -Path "$FileOutputDirectory\*" -Recurse -Destination $CertDataIISFolder -Force
+        & "C:\Windows\system32\inetsrv\appcmd.exe" set config "Default Web Site/certdata" /section:directoryBrowse /enabled:true
+
+        # Update DNS Alias
+        $DomainControllerFQDN = $($env:LOGONSERVER.replace("\\","")) + $RelevantSubCANetworkInfo.Domain
+        Invoke-Command -ComputerName $DomainControllerFQDN -Credential $DomainAdminCredentials -ScriptBlock {
+            Add-DnsServerResourceRecordCname -Name "pki" -HostnameAlias $RelevantSubCANetworkInfo.FQDN -ZoneName $RelevantSubCANetworkInfo.Domain
+        }
+
+        # Request and Install SCA Certificate from Existing CSR
+        $RootCACertUtilLocation = "$($RelevantRootCANetworkInfo.FQDN)\$($RelevantRootCANetworkInfo.HostName)" 
+        $SubCACACertUtilLocation = "$($RelevantSubCANetworkInfo.FQDN)\$($RelevantSubCANetworkInfo.HostName)"
+        $SubCACerFileOut = $FileOutputDirectory + "\" + $RelevantSubCANetworkInfo.FQDN + "_" + $RelevantSubCANetworkInfo.HostName + ".cer"
+        $CertificateChainOut = $FileOutputDirectory + "\" + $RelevantSubCANetworkInfo.FQDN + "_" + $RelevantSubCANetworkInfo.HostName + ".p7b"
+
+        $RequestID = (certreq.exe -config "$RootCACertUtilLocation" -submit "$CertRequestFile" "$SubCACerFileOut").split('"')[2]
+        Start-Sleep -Seconds 5
+        certreq.exe -retrieve -config $RootCACertUtilLocation $RequestID $CertificateChainOut
+        Start-Sleep -Seconds 5
+        certutil.exe -config $SubCACACertUtilLocation -installCert $CertificateChainOut
+  
+        try {
+            Restart-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        # Enable Subject Alt Name
+        certutil -setreg policy\\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
+
+        try {
+            Stop-Service certsvc -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Stopped") {
+            Write-Host "Waiting for the 'certsvc' service to stop..."
+            Start-Sleep -Seconds 5
+        }
+
+        # Install Certification Authority Web Enrollment
+        try {
+            Install-AdcsWebEnrollment -Force
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            Start-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        try {
+            # Install Certificate Enrollment Web Service
+            Install-AdcsEnrollmentWebService -AuthenticationType "UserName" -ApplicationPoolIdentity -CAConfig "$($RelevantSubCANetworkInfo.HostName)\$($RelevantSubCANetworkInfo.HostName)" -Force
+            
+            # Configure CRL, CDP, AIA, CA Auditing
+            # Update CRL Validity period
+            certutil -setreg CA\\CRLPeriod "Weeks"
+            certutil -setreg CA\\CRLPeriodUnits 4
+            certutil -setreg CA\\CRLOverlapPeriod "Days"
+            certutil -setreg CA\\CRLOverlapUnits 3
+
+            # Remove pre-existing http CDP, add custom CDP
+            Get-CACrlDistributionPoint | Where-Object { $_.URI -like "http#*" } | Remove-CACrlDistributionPoint -Force
+            Add-CACrlDistributionPoint -Uri $CDPUrl -AddToCertificateCdp -Force
+
+            # Remove pre-existing http AIA, add custom AIA
+            Get-CAAuthorityInformationAccess | Where-Object { $_.Uri -like "http*" } | Remove-CAAuthorityInformationAccess -Force
+            Add-CAAuthorityInformationAccess -Uri $AIAUrl -AddToCertificateAIA -Force
+
+            # Enable all event auditing
+            certutil -setreg CA\\AuditFilter 127
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            Restart-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        # Publish SubCA CRL
+        # Generate New CRL and Copy Contents of CertEnroll to $FileOutputDirectory
+        # NOTE: The below 'certutil -crl' outputs the new .crl file to "C:\Windows\System32\CertSrv\CertEnroll"
+        # which happens to contain some other important files that we'll need
+        $null = certutil -crl
+        Copy-Item -Path "C:\Windows\System32\CertSrv\CertEnroll\*" -Recurse -Destination $FileOutputDirectory -Force
+        # Convert SubCA .crt DER Certificate to Base64 Just in Case You Want to Use With Linux
+        $CrtFileItem = Get-ChildItem -Path $FileOutputDirectory -File -Recurse | Where-Object {$_.Name -match "$env:ComputerName\.crt"}
+        $null = certutil -encode $($CrtFileItem.FullName) $($CrtFileItem.FullName -replace '\.crt','_base64.cer')
+        
+        # Copy SubCA CRL From SubCA CertEnroll directory to C:\inetpub\wwwroot\certdata" do
+        $SubCACrlFileItem = Get-ChildItem -Path "C:\Windows\System32\CertSrv\CertEnroll" -File | Where-Object {$_.Name -match "$env:ComputerName\.crl"}
+        Copy-Item -Path $SubCACrlFileItem.FullName -Destination "C:\inetpub\wwwroot\certdata\$($SubCACrlFileItem.Name)" -Force
+        
+        # Copy SubCA Cert From $FileOutputDirectory to C:\inetpub\wwwroot\certdata
+        $SubCACerFileItem = Get-ChildItem -Path $FileOutputDirectory -File -Recurse | Where-Object {$_.Name -match "$env:ComputerName\.cer"}
+        Copy-Item $SubCACerFileItem.FullName -Destination "C:\inetpub\wwwroot\certdata\$($SubCACerFileItem.Name)"
+
+        # Import New Certificate Templates that were exported by the RootCA to a Network Share
+        # NOTE: This shouldn't be necessary if we're using and Enterprise Root CA
+        #ldifde -i -k -f $($RootCASMBShareMount.Name + ':\' + $NewComputerTemplateCommonName + '.ldf')
+        #ldifde -i -k -f $($RootCASMBShareMount.Name + ':\' + $NewWebServerTemplateCommonName + '.ldf')
+        
+        try {
+            # Add New Cert Templates to List of Temps to Issue using the PSPKI Module
+            Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewComputerTemplateCommonName | Set-CATemplate
+            Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewWebServerTemplateCommonName | Set-CATemplate
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Request PKI WebServer Alias Certificate
+        $PKIWebSiteCertInfFile = "$FileOutputDirectory\pki.$($RelevantSubCANetworkInfo.DomainName).inf"
+        $PKIWebSiteCertRequestFile = "$FileOutputDirectory\pki.$($RelevantSubCANetworkInfo.DomainName).csr"
+        $PKIWebsiteCertFileOut = "$FileOutputDirectory\pki.$($RelevantSubCANetworkInfo.DomainName).cer"
+
+        $inf = @"
+[Version]
+Signature="`$Windows NT`$"
+
+[NewRequest]
+Subject = "CN=pki.$($RelevantSubCANetworkInfo.DomainName)"
+KeySpec = 1
+KeyLength = $KeyLength
+Exportable = TRUE
+FriendlyName = "PKICertSrvOn$env:ComputerName"
+MachineKeySet = TRUE
+SMIME = False
+PrivateKeyArchive = FALSE
+UserProtected = FALSE
+UseExistingKeySet = FALSE
+ProviderName = "Microsoft RSA SChannel Cryptographic Provider"
+ProviderType = 12
+RequestType = PKCS10
+KeyUsage = 0xa0
+"@
+
+        $inf | Out-File $PKIWebSiteCertInfFile
+        certreq.exe -new "$PKIWebSiteCertInfFile" "$PKIWebSiteCertRequestFile"
+        Sleep -Seconds 5
+        certreq.exe -attrib "CertificateTemplate:$NewWebServerTemplateCommonName" -config "$SubCACACertUtilLocation" -submit "$PKIWebSiteCertInfFile" "$PKIWebsiteCertFileOut"
+        Sleep -Seconds 5
+        certreq.exe -accept "$PKIWebsiteCertFileOut"
+
+        if (!$(Test-Path $PKIWebsiteCertFileOut)) {
+            Write-Error "There was a problem requesting a WebServer Certificate from the Subordinate CA for the PKI (certsrv) website! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Copy PKI SubCA Alias Cert From $FileOutputDirectory to C:\inetpub\wwwroot\certdata
+        Copy-Item -Path $PKIWebsiteCertFileOut -Destination "C:\inetpub\wwwroot\certdata\pki.$($RelevantSubCANetworkInfo.DomainName).cer"
+
+        # Configure HTTPS Binding
+        try {
+            $CertInfo = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
+            $CertInfo.Import($PKIWebsiteCertFileOut)
+            $PKIWebsiteCertThumbPrint = $CertInfo.ThumbPrint
+
+            Import-Module WebAdministration
+            Remove-Item IIS:\SslBindings\*
+            Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -eq $PKIWebsiteCertThumbPrint} | New-Item IIS:\SslBindings\0.0.0.0!443
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Configure Application Settings
+        & "C:\Windows\system32\inetsrv\appcmd.exe" set config /commit:MACHINE /section:appSettings /+"[key='Friendly Name',value='$($RelevantSubCANetworkInfo.DomainName) Domain Certification Authority']"
     }
 
     #endregion >> Helper Functions
 
+    
     #region >> Initial Prep
 
     $ElevationCheck = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -489,13 +657,13 @@ function New-SubordinateCA {
     [System.Collections.ArrayList]$NetworkLocationObjsToResolve = @(
         [pscustomobject]@{
             ServerPurpose       = "RootCA"
-            NetworkLocation     = $RootCAFQDN
+            NetworkLocation     = $RootCAIPOrFQDN
         }
     )
-    if ($PSBoundParameters['SubCAFQDN']) {
+    if ($PSBoundParameters['SubCAIPOrFQDN']) {
         $SubCAPSObj = [pscustomobject]@{
             ServerPurpose       = "SubCA"
-            NetworkLocation     = $SubCAFQDN
+            NetworkLocation     = $SubCAIPOrFQDN
         }
     }
     else {
@@ -504,7 +672,7 @@ function New-SubordinateCA {
             NetworkLocation     = $env:ComputerName + "." + $(Get-CimInstance win32_computersystem).Domain
         }
     }
-    $null = $NetworkLocationsToResolve.Add($SubCAPSObj)
+    $null = $NetworkLocationObjsToResolve.Add($SubCAPSObj)
 
     [System.Collections.ArrayList]$NetworkInfoPSObjects = @()
     foreach ($NetworkLocationObj in $NetworkLocationObjsToResolve) {
@@ -585,7 +753,7 @@ function New-SubordinateCA {
 
     # Set some defaults if certain paramters are not used
     if (!$CAType) {
-        $CAType = "EnterpriseRootCA"
+        $CAType = "EnterpriseSubordinateCA"
     }
     if (!$NewComputerTemplateCommonName) {
         $NewComputerTemplateCommonName = $DomainShortName + "Computer"
@@ -594,7 +762,7 @@ function New-SubordinateCA {
         $NewWebServerTemplateCommonName = $DomainShortName + "WebServer"
     }
     if (!$FileOutputDirectory) {
-        $FileOutputDirectory = "C:\NewRootCAOutput"
+        $FileOutputDirectory = "C:\SubCAWorkingDir"
     }
     if (!$CryptoProvider) {
         $CryptoProvider = "Microsoft Software Key Storage Provider"
@@ -609,14 +777,14 @@ function New-SubordinateCA {
         $KeyAlgorithmValue = "RSA"
     }
     if (!$CDPUrl) {
-        $CDPUrl = "http://$RootCAFQDN/certdata/<CaName><CRLNameSuffix>.crl"
+        $CDPUrl = "http://pki.$($RelevantSubCANetworkInfo.DomainName)/certdata/<CaName><CRLNameSuffix>.crl"
     }
     if (!$AIAUrl) {
-        $AIAUrl = "http://$RootCAFQDN/certdata/<CaName><CertificateName>.crt"
+        $AIAUrl = "http://pki.$($RelevantSubCANetworkInfo.DomainName)/certdata/<CaName><CertificateName>.crt"
     }
 
     # Create SetupRootCA Helper Function Splat Parameters
-    $SetupRootCASplatParams = @{
+    $SetupSubCASplatParams = @{
         DomainAdminCredentials              = $DomainAdminCredentials
         NetworkInfoPSObjects                = $NetworkInfoPSObjects
         CAType                              = $CAType
@@ -639,14 +807,14 @@ function New-SubordinateCA {
 
     #region >> Do SubCA Install
 
-    if ($RelevantRootCANetworkInfo.HostName -ne $env:ComputerName) {
-        $PSSessionName = NewUniqueString -ArrayOfStrings $(Get-PSSession).Name -PossibleNewUniqueString "ToRootCA"
+    if ($RelevantSubCANetworkInfo.HostName -ne $env:ComputerName) {
+        $PSSessionName = NewUniqueString -ArrayOfStrings $(Get-PSSession).Name -PossibleNewUniqueString "ToSubCA"
 
         # Try to create a PSSession to the Root CA for 15 minutes, then give up
         $Counter = 0
         while (![bool]$(Get-PSSession -Name $PSSessionName -ErrorAction SilentlyContinue)) {
             try {
-                $RootCAPSSession = New-PSSession -ComputerName $RelevantRootCANetworkInfo.IPAddress -Credential $DomainAdminCredentials -Name $PSSessionName -ErrorAction SilentlyContinue
+                $SubCAPSSession = New-PSSession -ComputerName $RelevantSubCANetworkInfo.IPAddress -Credential $DomainAdminCredentials -Name $PSSessionName -ErrorAction SilentlyContinue
                 if (![bool]$(Get-PSSession -Name $PSSessionName -ErrorAction SilentlyContinue)) {throw}
             }
             catch {
@@ -663,25 +831,94 @@ function New-SubordinateCA {
             $Counter++
         }
 
-        if (!$RootCAPSSession) {
-            Write-Error "Unable to create a PSSession to the Root CA Server at '$($RelevantRootCANetworkInfo.IPAddress)'! Halting!"
+        if (!$SubCAPSSession) {
+            Write-Error "Unable to create a PSSession to the Root CA Server at '$($RelevantSubCANetworkInfo.IPAddress)'! Halting!"
             $global:FunctionResult = "1"
             return
         }
 
         $FunctionsForRemoteUse = @(
-            ${Function:SetupRootCA}.Ast.Extent.Text
+            ${Function:SetupSubCA}.Ast.Extent.Text
         )
-        Invoke-Command -Session $RootCAPSSession -ScriptBlock {
+        Invoke-Command -Session $SubCAPSSession -ScriptBlock {
             $using:FunctionsForRemoteUse | foreach { Invoke-Expression $_ }
-            SetupRootCA @using:SetupRootCASplatParams
+            SetupSubCA @using:SetupSubCASplatParams
         }
     }
     else {
-        SetupRootCA @SetupRootCASplatParams
+        SetupRootCA @SetupSubCASplatParams
     }
 
     #endregion >> Do SubCA Install
 
     
 }
+# SIG # Begin signature block
+# MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2pNcjrnuxZAfvznZYUHbFDB8
+# eBKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
+# CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
+# CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
+# B1plcm9TQ0EwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDCwqv+ROc1
+# bpJmKx+8rPUUfT3kPSUYeDxY8GXU2RrWcL5TSZ6AVJsvNpj+7d94OEmPZate7h4d
+# gJnhCSyh2/3v0BHBdgPzLcveLpxPiSWpTnqSWlLUW2NMFRRojZRscdA+e+9QotOB
+# aZmnLDrlePQe5W7S1CxbVu+W0H5/ukte5h6gsKa0ktNJ6X9nOPiGBMn1LcZV/Ksl
+# lUyuTc7KKYydYjbSSv2rQ4qmZCQHqxyNWVub1IiEP7ClqCYqeCdsTtfw4Y3WKxDI
+# JaPmWzlHNs0nkEjvnAJhsRdLFbvY5C2KJIenxR0gA79U8Xd6+cZanrBUNbUC8GCN
+# wYkYp4A4Jx+9AgMBAAGjggEqMIIBJjASBgkrBgEEAYI3FQEEBQIDAQABMCMGCSsG
+# AQQBgjcVAgQWBBQ/0jsn2LS8aZiDw0omqt9+KWpj3DAdBgNVHQ4EFgQUicLX4r2C
+# Kn0Zf5NYut8n7bkyhf4wGQYJKwYBBAGCNxQCBAweCgBTAHUAYgBDAEEwDgYDVR0P
+# AQH/BAQDAgGGMA8GA1UdEwEB/wQFMAMBAf8wHwYDVR0jBBgwFoAUdpW6phL2RQNF
+# 7AZBgQV4tgr7OE0wMQYDVR0fBCowKDAmoCSgIoYgaHR0cDovL3BraS9jZXJ0ZGF0
+# YS9aZXJvREMwMS5jcmwwPAYIKwYBBQUHAQEEMDAuMCwGCCsGAQUFBzAChiBodHRw
+# Oi8vcGtpL2NlcnRkYXRhL1plcm9EQzAxLmNydDANBgkqhkiG9w0BAQsFAAOCAQEA
+# tyX7aHk8vUM2WTQKINtrHKJJi29HaxhPaHrNZ0c32H70YZoFFaryM0GMowEaDbj0
+# a3ShBuQWfW7bD7Z4DmNc5Q6cp7JeDKSZHwe5JWFGrl7DlSFSab/+a0GQgtG05dXW
+# YVQsrwgfTDRXkmpLQxvSxAbxKiGrnuS+kaYmzRVDYWSZHwHFNgxeZ/La9/8FdCir
+# MXdJEAGzG+9TwO9JvJSyoGTzu7n93IQp6QteRlaYVemd5/fYqBhtskk1zDiv9edk
+# mHHpRWf9Xo94ZPEy7BqmDuixm4LdmmzIcFWqGGMo51hvzz0EaE8K5HuNvNaUB/hq
+# MTOIB5145K8bFOoKHO4LkTCCBc8wggS3oAMCAQICE1gAAAH5oOvjAv3166MAAQAA
+# AfkwDQYJKoZIhvcNAQELBQAwPTETMBEGCgmSJomT8ixkARkWA0xBQjEUMBIGCgmS
+# JomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EwHhcNMTcwOTIwMjE0MTIy
+# WhcNMTkwOTIwMjExMzU4WjBpMQswCQYDVQQGEwJVUzELMAkGA1UECBMCUEExFTAT
+# BgNVBAcTDFBoaWxhZGVscGhpYTEVMBMGA1UEChMMRGlNYWdnaW8gSW5jMQswCQYD
+# VQQLEwJJVDESMBAGA1UEAxMJWmVyb0NvZGUyMIIBIjANBgkqhkiG9w0BAQEFAAOC
+# AQ8AMIIBCgKCAQEAxX0+4yas6xfiaNVVVZJB2aRK+gS3iEMLx8wMF3kLJYLJyR+l
+# rcGF/x3gMxcvkKJQouLuChjh2+i7Ra1aO37ch3X3KDMZIoWrSzbbvqdBlwax7Gsm
+# BdLH9HZimSMCVgux0IfkClvnOlrc7Wpv1jqgvseRku5YKnNm1JD+91JDp/hBWRxR
+# 3Qg2OR667FJd1Q/5FWwAdrzoQbFUuvAyeVl7TNW0n1XUHRgq9+ZYawb+fxl1ruTj
+# 3MoktaLVzFKWqeHPKvgUTTnXvEbLh9RzX1eApZfTJmnUjBcl1tCQbSzLYkfJlJO6
+# eRUHZwojUK+TkidfklU2SpgvyJm2DhCtssFWiQIDAQABo4ICmjCCApYwDgYDVR0P
+# AQH/BAQDAgeAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMB0GA1UdDgQWBBS5d2bhatXq
+# eUDFo9KltQWHthbPKzAfBgNVHSMEGDAWgBSJwtfivYIqfRl/k1i63yftuTKF/jCB
+# 6QYDVR0fBIHhMIHeMIHboIHYoIHVhoGubGRhcDovLy9DTj1aZXJvU0NBKDEpLENO
+# PVplcm9TQ0EsQ049Q0RQLENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNl
+# cnZpY2VzLENOPUNvbmZpZ3VyYXRpb24sREM9emVybyxEQz1sYWI/Y2VydGlmaWNh
+# dGVSZXZvY2F0aW9uTGlzdD9iYXNlP29iamVjdENsYXNzPWNSTERpc3RyaWJ1dGlv
+# blBvaW50hiJodHRwOi8vcGtpL2NlcnRkYXRhL1plcm9TQ0EoMSkuY3JsMIHmBggr
+# BgEFBQcBAQSB2TCB1jCBowYIKwYBBQUHMAKGgZZsZGFwOi8vL0NOPVplcm9TQ0Es
+# Q049QUlBLENOPVB1YmxpYyUyMEtleSUyMFNlcnZpY2VzLENOPVNlcnZpY2VzLENO
+# PUNvbmZpZ3VyYXRpb24sREM9emVybyxEQz1sYWI/Y0FDZXJ0aWZpY2F0ZT9iYXNl
+# P29iamVjdENsYXNzPWNlcnRpZmljYXRpb25BdXRob3JpdHkwLgYIKwYBBQUHMAKG
+# Imh0dHA6Ly9wa2kvY2VydGRhdGEvWmVyb1NDQSgxKS5jcnQwPQYJKwYBBAGCNxUH
+# BDAwLgYmKwYBBAGCNxUIg7j0P4Sb8nmD8Y84g7C3MobRzXiBJ6HzzB+P2VUCAWQC
+# AQUwGwYJKwYBBAGCNxUKBA4wDDAKBggrBgEFBQcDAzANBgkqhkiG9w0BAQsFAAOC
+# AQEAszRRF+YTPhd9UbkJZy/pZQIqTjpXLpbhxWzs1ECTwtIbJPiI4dhAVAjrzkGj
+# DyXYWmpnNsyk19qE82AX75G9FLESfHbtesUXnrhbnsov4/D/qmXk/1KD9CE0lQHF
+# Lu2DvOsdf2mp2pjdeBgKMRuy4cZ0VCc/myO7uy7dq0CvVdXRsQC6Fqtr7yob9NbE
+# OdUYDBAGrt5ZAkw5YeL8H9E3JLGXtE7ir3ksT6Ki1mont2epJfHkO5JkmOI6XVtg
+# anuOGbo62885BOiXLu5+H2Fg+8ueTP40zFhfLh3e3Kj6Lm/NdovqqTBAsk04tFW9
+# Hp4gWfVc0gTDwok3rHOrfIY35TGCAfUwggHxAgEBMFQwPTETMBEGCgmSJomT8ixk
+# ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
+# E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
+# CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEMI2/z4AGSuovGH
+# QSyHSJZIZweqMA0GCSqGSIb3DQEBAQUABIIBAJaxAl0AS6ON19U+hleSxWe8S56B
+# tDqrQQZ0QOuFGtSc6XQ3gBhvVFkranwQydX/Mn4QjiAX3ANzFwoqOxTLjHdVVsG5
+# I6sHPHz8BWWXATngrcpXQDNozLG9DvfGmDSMabTAw30oRnSS/7C1zuOUqW3pY8sj
+# vCJEX3FYJDwsHyjibXcNhImX07LRVFOi2IceeZh9wDzvd1RAI1Rv6S51715mcHyN
+# QstegYRe1LwEL2fQtZzlYqpHi50pkJeJA3eEFibwfvIzP2LZkadiPR10yz0wNFuW
+# yRBMM2a4WP65nSKLyw82NgAYxZxmEerWG3RtVmyfzU2otvsAzMSabDwff14=
+# SIG # End signature block
