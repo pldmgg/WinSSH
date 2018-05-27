@@ -38,6 +38,1626 @@ catch {
 }
 
 
+function New-RootCA {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$True)]
+        [pscredential]$DomainAdminCredentials,
+
+        [Parameter(Mandatory=$False)]
+        [string]$RootCAIPOrFQDN,
+
+        [Parameter(Mandatory=$False)]
+        #[ValidateSet("EnterpriseRootCa","StandaloneRootCa")]
+        [ValidateSet("EnterpriseRootCA")]
+        [string]$CAType,
+
+        [Parameter(Mandatory=$False)]
+        [string]$NewComputerTemplateCommonName,
+
+        [Parameter(Mandatory=$False)]
+        [string]$NewWebServerTemplateCommonName,
+
+        [Parameter(Mandatory=$False)]
+        [string]$FileOutputDirectory,
+
+        [Parameter(Mandatory=$False)]
+        <#
+        [ValidateSet("Microsoft Base Cryptographic Provider v1.0","Microsoft Base DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Base DSS Cryptographic Provider","Microsoft Base Smart Card Crypto Provider",
+        "Microsoft DH SChannel Cryptographic Provider","Microsoft Enhanced Cryptographic Provider v1.0",
+        "Microsoft Enhanced DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Enhanced RSA and AES Cryptographic Provider","Microsoft RSA SChannel Cryptographic Provider",
+        "Microsoft Strong Cryptographic Provider","Microsoft Software Key Storage Provider",
+        "Microsoft Passport Key Storage Provider")]
+        #>
+        [ValidateSet("Microsoft Software Key Storage Provider")]
+        [string]$CryptoProvider,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("2048","4096")]
+        [int]$KeyLength,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("SHA1","SHA256","SHA384","SHA512","MD5","MD4","MD2")]
+        [string]$HashAlgorithm,
+
+        # For now, stick to just using RSA
+        [Parameter(Mandatory=$False)]
+        #[ValidateSet("RSA","DH","DSA","ECDH_P256","ECDH_P521","ECDSA_P256","ECDSA_P384","ECDSA_P521")]
+        [ValidateSet("RSA")]
+        [string]$KeyAlgorithmValue,
+
+        [Parameter(Mandatory=$False)]
+        [ValidatePattern('http.*?\/<CaName><CRLNameSuffix>\.crl$')]
+        [string]$CDPUrl,
+
+        [Parameter(Mandatory=$False)]
+        [ValidatePattern('http.*?\/<CaName><CertificateName>.crt$')]
+        [string]$AIAUrl
+    )
+    
+    #region >> Helper Functions
+
+    function NewUniqueString {
+        [CmdletBinding()]
+        Param(
+            [Parameter(Mandatory=$False)]
+            [string[]]$ArrayOfStrings,
+    
+            [Parameter(Mandatory=$True)]
+            [string]$PossibleNewUniqueString
+        )
+    
+        if (!$ArrayOfStrings -or $ArrayOfStrings.Count -eq 0 -or ![bool]$($ArrayOfStrings -match "[\w]")) {
+            $PossibleNewUniqueString
+        }
+        else {
+            $OriginalString = $PossibleNewUniqueString
+            $Iteration = 1
+            while ($ArrayOfStrings -contains $PossibleNewUniqueString) {
+                $AppendedValue = "_$Iteration"
+                $PossibleNewUniqueString = $OriginalString + $AppendedValue
+                $Iteration++
+            }
+    
+            $PossibleNewUniqueString
+        }
+    }
+
+    function TestIsValidIPAddress([string]$IPAddress) {
+        [boolean]$Octets = (($IPAddress.Split(".") | Measure-Object).Count -eq 4) 
+        [boolean]$Valid  =  ($IPAddress -as [ipaddress]) -as [boolean]
+        Return  ($Valid -and $Octets)
+    }
+
+    function ResolveHost {
+        [CmdletBinding()]
+        Param(
+            [Parameter(Mandatory=$True)]
+            [string]$HostNameOrIP
+        )
+    
+        ##### BEGIN Main Body #####
+    
+        $RemoteHostNetworkInfoArray = @()
+        if (!$(TestIsValidIPAddress -IPAddress $HostNameOrIP)) {
+            try {
+                $HostNamePrep = $HostNameOrIP
+                [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                $IPv4AddressFamily = "InterNetwork"
+                $IPv6AddressFamily = "InterNetworkV6"
+    
+                $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostNamePrep)
+                $ResolutionInfo.AddressList | Where-Object {
+                    $_.AddressFamily -eq $IPv4AddressFamily
+                } | foreach {
+                    if ($RemoteHostArrayOfIPAddresses -notcontains $_.IPAddressToString) {
+                        $null = $RemoteHostArrayOfIPAddresses.Add($_.IPAddressToString)
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostNameOrIP when treated as a Host Name (as opposed to IP Address)!"
+            }
+        }
+        if (TestIsValidIPAddress -IPAddress $HostNameOrIP) {
+            try {
+                $HostIPPrep = $HostNameOrIP
+                [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                $null = $RemoteHostArrayOfIPAddresses.Add($HostIPPrep)
+    
+                $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostIPPrep)
+    
+                [System.Collections.ArrayList]$RemoteHostFQDNs = @() 
+                $null = $RemoteHostFQDNs.Add($ResolutionInfo.HostName)
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostNameOrIP when treated as an IP Address (as opposed to Host Name)!"
+            }
+        }
+    
+        if ($RemoteHostArrayOfIPAddresses.Count -eq 0) {
+            Write-Error "Unable to determine IP Address of $HostNameOrIP! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    
+        # At this point, we have $RemoteHostArrayOfIPAddresses...
+        [System.Collections.ArrayList]$RemoteHostFQDNs = @()
+        foreach ($HostIP in $RemoteHostArrayOfIPAddresses) {
+            try {
+                $FQDNPrep = [System.Net.Dns]::GetHostEntry($HostIP).HostName
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostIP. No PTR Record? Please check your DNS config."
+                continue
+            }
+            if ($RemoteHostFQDNs -notcontains $FQDNPrep) {
+                $null = $RemoteHostFQDNs.Add($FQDNPrep)
+            }
+        }
+    
+        if ($RemoteHostFQDNs.Count -eq 0) {
+            $null = $RemoteHostFQDNs.Add($ResolutionInfo.HostName)
+        }
+    
+        [System.Collections.ArrayList]$HostNameList = @()
+        [System.Collections.ArrayList]$DomainList = @()
+        foreach ($fqdn in $RemoteHostFQDNs) {
+            $PeriodCheck = $($fqdn | Select-String -Pattern "\.").Matches.Success
+            if ($PeriodCheck) {
+                $HostName = $($fqdn -split "\.")[0]
+                $Domain = $($fqdn -split "\.")[1..$($($fqdn -split "\.").Count-1)] -join '.'
+            }
+            else {
+                $HostName = $fqdn
+                $Domain = "Unknown"
+            }
+    
+            $null = $HostNameList.Add($HostName)
+            $null = $DomainList.Add($Domain)
+        }
+    
+        if ($RemoteHostFQDNs[0] -eq $null -and $HostNameList[0] -eq $null -and $DomainList -eq "Unknown" -and $RemoteHostArrayOfIPAddresses) {
+            [System.Collections.ArrayList]$SuccessfullyPingedIPs = @()
+            # Test to see if we can reach the IP Addresses
+            foreach ($ip in $RemoteHostArrayOfIPAddresses) {
+                if ([bool]$(Test-Connection $ip -Count 1 -ErrorAction SilentlyContinue)) {
+                    $null = $SuccessfullyPingedIPs.Add($ip)
+                }
+            }
+    
+            if ($SuccessfullyPingedIPs.Count -eq 0) {
+                Write-Error "Unable to resolve $HostNameOrIP! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+    
+        $FQDNPrep = if ($RemoteHostFQDNs) {$RemoteHostFQDNs[0]} else {$null}
+        if ($FQDNPrep -match ',') {
+            $FQDN = $($FQDNPrep -split ',')[0]
+        }
+        else {
+            $FQDN = $FQDNPrep
+        }
+    
+        $DomainPrep = if ($DomainList) {$DomainList[0]} else {$null}
+        if ($DomainPrep -match ',') {
+            $Domain = $($DomainPrep -split ',')[0]
+        }
+        else {
+            $Domain = $DomainPrep
+        }
+    
+        [pscustomobject]@{
+            IPAddressList   = [System.Collections.ArrayList]@($(if ($SuccessfullyPingedIPs) {$SuccessfullyPingedIPs} else {$RemoteHostArrayOfIPAddresses}))
+            FQDN            = $FQDN
+            HostName        = if ($HostNameList) {$HostNameList[0].ToLowerInvariant()} else {$null}
+            Domain          = $Domain
+        }
+    
+        ##### END Main Body #####
+    
+    }
+
+    function SetupRootCA {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory=$True)]
+            [pscredential]$DomainAdminCredentials,
+
+            [Parameter(Mandatory=$True)]
+            [System.Collections.ArrayList]$NetworkInfoPSObjects,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("EnterpriseRootCA")]
+            [string]$CAType,
+
+            [Parameter(Mandatory=$True)]
+            [string]$NewComputerTemplateCommonName,
+
+            [Parameter(Mandatory=$True)]
+            [string]$NewWebServerTemplateCommonName,
+
+            [Parameter(Mandatory=$True)]
+            [string]$FileOutputDirectory,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("Microsoft Software Key Storage Provider")]
+            [string]$CryptoProvider,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("2048","4096")]
+            [int]$KeyLength,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("SHA1","SHA256","SHA384","SHA512","MD5","MD4","MD2")]
+            [string]$HashAlgorithm,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("RSA")]
+            [string]$KeyAlgorithmValue,
+
+            [Parameter(Mandatory=$True)]
+            [ValidatePattern('http.*?\/<CaName><CRLNameSuffix>\.crl$')]
+            [string]$CDPUrl,
+
+            [Parameter(Mandatory=$True)]
+            [ValidatePattern('http.*?\/<CaName><CertificateName>.crt$')]
+            [string]$AIAUrl
+        )
+
+        #region >> Prep
+
+        if (!$(Test-Path $FileOutputDirectory)) {
+            $null = New-Item -ItemType Directory -Path $FileOutputDirectory 
+        }
+
+        try {
+            $null = Install-PackageProvider -Name Nuget -Force -Confirm:$False
+            $null = Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            Install-Module PSPKI -ErrorAction Stop
+            Import-Module PSPKI -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+        
+        try {
+            Import-Module ServerManager -ErrorAction Stop
+        }
+        catch {
+            Write-Error "Problem importing the ServerManager Module! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        $WindowsFeaturesToAdd = @(
+            "Adcs-Cert-Authority"
+            "RSAT-AD-Tools"
+        )
+        foreach ($FeatureName in $WindowsFeaturesToAdd) {
+            $SplatParams = @{
+                Name    = $FeatureName
+            }
+            if ($FeatureName -eq "Adcs-Cert-Authority") {
+                $SplatParams.Add("IncludeManagementTools",$True)
+            }
+
+            try {
+                $null = Add-WindowsFeature @SplatParams
+            }
+            catch {
+                Write-Error "Problem with 'Add-WindowsFeature $FeatureName'! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        $RelevantRootCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "RootCA"}
+
+        #endregion >> Prep
+
+        #region >> Install ADCSCA
+        try {
+            $FinalCryptoProvider = $KeyAlgorithmValue + "#" + $CryptoProvider
+            $InstallADCSCertAuthSplatParams = @{
+                Credential                  = $DomainAdminCredentials
+                CAType                      = $CAType
+                CryptoProviderName          = $FinalCryptoProvider
+                KeyLength                   = $KeyLength
+                HashAlgorithmName           = $HashAlgorithm
+                CACommonName                = $env:ComputerName
+                CADistinguishedNameSuffix   = $RelevantRootCANetworkInfo.DomainLDAPString
+                DatabaseDirectory           = $(Join-Path $env:SystemRoot "System32\CertLog")
+                ValidityPeriod              = "years"
+                ValidityPeriodUnits         = 20
+                Force                       = $True
+                ErrorAction                 = "Stop"
+            }
+            $null = Install-AdcsCertificationAuthority @InstallADCSCertAuthSplatParams
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem with Install-AdcsCertificationAuthority cmdlet! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            $null = certutil -setreg CA\\CRLPeriod "Years"
+            $null = certutil -setreg CA\\CRLPeriodUnits 1
+            $null = certutil -setreg CA\\CRLOverlapPeriod "Days"
+            $null = certutil -setreg CA\\CRLOverlapUnits 7
+
+            Write-Host "Done initial certutil commands..."
+
+            # Update the Local CDP
+            $LocalCDP = (Get-CACrlDistributionPoint)[0]
+            $null = $LocalCDP | Remove-CACrlDistributionPoint -Force
+            $LocalCDP.PublishDeltaToServer = $false
+            $null = $LocalCDP | Add-CACrlDistributionPoint -Force
+
+            # Remove pre-existing ldap/http CDPs, add custom CDP
+            $null = Get-CACrlDistributionPoint | Where-Object { $_.URI -like "http*" -or $_.Uri -like "ldap*" } | Remove-CACrlDistributionPoint -Force
+            $null = Add-CACrlDistributionPoint -Uri $CDPUrl -AddToCertificateCdp -Force
+
+            # Remove pre-existing ldap/http AIAs, add custom AIA
+            $null = Get-CAAuthorityInformationAccess | Where-Object { $_.Uri -like "http*" -or $_.Uri -like "ldap*" } | Remove-CAAuthorityInformationAccess -Force
+            $null = Add-CAAuthorityInformationAccess -Uri $AIAUrl -AddToCertificateAIA -Force
+
+            Write-Host "Done CDP and AIA cmdlets..."
+
+            # Enable all event auditing
+            $null = certutil -setreg CA\\AuditFilter 127
+
+            Write-Host "Done final certutil command..."
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            $null = Restart-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem with 'Restart-Service certsvc'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        #endregion >> Install ADCSCA
+
+        #region >> New Computer/Machine Template
+        Write-Host "Creating new Machine Certificate Template..."
+
+        while (!$WebServTempl -or !$ComputerTempl) {
+            $ConfigContext = $([ADSI]"LDAP://RootDSE").ConfigurationNamingContext
+            $LDAPLocation = "LDAP://CN=Certificate Templates,CN=Public Key Services,CN=Services,$ConfigContext"
+            $ADSI = New-Object System.DirectoryServices.DirectoryEntry($LDAPLocation,$DomainAdminCredentials.UserName,$($DomainAdminCredentials.GetNetworkCredential().Password),"Secure")
+
+            $WebServTempl = $ADSI.psbase.children | Where-Object {$_.distinguishedName -match "CN=WebServer,"}
+            $ComputerTempl = $ADSI.psbase.children | Where-Object {$_.distinguishedName -match "CN=Machine,"}
+
+            Write-Host "Waiting for Active Directory 'LDAP://CN=Certificate Templates,CN=Public Key Services,CN=Services,$ConfigContext' to contain default Machine/Computer and WebServer Certificate Templates..."
+            Start-Sleep -Seconds 15
+        }
+
+        $OIDRandComp = (Get-Random -Maximum 999999999999999).tostring('d15')
+        $OIDRandComp = $OIDRandComp.Insert(8,'.')
+        $CompOIDValue = $ComputerTempl.'msPKI-Cert-Template-OID'
+        $NewCompTemplOID = $CompOIDValue.subString(0,$CompOIDValue.length-4)+$OIDRandComp
+
+        $NewCompTempl = $ADSI.Create("pKICertificateTemplate","CN=$NewComputerTemplateCommonName")
+        $NewCompTempl.put("distinguishedName","CN=$NewComputerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,$ConfigContext")
+        $NewCompTempl.put("flags","131680")
+        $NewCompTempl.put("displayName","$NewComputerTemplateCommonName")
+        $NewCompTempl.put("revision","100")
+        $NewCompTempl.put("pKIDefaultKeySpec","1")
+        $NewCompTempl.put("pKIMaxIssuingDepth","0")
+        $pkiCritExt = "2.5.29.17","2.5.29.15"
+        $NewCompTempl.put("pKICriticalExtensions",$pkiCritExt)
+        $ExtKeyUse = "1.3.6.1.5.5.7.3.1","1.3.6.1.5.5.7.3.2"
+        $NewCompTempl.put("pKIExtendedKeyUsage",$ExtKeyUse)
+        $NewCompTempl.put("pKIDefaultCSPs","1,Microsoft RSA SChannel Cryptographic Provider")
+        $NewCompTempl.put("msPKI-RA-Signature","0")
+        $NewCompTempl.put("msPKI-Enrollment-Flag","0")
+        $NewCompTempl.put("msPKI-Private-Key-Flag","0") # Used to be "50659328"
+        $NewCompTempl.put("msPKI-Certificate-Name-Flag","1")
+        $NewCompTempl.put("msPKI-Minimal-Key-Size","2048")
+        $NewCompTempl.put("msPKI-Template-Schema-Version","2") # This needs to be either "1" or "2" for it to show up in the ADCS Website dropdown
+        $NewCompTempl.put("msPKI-Template-Minor-Revision","2")
+        $NewCompTempl.put("msPKI-Cert-Template-OID","$NewCompTemplOID")
+        $AppPol = "1.3.6.1.5.5.7.3.1","1.3.6.1.5.5.7.3.2"
+        $NewCompTempl.put("msPKI-Certificate-Application-Policy",$AppPol)
+        $NewCompTempl.Setinfo()
+        # Get the last few attributes from the existing default "CN=Machine" Certificate Template
+        $NewCompTempl.pKIOverlapPeriod = $ComputerTempl.pKIOverlapPeriod # Used to be $WebServTempl.pKIOverlapPeriod
+        $NewCompTempl.pKIKeyUsage = $ComputerTempl.pKIKeyUsage # Used to be $WebServTempl.pKIKeyUsage
+        $NewCompTempl.pKIExpirationPeriod = $ComputerTempl.pKIExpirationPeriod # Used to be $WebServTempl.pKIExpirationPeriod
+        $NewCompTempl.Setinfo()
+
+        # Set Access Rights / Permissions on the $NewCompTempl LDAP object
+        $AdObj = New-Object System.Security.Principal.NTAccount("Domain Computers")
+        $identity = $AdObj.Translate([System.Security.Principal.SecurityIdentifier])
+        $adRights = "ExtendedRight"
+        $type = "Allow"
+        $ACE = New-Object System.DirectoryServices.ActiveDirectoryAccessRule($identity,$adRights,$type)
+        $NewCompTempl.psbase.ObjectSecurity.SetAccessRule($ACE)
+        $NewCompTempl.psbase.commitchanges()
+
+        #endregion >> New Computer/Machine Template
+
+        #region >> New WebServer Template
+        Write-Host "Creating new WebServer Certificate Template..."
+
+        $OIDRandWebServ = (Get-Random -Maximum 999999999999999).tostring('d15')
+        $OIDRandWebServ = $OIDRandWebServ.Insert(8,'.')
+        $WebServOIDValue = $WebServTempl.'msPKI-Cert-Template-OID'
+        $NewWebServTemplOID = $WebServOIDValue.subString(0,$WebServOIDValue.length-4)+$OIDRandWebServ
+
+        $NewWebServTempl = $ADSI.Create("pKICertificateTemplate", "CN=$NewWebServerTemplateCommonName") 
+        $NewWebServTempl.put("distinguishedName","CN=$NewWebServerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,$ConfigContext")
+        $NewWebServTempl.put("flags","131649")
+        $NewWebServTempl.put("displayName","$NewWebServerTemplateCommonName")
+        $NewWebServTempl.put("revision","100")
+        $NewWebServTempl.put("pKIDefaultKeySpec","1")
+        $NewWebServTempl.put("pKIMaxIssuingDepth","0")
+        $pkiCritExt = "2.5.29.15"
+        $NewWebServTempl.put("pKICriticalExtensions",$pkiCritExt)
+        $ExtKeyUse = "1.3.6.1.5.5.7.3.1","1.3.6.1.5.5.7.3.2"
+        $NewWebServTempl.put("pKIExtendedKeyUsage",$ExtKeyUse)
+        $pkiCSP = "1,Microsoft RSA SChannel Cryptographic Provider","2,Microsoft DH SChannel Cryptographic Provider"
+        $NewWebServTempl.put("pKIDefaultCSPs",$pkiCSP)
+        $NewWebServTempl.put("msPKI-RA-Signature","0")
+        $NewWebServTempl.put("msPKI-Enrollment-Flag","0")
+        $NewWebServTempl.put("msPKI-Private-Key-Flag","0") # Used to be "16842752"
+        $NewWebServTempl.put("msPKI-Certificate-Name-Flag","1")
+        $NewWebServTempl.put("msPKI-Minimal-Key-Size","2048")
+        $NewWebServTempl.put("msPKI-Template-Schema-Version","2") # This needs to be either "1" or "2" for it to show up in the ADCS Website dropdown
+        $NewWebServTempl.put("msPKI-Template-Minor-Revision","2")
+        $NewWebServTempl.put("msPKI-Cert-Template-OID","$NewWebServTemplOID")
+        $AppPol = "1.3.6.1.5.5.7.3.1","1.3.6.1.5.5.7.3.2"
+        $NewWebServTempl.put("msPKI-Certificate-Application-Policy",$AppPol)
+        $NewWebServTempl.Setinfo()
+        # Get the last few attributes from the existing default "CN=WebServer" Certificate Template
+        $NewWebServTempl.pKIOverlapPeriod = $WebServTempl.pKIOverlapPeriod
+        $NewWebServTempl.pKIKeyUsage = $WebServTempl.pKIKeyUsage
+        $NewWebServTempl.pKIExpirationPeriod = $WebServTempl.pKIExpirationPeriod
+        $NewWebServTempl.Setinfo()
+
+        #endregion >> New WebServer Template
+
+        #region >> Finish
+
+        # Add the newly created custom Computer and WebServer Certificate Templates to List of Certificate Templates to Issue
+        # For this to be (relatively) painless, we need the following PSPKI Module cmdlets
+        Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewComputerTemplateCommonName | Set-CATemplate
+        Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewWebServerTemplateCommonName | Set-CATemplate
+
+        # Export New Certificate Templates to NewCert-Templates Directory
+        $ldifdeUserName = $($DomainAdminCredentials.UserName -split "\\")[-1]
+        $ldifdeDomain = $RelevantRootCANetworkInfo.DomainName
+        $ldifdePwd = $DomainAdminCredentials.GetNetworkCredential().Password
+        $null = ldifde -m -v -b $ldifdeUserName $ldifdeDomain $ldifdePwd -d "CN=$NewComputerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$ConfigContext" -f "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf"
+        $null = ldifde -m -v -b $ldifdeUserName $ldifdeDomain $ldifdePwd -d "CN=$NewWebServerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$ConfigContext" -f "$FileOutputDirectory\$NewWebServerTemplateCommonName.ldf"
+        
+        if ($(Get-Item "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf").Length -eq 0) {
+            Write-Warning "Problem with exporting the new Computer Certificate Template using ldifde command:`nldifde -m -v -b $ldifdeUserName $ldifdeDomain $ldifdePwd -d 'CN=$NewComputerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$ConfigContext' -f '$FileOutputDirectory\$NewComputerTemplateCommonName.ldf'"
+        }
+        if ($(Get-Item "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf").Length -eq 0) {
+            Write-Warning "Problem with exporting the new Web Server Certificate Template using ldifde command:`nldifde -m -v -b $ldifdeUserName $ldifdeDomain $ldifdePwd -d 'CN=$NewWebServerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$ConfigContext' -f '$FileOutputDirectory\$NewWebServerTemplateCommonName.ldf'"
+        }
+
+        # Side Note: You can import Certificate Templates on another Certificate Authority via ldife.exe with:
+        <#
+        ldifde -i -k -f "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf"
+        ldifde -i -k -f "$FileOutputDirectory\$NewWebServerTemplateCommonName.ldf"
+        #>
+
+        # Generate New CRL and Copy Contents of CertEnroll to $FileOutputDirectory
+        # NOTE: The below 'certutil -crl' outputs the new .crl file to "C:\Windows\System32\CertSrv\CertEnroll"
+        # which happens to contain some other important files that we'll need
+        $null = certutil -crl
+        Copy-Item -Path "C:\Windows\System32\CertSrv\CertEnroll\*" -Recurse -Destination $FileOutputDirectory -Force
+        # Convert RootCA .crt DER Certificate to Base64 Just in Case You Want to Use With Linux
+        $CrtFileItem = Get-ChildItem -Path $FileOutputDirectory -File -Recurse | Where-Object {$_.Name -match "$env:ComputerName\.crt"}
+        $null = certutil -encode $($CrtFileItem.FullName) $($CrtFileItem.FullName -replace '\.crt','_base64.cer')
+
+        # Make $FileOutputDirectory a Network Share until the Subordinate CA can download the files
+        # IMPORTANT NOTE: The below -CATimeout parameter should be in Seconds. So after 12000 seconds, the SMB Share
+        # will no longer be available
+        # IMPORTANT NOTE: The below -Temporary switch means that the SMB Share will NOT survive a reboot
+        $null = New-SMBShare -Name RootCAFiles -Path $FileOutputDirectory -CATimeout 12000 -Temporary
+        # Now the SMB Share  should be available
+        $RootCASMBShareFQDNLocation = '\\' + $RelevantRootCANetworkInfo.FQDN + "\RootCAFiles"
+        $RootCASMBShareIPLocation = '\\' + $RelevantRootCANetworkInfo.IPAddress + "\RootCAFiles"
+
+        Write-Host "Successfully configured Root Certificate Authority" -ForegroundColor Green
+        Write-Host "RootCA Files needed by the new Subordinate/Issuing/Intermediate CA Server(s) are now TEMPORARILY available at SMB Share located:`n$RootCASMBShareFQDNLocation`nOR`n$RootCASMBShareIPLocation" -ForegroundColor Green
+        
+        [pscustomobject] @{
+            SMBShareIPLocation = $RootCASMBShareIPLocation
+            SMBShareFQDNLocation = $RootCASMBShareFQDNLocation
+        }
+        
+        #endregion >> Finish
+    }
+
+    #endregion >> Helper Functions
+
+
+    #region >> Initial Prep
+
+    $ElevationCheck = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (!$ElevationCheck) {
+        Write-Error "You must run the build.ps1 as an Administrator (i.e. elevated PowerShell Session)! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    $NextHop = $(Get-NetRoute -AddressFamily IPv4 | Where-Object {$_.NextHop -ne "0.0.0.0"} | Sort-Object RouteMetric)[0].NextHop
+    $PrimaryIP = $(Find-NetRoute -RemoteIPAddress $NextHop | Where-Object {$($_ | Get-Member).Name -contains "IPAddress"}).IPAddress
+
+    [System.Collections.ArrayList]$NetworkLocationObjsToResolve = @()
+    if ($PSBoundParameters['RootCAIPOrFQDN']) {
+        $RootCAPSObj = [pscustomobject]@{
+            ServerPurpose       = "RootCA"
+            NetworkLocation     = $RootCAIPOrFQDN
+        }
+    }
+    else {
+        $RootCAPSObj = [pscustomobject]@{
+            ServerPurpose       = "RootCA"
+            NetworkLocation     = $env:ComputerName + "." + $(Get-CimInstance win32_computersystem).Domain
+        }
+    }
+    $null = $NetworkLocationObjsToResolve.Add($RootCAPSObj)
+
+    [System.Collections.ArrayList]$NetworkInfoPSObjects = @()
+    foreach ($NetworkLocationObj in $NetworkLocationObjsToResolve) {
+        if ($($NetworkLocation -split "\.")[0] -ne $env:ComputerName -and
+        $NetworkLocation -ne $PrimaryIP -and
+        $NetworkLocation -ne "$env:ComputerName.$($(Get-CimInstance win32_computersystem).Domain)"
+        ) {
+            try {
+                $NetworkInfo = ResolveHost -HostNameOrIP $NetworkLocationObj.NetworkLocation
+                $DomainName = $NetworkInfo.Domain
+                $FQDN = $NetworkInfo.FQDN
+                $IPAddr = $NetworkInfo.IPAddressList[0]
+                $DomainShortName = $($DomainName -split "\.")[0]
+                $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$StringPart"}) -join ','
+
+                if (!$NetworkInfo -or $DomainName -eq "Unknown" -or !$DomainName -or $FQDN -eq "Unknown" -or !$FQDN) {
+                    throw "Unable to gather Domain Name and/or FQDN info about '$NetworkLocation'! Please check DNS. Halting!"
+                }
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+
+            # Make sure WinRM in Enabled and Running on $env:ComputerName
+            try {
+                $null = Enable-PSRemoting -Force -ErrorAction Stop
+            }
+            catch {
+                $null = Get-NetConnectionProfile | Where-Object {$_.NetworkCategory -eq 'Public'} | Set-NetConnectionProfile -NetworkCategory 'Private'
+
+                try {
+                    $null = Enable-PSRemoting -Force
+                }
+                catch {
+                    Write-Error $_
+                    Write-Error "Problem with Enabble-PSRemoting WinRM Quick Config! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+
+            # If $env:ComputerName is not part of a Domain, we need to add this registry entry to make sure WinRM works as expected
+            if (!$(Get-CimInstance Win32_Computersystem).PartOfDomain) {
+                $null = reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
+            }
+
+            # Add the New Server's IP Addresses to $env:ComputerName's TrustedHosts
+            $CurrentTrustedHosts = $(Get-Item WSMan:\localhost\Client\TrustedHosts).Value
+            [System.Collections.ArrayList][array]$CurrentTrustedHostsAsArray = $CurrentTrustedHosts -split ','
+
+            $ItemsToAddToWSMANTrustedHosts = @($IPAddr,$FQDN,$($($FQDN -split "\.")[0]))
+            foreach ($NetItem in $ItemsToAddToWSMANTrustedHosts) {
+                if ($CurrentTrustedHostsAsArray -notcontains $NetItem) {
+                    $null = $CurrentTrustedHostsAsArray.Add($NetItem)
+                }
+            }
+            $UpdatedTrustedHostsString = $CurrentTrustedHostsAsArray -join ','
+            Set-Item WSMan:\localhost\Client\TrustedHosts $UpdatedTrustedHostsString -Force
+        }
+        else {
+            $DomainName = $(Get-CimInstance win32_computersystem).Domain
+            $DomainShortName = $($DomainName -split "\.")[0]
+            $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$StringPart"}) -join ','
+            $FQDN = $env:ComputerName + '.' + $DomainName
+            $IPAddr = $PrimaryIP
+        }
+
+        $PSObj = [pscustomobject]@{
+            ServerPurpose       = $NetworkLocationObj.ServerPurpose
+            FQDN                = $FQDN
+            HostName            = $($FQDN -split "\.")[0]
+            IPAddress           = $IPAddr
+            DomainName          = $DomainName
+            DomainShortName     = $DomainShortName
+            DomainLDAPString    = $DomainLDAPString
+        }
+        $null = $NetworkInfoPSObjects.Add($PSObj)
+    }
+
+    # Set some defaults if certain paramters are not used
+    if (!$CAType) {
+        $CAType = "EnterpriseRootCA"
+    }
+    if (!$NewComputerTemplateCommonName) {
+        $NewComputerTemplateCommonName = $DomainShortName + "Computer"
+    }
+    if (!$NewWebServerTemplateCommonName) {
+        $NewWebServerTemplateCommonName = $DomainShortName + "WebServer"
+    }
+    if (!$FileOutputDirectory) {
+        $FileOutputDirectory = "C:\NewRootCAOutput"
+    }
+    if (!$CryptoProvider) {
+        $CryptoProvider = "Microsoft Software Key Storage Provider"
+    }
+    if (!$KeyLength) {
+        $KeyLength = 2048
+    }
+    if (!$HashAlgorithm) {
+        $HashAlgorithm = "SHA256"
+    }
+    if (!$KeyAlgorithmValue) {
+        $KeyAlgorithmValue = "RSA"
+    }
+    if (!$CDPUrl) {
+        $CDPUrl = "http://pki.$($RelevantRootCANetworkInfo.DomainName)/certdata/<CaName><CRLNameSuffix>.crl"
+    }
+    if (!$AIAUrl) {
+        $AIAUrl = "http://pki.$($RelevantRootCANetworkInfo.DomainName)/certdata/<CaName><CertificateName>.crt"
+    }
+
+    # Create SetupRootCA Helper Function Splat Parameters
+    $SetupRootCASplatParams = @{
+        DomainAdminCredentials              = $DomainAdminCredentials
+        NetworkInfoPSObjects                = $NetworkInfoPSObjects
+        CAType                              = $CAType
+        NewComputerTemplateCommonName       = $NewComputerTemplateCommonName
+        NewWebServerTemplateCommonName      = $NewWebServerTemplateCommonName
+        FileOutputDirectory                 = $FileOutputDirectory
+        CryptoProvider                      = $CryptoProvider
+        KeyLength                           = $KeyLength
+        HashAlgorithm                       = $HashAlgorithm
+        KeyAlgorithmValue                   = $KeyAlgorithmValue
+        CDPUrl                              = $CDPUrl
+        AIAUrl                              = $AIAUrl
+    }
+
+    $RelevantRootCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "RootCA"}
+
+    #endregion >> Initial Prep
+
+
+    #region >> Do RootCA Install
+
+    if ($RelevantRootCANetworkInfo.HostName -ne $env:ComputerName) {
+        $PSSessionName = NewUniqueString -ArrayOfStrings $(Get-PSSession).Name -PossibleNewUniqueString "ToRootCA"
+
+        # Try to create a PSSession to the Root CA for 15 minutes, then give up
+        $Counter = 0
+        while (![bool]$(Get-PSSession -Name $PSSessionName -ErrorAction SilentlyContinue)) {
+            try {
+                $RootCAPSSession = New-PSSession -ComputerName $RelevantRootCANetworkInfo.IPAddress -Credential $DomainAdminCredentials -Name $PSSessionName -ErrorAction SilentlyContinue
+                if (![bool]$(Get-PSSession -Name $PSSessionName -ErrorAction SilentlyContinue)) {throw}
+            }
+            catch {
+                if ($Counter -le 60) {
+                    Write-Warning "New-PSSession '$PSSessionName' failed. Trying again in 15 seconds..."
+                    Start-Sleep -Seconds 15
+                }
+                else {
+                    Write-Error "Unable to create new PSSession to '$PSSessionName' using account '$($DomainAdminCredentials.UserName)'! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+            $Counter++
+        }
+
+        if (!$RootCAPSSession) {
+            Write-Error "Unable to create a PSSession to the Root CA Server at '$($RelevantRootCANetworkInfo.IPAddress)'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        $FunctionsForRemoteUse = @(
+            ${Function:SetupRootCA}.Ast.Extent.Text
+        )
+        Invoke-Command -Session $RootCAPSSession -ScriptBlock {
+            $using:FunctionsForRemoteUse | foreach { Invoke-Expression $_ }
+            SetupRootCA @using:SetupRootCASplatParams
+        }
+    }
+    else {
+        SetupRootCA @SetupRootCASplatParams
+    }
+
+    #endregion >> Do RootCA Install
+}
+
+function New-SubordinateCA {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$True)]
+        [string]$RootCAIPOrFQDN,
+
+        [Parameter(Mandatory=$True)]
+        [pscredential]$DomainAdminCredentials,
+
+        [Parameter(Mandatory=$False)]
+        [string]$SubCAIPOrFQDN,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("EnterpriseSubordinateCA")]
+        [string]$CAType,
+
+        [Parameter(Mandatory=$False)]
+        [string]$NewComputerTemplateCommonName,
+
+        [Parameter(Mandatory=$False)]
+        [string]$NewWebServerTemplateCommonName,
+
+        [Parameter(Mandatory=$False)]
+        [string]$FileOutputDirectory,
+
+        [Parameter(Mandatory=$False)]
+        <#
+        [ValidateSet("Microsoft Base Cryptographic Provider v1.0","Microsoft Base DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Base DSS Cryptographic Provider","Microsoft Base Smart Card Crypto Provider",
+        "Microsoft DH SChannel Cryptographic Provider","Microsoft Enhanced Cryptographic Provider v1.0",
+        "Microsoft Enhanced DSS and Diffie-Hellman Cryptographic Provider",
+        "Microsoft Enhanced RSA and AES Cryptographic Provider","Microsoft RSA SChannel Cryptographic Provider",
+        "Microsoft Strong Cryptographic Provider","Microsoft Software Key Storage Provider",
+        "Microsoft Passport Key Storage Provider")]
+        #>
+        [ValidateSet("Microsoft Software Key Storage Provider")]
+        [string]$CryptoProvider,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("2048","4096")]
+        [int]$KeyLength,
+
+        [Parameter(Mandatory=$False)]
+        [ValidateSet("SHA1","SHA256","SHA384","SHA512","MD5","MD4","MD2")]
+        [string]$HashAlgorithm,
+
+        # For now, stick to just using RSA
+        [Parameter(Mandatory=$False)]
+        #[ValidateSet("RSA","DH","DSA","ECDH_P256","ECDH_P521","ECDSA_P256","ECDSA_P384","ECDSA_P521")]
+        [ValidateSet("RSA")]
+        [string]$KeyAlgorithmValue,
+
+        [Parameter(Mandatory=$False)]
+        [ValidatePattern('http.*?\/<CaName><CRLNameSuffix>\.crl$')]
+        [string]$CDPUrl,
+
+        [Parameter(Mandatory=$False)]
+        [ValidatePattern('http.*?\/<CaName><CertificateName>.crt$')]
+        [string]$AIAUrl
+    )
+
+    #region >> Helper Functions
+
+    function NewUniqueString {
+        [CmdletBinding()]
+        Param(
+            [Parameter(Mandatory=$False)]
+            [string[]]$ArrayOfStrings,
+    
+            [Parameter(Mandatory=$True)]
+            [string]$PossibleNewUniqueString
+        )
+    
+        if (!$ArrayOfStrings -or $ArrayOfStrings.Count -eq 0 -or ![bool]$($ArrayOfStrings -match "[\w]")) {
+            $PossibleNewUniqueString
+        }
+        else {
+            $OriginalString = $PossibleNewUniqueString
+            $Iteration = 1
+            while ($ArrayOfStrings -contains $PossibleNewUniqueString) {
+                $AppendedValue = "_$Iteration"
+                $PossibleNewUniqueString = $OriginalString + $AppendedValue
+                $Iteration++
+            }
+    
+            $PossibleNewUniqueString
+        }
+    }
+
+    function TestIsValidIPAddress([string]$IPAddress) {
+        [boolean]$Octets = (($IPAddress.Split(".") | Measure-Object).Count -eq 4) 
+        [boolean]$Valid  =  ($IPAddress -as [ipaddress]) -as [boolean]
+        Return  ($Valid -and $Octets)
+    }
+
+    function ResolveHost {
+        [CmdletBinding()]
+        Param(
+            [Parameter(Mandatory=$True)]
+            [string]$HostNameOrIP
+        )
+    
+        ##### BEGIN Main Body #####
+    
+        $RemoteHostNetworkInfoArray = @()
+        if (!$(TestIsValidIPAddress -IPAddress $HostNameOrIP)) {
+            try {
+                $HostNamePrep = $HostNameOrIP
+                [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                $IPv4AddressFamily = "InterNetwork"
+                $IPv6AddressFamily = "InterNetworkV6"
+    
+                $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostNamePrep)
+                $ResolutionInfo.AddressList | Where-Object {
+                    $_.AddressFamily -eq $IPv4AddressFamily
+                } | foreach {
+                    if ($RemoteHostArrayOfIPAddresses -notcontains $_.IPAddressToString) {
+                        $null = $RemoteHostArrayOfIPAddresses.Add($_.IPAddressToString)
+                    }
+                }
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostNameOrIP when treated as a Host Name (as opposed to IP Address)!"
+            }
+        }
+        if (TestIsValidIPAddress -IPAddress $HostNameOrIP) {
+            try {
+                $HostIPPrep = $HostNameOrIP
+                [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                $null = $RemoteHostArrayOfIPAddresses.Add($HostIPPrep)
+    
+                $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostIPPrep)
+    
+                [System.Collections.ArrayList]$RemoteHostFQDNs = @() 
+                $null = $RemoteHostFQDNs.Add($ResolutionInfo.HostName)
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostNameOrIP when treated as an IP Address (as opposed to Host Name)!"
+            }
+        }
+    
+        if ($RemoteHostArrayOfIPAddresses.Count -eq 0) {
+            Write-Error "Unable to determine IP Address of $HostNameOrIP! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    
+        # At this point, we have $RemoteHostArrayOfIPAddresses...
+        [System.Collections.ArrayList]$RemoteHostFQDNs = @()
+        foreach ($HostIP in $RemoteHostArrayOfIPAddresses) {
+            try {
+                $FQDNPrep = [System.Net.Dns]::GetHostEntry($HostIP).HostName
+            }
+            catch {
+                Write-Verbose "Unable to resolve $HostIP. No PTR Record? Please check your DNS config."
+                continue
+            }
+            if ($RemoteHostFQDNs -notcontains $FQDNPrep) {
+                $null = $RemoteHostFQDNs.Add($FQDNPrep)
+            }
+        }
+    
+        if ($RemoteHostFQDNs.Count -eq 0) {
+            $null = $RemoteHostFQDNs.Add($ResolutionInfo.HostName)
+        }
+    
+        [System.Collections.ArrayList]$HostNameList = @()
+        [System.Collections.ArrayList]$DomainList = @()
+        foreach ($fqdn in $RemoteHostFQDNs) {
+            $PeriodCheck = $($fqdn | Select-String -Pattern "\.").Matches.Success
+            if ($PeriodCheck) {
+                $HostName = $($fqdn -split "\.")[0]
+                $Domain = $($fqdn -split "\.")[1..$($($fqdn -split "\.").Count-1)] -join '.'
+            }
+            else {
+                $HostName = $fqdn
+                $Domain = "Unknown"
+            }
+    
+            $null = $HostNameList.Add($HostName)
+            $null = $DomainList.Add($Domain)
+        }
+    
+        if ($RemoteHostFQDNs[0] -eq $null -and $HostNameList[0] -eq $null -and $DomainList -eq "Unknown" -and $RemoteHostArrayOfIPAddresses) {
+            [System.Collections.ArrayList]$SuccessfullyPingedIPs = @()
+            # Test to see if we can reach the IP Addresses
+            foreach ($ip in $RemoteHostArrayOfIPAddresses) {
+                if ([bool]$(Test-Connection $ip -Count 1 -ErrorAction SilentlyContinue)) {
+                    $null = $SuccessfullyPingedIPs.Add($ip)
+                }
+            }
+    
+            if ($SuccessfullyPingedIPs.Count -eq 0) {
+                Write-Error "Unable to resolve $HostNameOrIP! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+    
+        $FQDNPrep = if ($RemoteHostFQDNs) {$RemoteHostFQDNs[0]} else {$null}
+        if ($FQDNPrep -match ',') {
+            $FQDN = $($FQDNPrep -split ',')[0]
+        }
+        else {
+            $FQDN = $FQDNPrep
+        }
+    
+        $DomainPrep = if ($DomainList) {$DomainList[0]} else {$null}
+        if ($DomainPrep -match ',') {
+            $Domain = $($DomainPrep -split ',')[0]
+        }
+        else {
+            $Domain = $DomainPrep
+        }
+    
+        [pscustomobject]@{
+            IPAddressList   = [System.Collections.ArrayList]@($(if ($SuccessfullyPingedIPs) {$SuccessfullyPingedIPs} else {$RemoteHostArrayOfIPAddresses}))
+            FQDN            = $FQDN
+            HostName        = if ($HostNameList) {$HostNameList[0].ToLowerInvariant()} else {$null}
+            Domain          = $Domain
+        }
+    
+        ##### END Main Body #####
+    
+    }
+
+    function SetupSubCA {
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory=$True)]
+            [pscredential]$DomainAdminCredentials,
+
+            [Parameter(Mandatory=$True)]
+            [System.Collections.ArrayList]$NetworkInfoPSObjects,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("EnterpriseSubordinateCA")]
+            [string]$CAType,
+
+            [Parameter(Mandatory=$True)]
+            [string]$NewComputerTemplateCommonName,
+
+            [Parameter(Mandatory=$True)]
+            [string]$NewWebServerTemplateCommonName,
+
+            [Parameter(Mandatory=$True)]
+            [string]$FileOutputDirectory,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("Microsoft Software Key Storage Provider")]
+            [string]$CryptoProvider,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("2048","4096")]
+            [int]$KeyLength,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("SHA1","SHA256","SHA384","SHA512","MD5","MD4","MD2")]
+            [string]$HashAlgorithm,
+
+            [Parameter(Mandatory=$True)]
+            [ValidateSet("RSA")]
+            [string]$KeyAlgorithmValue,
+
+            [Parameter(Mandatory=$True)]
+            [ValidatePattern('http.*?\/<CaName><CRLNameSuffix>\.crl$')]
+            [string]$CDPUrl,
+
+            [Parameter(Mandatory=$True)]
+            [ValidatePattern('http.*?\/<CaName><CertificateName>.crt$')]
+            [string]$AIAUrl
+        )
+
+        $RelevantRootCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "RootCA"}
+        $RelevantSubCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "SubCA"}
+
+        # Mount the RootCA Temporary SMB Share To Get the Following Files
+        <#
+        Mode                LastWriteTime         Length Name                                                    PSComputerName
+        ----                -------------         ------ ----                                                    --------------
+        -a----        5/22/2018   8:09 AM              0 alphaComputer.ldf                                       192.168.2.111
+        -a----        5/22/2018   8:09 AM              0 alphaWebServer.ldf                                      192.168.2.111
+        -a----        5/22/2018   8:07 AM            841 RootCA.alpha.lab_ROOTCA.crt                             192.168.2.111
+        -a----        5/22/2018   8:09 AM           1216 RootCA.alpha.lab_ROOTCA_base64.cer                      192.168.2.111
+        -a----        5/22/2018   8:09 AM            483 ROOTCA.crl                                              192.168.2.111
+        #>
+        # This also serves as a way to determine if the Root CA is ready
+        while (!$RootCASMBShareMount) {
+            $NewPSDriveSplatParams = @{
+                Name            = "R"
+                PSProvider      = "FileSystem"
+                Root            = "\\$($RelevantRootCANetworkInfo.FQDN)\RootCAFiles"
+                Credential      = $DomainAdminCredentials
+                ErrorAction     = "SilentlyContinue"
+            }
+            $RootCASMBShareMount = New-PSDrive @NewPSDriveSplatParams
+
+            if (!$RootCASMBShareMount) {
+                Write-Host "Waiting for RootCA SMB Share to become available. Sleeping for 15 seconds..."
+                Start-Sleep -Seconds 15
+            }
+        }
+
+        if (!$(Test-Path $FileOutputDirectory)) {
+            $null = New-Item -ItemType Directory -Path $FileOutputDirectory 
+        }
+        
+        try {
+            $null = Install-PackageProvider -Name Nuget -Force -Confirm:$False
+            $null = Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+            Install-Module PSPKI -ErrorAction Stop
+            Import-Module PSPKI -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+        
+        try {
+            Import-Module ServerManager -ErrorAction Stop
+        }
+        catch {
+            Write-Error "Problem importing the ServerManager Module! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        $WindowsFeaturesToAdd = @(
+            "Adcs-Cert-Authority"
+            "Adcs-Web-Enrollment"
+            "Web-Mgmt-Console"
+            "RSAT-AD-Tools"
+        )
+        foreach ($FeatureName in $WindowsFeaturesToAdd) {
+            $SplatParams = @{
+                Name    = $FeatureName
+            }
+            if ($FeatureName -eq "Adcs-Cert-Authority") {
+                $SplatParams.Add("IncludeManagementTools",$True)
+            }
+
+            try {
+                $null = Add-WindowsFeature @SplatParams
+            }
+            catch {
+                Write-Error "Problem with 'Add-WindowsFeature $FeatureName'! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        #region >> Install ADCSCA
+        try {
+            $CertRequestFile = $FileOutputDirectory + "\" + $RelevantSubCANetworkInfo.FQDN + "_" + $RelevantSubCANetworkInfo.HostName + ".csr"
+            $FinalCryptoProvider = $KeyAlgorithmValue + "#" + $CryptoProvider
+            $InstallADCSCertAuthSplatParams = @{
+                Credential                  = $DomainAdminCredentials
+                CAType                      = $CAType
+                CryptoProviderName          = $FinalCryptoProvider
+                KeyLength                   = $KeyLength
+                HashAlgorithmName           = $HashAlgorithm
+                CACommonName                = $env:ComputerName
+                CADistinguishedNameSuffix   = $RelevantSubCANetworkInfo.DomainLDAPString
+                OutputCertRequestFile       = $CertRequestFile
+                Force                       = $True
+                ErrorAction                 = "Stop"
+            }
+            Install-AdcsCertificationAuthority @InstallADCSCertAuthSplatParams
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem with Install-AdcsCertificationAuthority cmdlet! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Copy RootCA .crt and .crl From Network Share to SubCA CertEnroll Directory
+        Copy-Item -Path "$($RootCASMBShareMount.Name)`:\*" -Recurse -Destination "C:\Windows\System32\CertSrv\CertEnroll" -Force
+
+        # Copy RootCA .crt and .crl From Network Share to the $FileOutputDirectory
+        Copy-Item -Path "$($RootCASMBShareMount.Name)`:\*" -Recurse -Destination $FileOutputDirectory -Force
+
+        # Install the RootCA .crt to the Certificate Store
+        [array]$RootCACrtFile = Get-ChildItem -Path $FileOutputDirectory -Filter "*.crt"
+        if ($RootCACrtFile.Count -eq 0) {
+            Write-Error "Unable to find RootCA .crt file under the directory '$FileOutputDirectory'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($RootCACrtFile.Count -gt 1) {
+            $RootCACrtFile = $RootCACrtFile | Where-Object {$_.Name -eq $($RelevantRootCANetworkInfo.FQDN + "_" + $RelevantRootCANetworkInfo.HostName + '.crt')}
+        }
+        if ($RootCACrtFile -eq 1) {
+            $RootCACrtFile = $RootCACrtFile[0]
+        }
+        certutil -addstore "Root" "$($RootCACrtFile.FullName)"
+
+        # Install RootCA .crl
+        [array]$RootCACrlFile = Get-ChildItem -Path $FileOutputDirectory -Filter "*.crl"
+        if ($RootCACrlFile.Count -eq 0) {
+            Write-Error "Unable to find RootCA .crl file under the directory '$FileOutputDirectory'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        if ($RootCACrlFile.Count -gt 1) {
+            $RootCACrlFile = $RootCACrlFile | Where-Object {$_.Name -eq $($RelevantRootCANetworkInfo.HostName + '.crl')}
+        }
+        if ($RootCACrlFile -eq 1) {
+            $RootCACrlFile = $RootCACrlFile[0]
+        }
+        certutil -addstore "Root" "$($RootCACrlFile.FullName)"
+
+        # Create the Certdata IIS folder
+        $CertDataIISFolder = "C:\inetpub\wwwroot\certdata"
+        if (!$(Test-Path $CertDataIISFolder)) {
+            $null = New-Item -ItemType Directory -Path $CertDataIISFolder -Force
+        }
+
+        # Stage certdata IIS site and enable directory browsing
+        Copy-Item -Path "$FileOutputDirectory\*" -Recurse -Destination $CertDataIISFolder -Force
+        & "C:\Windows\system32\inetsrv\appcmd.exe" set config "Default Web Site/certdata" /section:directoryBrowse /enabled:true
+
+        # Update DNS Alias
+        $DomainControllerFQDN = $($env:LOGONSERVER.replace("\\","")) + $RelevantSubCANetworkInfo.Domain
+        Invoke-Command -ComputerName $DomainControllerFQDN -Credential $DomainAdminCredentials -ScriptBlock {
+            Add-DnsServerResourceRecordCname -Name "pki" -HostnameAlias $RelevantSubCANetworkInfo.FQDN -ZoneName $RelevantSubCANetworkInfo.Domain
+        }
+
+        # Request and Install SCA Certificate from Existing CSR
+        $RootCACertUtilLocation = "$($RelevantRootCANetworkInfo.FQDN)\$($RelevantRootCANetworkInfo.HostName)" 
+        $SubCACACertUtilLocation = "$($RelevantSubCANetworkInfo.FQDN)\$($RelevantSubCANetworkInfo.HostName)"
+        $SubCACerFileOut = $FileOutputDirectory + "\" + $RelevantSubCANetworkInfo.FQDN + "_" + $RelevantSubCANetworkInfo.HostName + ".cer"
+        $CertificateChainOut = $FileOutputDirectory + "\" + $RelevantSubCANetworkInfo.FQDN + "_" + $RelevantSubCANetworkInfo.HostName + ".p7b"
+
+        $RequestID = (certreq.exe -config "$RootCACertUtilLocation" -submit "$CertRequestFile" "$SubCACerFileOut").split('"')[2]
+        Start-Sleep -Seconds 5
+        certreq.exe -retrieve -config $RootCACertUtilLocation $RequestID $CertificateChainOut
+        Start-Sleep -Seconds 5
+        certutil.exe -config $SubCACACertUtilLocation -installCert $CertificateChainOut
+  
+        try {
+            Restart-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        # Enable Subject Alt Name
+        certutil -setreg policy\\EditFlags +EDITF_ATTRIBUTESUBJECTALTNAME2
+
+        try {
+            Stop-Service certsvc -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Stopped") {
+            Write-Host "Waiting for the 'certsvc' service to stop..."
+            Start-Sleep -Seconds 5
+        }
+
+        # Install Certification Authority Web Enrollment
+        try {
+            Install-AdcsWebEnrollment -Force
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            Start-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        try {
+            # Install Certificate Enrollment Web Service
+            Install-AdcsEnrollmentWebService -AuthenticationType "UserName" -ApplicationPoolIdentity -CAConfig "$($RelevantSubCANetworkInfo.HostName)\$($RelevantSubCANetworkInfo.HostName)" -Force
+            
+            # Configure CRL, CDP, AIA, CA Auditing
+            # Update CRL Validity period
+            certutil -setreg CA\\CRLPeriod "Weeks"
+            certutil -setreg CA\\CRLPeriodUnits 4
+            certutil -setreg CA\\CRLOverlapPeriod "Days"
+            certutil -setreg CA\\CRLOverlapUnits 3
+
+            # Remove pre-existing http CDP, add custom CDP
+            Get-CACrlDistributionPoint | Where-Object { $_.URI -like "http#*" } | Remove-CACrlDistributionPoint -Force
+            Add-CACrlDistributionPoint -Uri $CDPUrl -AddToCertificateCdp -Force
+
+            # Remove pre-existing http AIA, add custom AIA
+            Get-CAAuthorityInformationAccess | Where-Object { $_.Uri -like "http*" } | Remove-CAAuthorityInformationAccess -Force
+            Add-CAAuthorityInformationAccess -Uri $AIAUrl -AddToCertificateAIA -Force
+
+            # Enable all event auditing
+            certutil -setreg CA\\AuditFilter 127
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            Restart-Service certsvc -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        while ($(Get-Service certsvc).Status -ne "Running") {
+            Write-Host "Waiting for the 'certsvc' service to start..."
+            Start-Sleep -Seconds 5
+        }
+
+        # Publish SubCA CRL
+        # Generate New CRL and Copy Contents of CertEnroll to $FileOutputDirectory
+        # NOTE: The below 'certutil -crl' outputs the new .crl file to "C:\Windows\System32\CertSrv\CertEnroll"
+        # which happens to contain some other important files that we'll need
+        $null = certutil -crl
+        Copy-Item -Path "C:\Windows\System32\CertSrv\CertEnroll\*" -Recurse -Destination $FileOutputDirectory -Force
+        # Convert SubCA .crt DER Certificate to Base64 Just in Case You Want to Use With Linux
+        $CrtFileItem = Get-ChildItem -Path $FileOutputDirectory -File -Recurse | Where-Object {$_.Name -match "$env:ComputerName\.crt"}
+        $null = certutil -encode $($CrtFileItem.FullName) $($CrtFileItem.FullName -replace '\.crt','_base64.cer')
+        
+        # Copy SubCA CRL From SubCA CertEnroll directory to C:\inetpub\wwwroot\certdata" do
+        $SubCACrlFileItem = Get-ChildItem -Path "C:\Windows\System32\CertSrv\CertEnroll" -File | Where-Object {$_.Name -match "$env:ComputerName\.crl"}
+        Copy-Item -Path $SubCACrlFileItem.FullName -Destination "C:\inetpub\wwwroot\certdata\$($SubCACrlFileItem.Name)" -Force
+        
+        # Copy SubCA Cert From $FileOutputDirectory to C:\inetpub\wwwroot\certdata
+        $SubCACerFileItem = Get-ChildItem -Path $FileOutputDirectory -File -Recurse | Where-Object {$_.Name -match "$env:ComputerName\.cer"}
+        Copy-Item $SubCACerFileItem.FullName -Destination "C:\inetpub\wwwroot\certdata\$($SubCACerFileItem.Name)"
+
+        # Import New Certificate Templates that were exported by the RootCA to a Network Share
+        # NOTE: This shouldn't be necessary if we're using and Enterprise Root CA
+        #ldifde -i -k -f $($RootCASMBShareMount.Name + ':\' + $NewComputerTemplateCommonName + '.ldf')
+        #ldifde -i -k -f $($RootCASMBShareMount.Name + ':\' + $NewWebServerTemplateCommonName + '.ldf')
+        
+        try {
+            # Add New Cert Templates to List of Temps to Issue using the PSPKI Module
+            Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewComputerTemplateCommonName | Set-CATemplate
+            Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewWebServerTemplateCommonName | Set-CATemplate
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Request PKI WebServer Alias Certificate
+        $PKIWebSiteCertInfFile = "$FileOutputDirectory\pki.$($RelevantSubCANetworkInfo.DomainName).inf"
+        $PKIWebSiteCertRequestFile = "$FileOutputDirectory\pki.$($RelevantSubCANetworkInfo.DomainName).csr"
+        $PKIWebsiteCertFileOut = "$FileOutputDirectory\pki.$($RelevantSubCANetworkInfo.DomainName).cer"
+
+        $inf = @"
+[Version]
+Signature="`$Windows NT`$"
+
+[NewRequest]
+Subject = "CN=pki.$($RelevantSubCANetworkInfo.DomainName)"
+KeySpec = 1
+KeyLength = $KeyLength
+Exportable = TRUE
+FriendlyName = "PKICertSrvOn$env:ComputerName"
+MachineKeySet = TRUE
+SMIME = False
+PrivateKeyArchive = FALSE
+UserProtected = FALSE
+UseExistingKeySet = FALSE
+ProviderName = "Microsoft RSA SChannel Cryptographic Provider"
+ProviderType = 12
+RequestType = PKCS10
+KeyUsage = 0xa0
+"@
+
+        $inf | Out-File $PKIWebSiteCertInfFile
+        certreq.exe -new "$PKIWebSiteCertInfFile" "$PKIWebSiteCertRequestFile"
+        Sleep -Seconds 5
+        certreq.exe -attrib "CertificateTemplate:$NewWebServerTemplateCommonName" -config "$SubCACACertUtilLocation" -submit "$PKIWebSiteCertInfFile" "$PKIWebsiteCertFileOut"
+        Sleep -Seconds 5
+        certreq.exe -accept "$PKIWebsiteCertFileOut"
+
+        if (!$(Test-Path $PKIWebsiteCertFileOut)) {
+            Write-Error "There was a problem requesting a WebServer Certificate from the Subordinate CA for the PKI (certsrv) website! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Copy PKI SubCA Alias Cert From $FileOutputDirectory to C:\inetpub\wwwroot\certdata
+        Copy-Item -Path $PKIWebsiteCertFileOut -Destination "C:\inetpub\wwwroot\certdata\pki.$($RelevantSubCANetworkInfo.DomainName).cer"
+
+        # Configure HTTPS Binding
+        try {
+            $CertInfo = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
+            $CertInfo.Import($PKIWebsiteCertFileOut)
+            $PKIWebsiteCertThumbPrint = $CertInfo.ThumbPrint
+
+            Import-Module WebAdministration
+            Remove-Item IIS:\SslBindings\*
+            Get-ChildItem Cert:\LocalMachine\My | Where-Object {$_.Thumbprint -eq $PKIWebsiteCertThumbPrint} | New-Item IIS:\SslBindings\0.0.0.0!443
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Configure Application Settings
+        & "C:\Windows\system32\inetsrv\appcmd.exe" set config /commit:MACHINE /section:appSettings /+"[key='Friendly Name',value='$($RelevantSubCANetworkInfo.DomainName) Domain Certification Authority']"
+    }
+
+    #endregion >> Helper Functions
+
+    
+    #region >> Initial Prep
+
+    $ElevationCheck = [System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (!$ElevationCheck) {
+        Write-Error "You must run the build.ps1 as an Administrator (i.e. elevated PowerShell Session)! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    $NextHop = $(Get-NetRoute -AddressFamily IPv4 | Where-Object {$_.NextHop -ne "0.0.0.0"} | Sort-Object RouteMetric)[0].NextHop
+    $PrimaryIP = $(Find-NetRoute -RemoteIPAddress $NextHop | Where-Object {$($_ | Get-Member).Name -contains "IPAddress"}).IPAddress
+
+    [System.Collections.ArrayList]$NetworkLocationObjsToResolve = @(
+        [pscustomobject]@{
+            ServerPurpose       = "RootCA"
+            NetworkLocation     = $RootCAIPOrFQDN
+        }
+    )
+    if ($PSBoundParameters['SubCAIPOrFQDN']) {
+        $SubCAPSObj = [pscustomobject]@{
+            ServerPurpose       = "SubCA"
+            NetworkLocation     = $SubCAIPOrFQDN
+        }
+    }
+    else {
+        $SubCAPSObj = [pscustomobject]@{
+            ServerPurpose       = "SubCA"
+            NetworkLocation     = $env:ComputerName + "." + $(Get-CimInstance win32_computersystem).Domain
+        }
+    }
+    $null = $NetworkLocationObjsToResolve.Add($SubCAPSObj)
+
+    [System.Collections.ArrayList]$NetworkInfoPSObjects = @()
+    foreach ($NetworkLocationObj in $NetworkLocationObjsToResolve) {
+        if ($($NetworkLocation -split "\.")[0] -ne $env:ComputerName -and
+        $NetworkLocation -ne $PrimaryIP -and
+        $NetworkLocation -ne "$env:ComputerName.$($(Get-CimInstance win32_computersystem).Domain)"
+        ) {
+            try {
+                $NetworkInfo = ResolveHost -HostNameOrIP $NetworkLocationObj.NetworkLocation
+                $DomainName = $NetworkInfo.Domain
+                $FQDN = $NetworkInfo.FQDN
+                $IPAddr = $NetworkInfo.IPAddressList[0]
+                $DomainShortName = $($DomainName -split "\.")[0]
+                $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$Part"}) -join ','
+
+                if (!$NetworkInfo -or $DomainName -eq "Unknown" -or !$DomainName -or $FQDN -eq "Unknown" -or !$FQDN) {
+                    throw "Unable to gather Domain Name and/or FQDN info about '$NetworkLocation'! Please check DNS. Halting!"
+                }
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+
+            # Make sure WinRM in Enabled and Running on $env:ComputerName
+            try {
+                $null = Enable-PSRemoting -Force -ErrorAction Stop
+            }
+            catch {
+                $null = Get-NetConnectionProfile | Where-Object {$_.NetworkCategory -eq 'Public'} | Set-NetConnectionProfile -NetworkCategory 'Private'
+
+                try {
+                    $null = Enable-PSRemoting -Force
+                }
+                catch {
+                    Write-Error $_
+                    Write-Error "Problem with Enabble-PSRemoting WinRM Quick Config! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+
+            # If $env:ComputerName is not part of a Domain, we need to add this registry entry to make sure WinRM works as expected
+            if (!$(Get-CimInstance Win32_Computersystem).PartOfDomain) {
+                $null = reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
+            }
+
+            # Add the New Server's IP Addresses to $env:ComputerName's TrustedHosts
+            $CurrentTrustedHosts = $(Get-Item WSMan:\localhost\Client\TrustedHosts).Value
+            [System.Collections.ArrayList][array]$CurrentTrustedHostsAsArray = $CurrentTrustedHosts -split ','
+
+            $ItemsToAddToWSMANTrustedHosts = @($IPAddr,$FQDN,$($($FQDN -split "\.")[0]))
+            foreach ($NetItem in $ItemsToAddToWSMANTrustedHosts) {
+                if ($CurrentTrustedHostsAsArray -notcontains $NetItem) {
+                    $null = $CurrentTrustedHostsAsArray.Add($NetItem)
+                }
+            }
+            $UpdatedTrustedHostsString = $CurrentTrustedHostsAsArray -join ','
+            Set-Item WSMan:\localhost\Client\TrustedHosts $UpdatedTrustedHostsString -Force
+        }
+        else {
+            $DomainName = $(Get-CimInstance win32_computersystem).Domain
+            $DomainShortName = $($DomainName -split "\.")[0]
+            $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$StringPart"}) -join ','
+            $FQDN = $env:ComputerName + '.' + $DomainName
+            $IPAddr = $PrimaryIP
+        }
+
+        $PSObj = [pscustomobject]@{
+            ServerPurpose       = $NetworkLocationObj.ServerPurpose
+            FQDN                = $FQDN
+            HostName            = $($FQDN -split "\.")[0]
+            IPAddress           = $IPAddr
+            DomainName          = $DomainName
+            DomainShortName     = $DomainShortName
+            DomainLDAPString    = $DomainLDAPString
+        }
+        $null = $NetworkInfoPSObjects.Add($PSObj)
+    }
+
+    # Set some defaults if certain paramters are not used
+    if (!$CAType) {
+        $CAType = "EnterpriseSubordinateCA"
+    }
+    if (!$NewComputerTemplateCommonName) {
+        $NewComputerTemplateCommonName = $DomainShortName + "Computer"
+    }
+    if (!$NewWebServerTemplateCommonName) {
+        $NewWebServerTemplateCommonName = $DomainShortName + "WebServer"
+    }
+    if (!$FileOutputDirectory) {
+        $FileOutputDirectory = "C:\SubCAWorkingDir"
+    }
+    if (!$CryptoProvider) {
+        $CryptoProvider = "Microsoft Software Key Storage Provider"
+    }
+    if (!$KeyLength) {
+        $KeyLength = 2048
+    }
+    if (!$HashAlgorithm) {
+        $HashAlgorithm = "SHA256"
+    }
+    if (!$KeyAlgorithmValue) {
+        $KeyAlgorithmValue = "RSA"
+    }
+    if (!$CDPUrl) {
+        $CDPUrl = "http://pki.$($RelevantSubCANetworkInfo.DomainName)/certdata/<CaName><CRLNameSuffix>.crl"
+    }
+    if (!$AIAUrl) {
+        $AIAUrl = "http://pki.$($RelevantSubCANetworkInfo.DomainName)/certdata/<CaName><CertificateName>.crt"
+    }
+
+    # Create SetupRootCA Helper Function Splat Parameters
+    $SetupSubCASplatParams = @{
+        DomainAdminCredentials              = $DomainAdminCredentials
+        NetworkInfoPSObjects                = $NetworkInfoPSObjects
+        CAType                              = $CAType
+        NewComputerTemplateCommonName       = $NewComputerTemplateCommonName
+        NewWebServerTemplateCommonName      = $NewWebServerTemplateCommonName
+        FileOutputDirectory                 = $FileOutputDirectory
+        CryptoProvider                      = $CryptoProvider
+        KeyLength                           = $KeyLength
+        HashAlgorithm                       = $HashAlgorithm
+        KeyAlgorithmValue                   = $KeyAlgorithmValue
+        CDPUrl                              = $CDPUrl
+        AIAUrl                              = $AIAUrl
+    }
+
+    $RelevantRootCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "RootCA"}
+    $RelevantSubCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "SubCA"}
+
+    #endregion >> Initial Prep
+
+
+    #region >> Do SubCA Install
+
+    if ($RelevantSubCANetworkInfo.HostName -ne $env:ComputerName) {
+        $PSSessionName = NewUniqueString -ArrayOfStrings $(Get-PSSession).Name -PossibleNewUniqueString "ToSubCA"
+
+        # Try to create a PSSession to the Root CA for 15 minutes, then give up
+        $Counter = 0
+        while (![bool]$(Get-PSSession -Name $PSSessionName -ErrorAction SilentlyContinue)) {
+            try {
+                $SubCAPSSession = New-PSSession -ComputerName $RelevantSubCANetworkInfo.IPAddress -Credential $DomainAdminCredentials -Name $PSSessionName -ErrorAction SilentlyContinue
+                if (![bool]$(Get-PSSession -Name $PSSessionName -ErrorAction SilentlyContinue)) {throw}
+            }
+            catch {
+                if ($Counter -le 60) {
+                    Write-Warning "New-PSSession '$PSSessionName' failed. Trying again in 15 seconds..."
+                    Start-Sleep -Seconds 15
+                }
+                else {
+                    Write-Error "Unable to create new PSSession to '$PSSessionName' using account '$($DomainAdminCredentials.UserName)'! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+            $Counter++
+        }
+
+        if (!$SubCAPSSession) {
+            Write-Error "Unable to create a PSSession to the Root CA Server at '$($RelevantSubCANetworkInfo.IPAddress)'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        $FunctionsForRemoteUse = @(
+            ${Function:SetupSubCA}.Ast.Extent.Text
+        )
+        Invoke-Command -Session $SubCAPSSession -ScriptBlock {
+            $using:FunctionsForRemoteUse | foreach { Invoke-Expression $_ }
+            SetupSubCA @using:SetupSubCASplatParams
+        }
+    }
+    else {
+        SetupRootCA @SetupSubCASplatParams
+    }
+
+    #endregion >> Do SubCA Install
+
+    
+}
+
 
 <#
     .SYNOPSIS
@@ -11238,6 +12858,7 @@ function Manage-HyperVVM {
             
             # Also fix permissions on "$env:SystemDrive\Users\Public" and "$env:SystemDrive\ProgramData\Microsoft\Windows\Hyper-V"
             # the because lots of software (like Docker) likes throwing stuff in these locations
+            <#
             $PublicUserDirectoryPath = "$env:SystemDrive\Users\Public"
             $HyperVConfigDir = "$env:SystemDrive\ProgramData\Microsoft\Windows\Hyper-V"
             [System.Collections.ArrayList]$DirsToPotentiallyFix = @($PublicUserDirectoryPath,$HyperVConfigDir)
@@ -11253,6 +12874,7 @@ function Manage-HyperVVM {
                     return
                 }
             }
+            #>
 
             ## END Try and Update Permissions ##
 
@@ -15002,8 +16624,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbcn/B3jM4TBgXCyRrBu5lSBL
-# 0KWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwKNvcMUDPMFb8Wlfk6RB5U5x
+# c92gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -15060,11 +16682,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKW15IF97zmTjZiC
-# ZitD2Jo7y/sKMA0GCSqGSIb3DQEBAQUABIIBAMS67ZTf4kUOLvlR0JJy8KRyzN0h
-# 4dXzFD30Ti0gjlKZCkRUp9Uzr5zrpE0xPRlxFuUejWIcslFjzUZbyd72lke187tf
-# +S9rBPvscy2DhoHTbx+lZnNg8oSFyuJjbQleIi0tnNWpBf+XDjeekH6M3tQpTG6E
-# 7pftiGzU9GB1CkiLLVk33U3xnU6GizZm4CR1U8OyLcCzGQ9Kia8Fvq0zTNd7mDLG
-# OlAQ5IBuER5BMHQlrVxSrjF4SFYM2OxbKcAMqb8C/eFDhsKmefXcea98eHRmJJiD
-# /6DGfVCfxh4KuPUJd7J4SSEEIHFw12mTq5hNY6fOJsAdL9Cg10xHrcIJAug=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJU06B9yh4AbQ4ad
+# 35crXtoOy/lDMA0GCSqGSIb3DQEBAQUABIIBADF61L7VYfhRTV+I6jGk7WRkZIej
+# SKJZFuQP5Ylb2bp4Ok5OXtLWAnguXqvXpfLhAM1bydzJ+DQatpEFcR/EZhaz0J1/
+# 61G0e/2zSt+LzQG+b5UTQqkkIsO25efrA4MFjkapttKaJ2o1ZrTFFFtzkRd6pxNR
+# 5CW9SfGqbKaFRjrOjnN3VPGOTIz0yBr1OnPKkStAq57BICr+GFJi/5ny/T0FGklk
+# 2cvCVzyHwLBUBDNTDeo9Tnj4tH41S+O4nG68aoU0dzNTAmA6/BKs83S1UakgdJiD
+# XRltEPdvhgJKHK1n5r/UYQd6Xieym11NIDoHygL0/74keXNgbCL7a9t4Ga0=
 # SIG # End signature block

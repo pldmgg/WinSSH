@@ -2726,9 +2726,8 @@ function Generate-Certificate {
         ) {
             [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
             $OpenSSLWinBinariesUrl = "http://wiki.overbyte.eu/wiki/index.php/ICS_Download"
-            $IWRResult = Invoke-WebRequest -Uri $OpenSSLWinBinariesUrl
-            $LatestOpenSSLWinBinaryLinkObj = $($IWRResult.Links | Where-Object {$_.innerText -match "OpenSSL Binaries" -and $_.href -match "\.zip"})[0]
-            $LatestOpenSSLWinBinaryUrl = $LatestOpenSSLWinBinaryLinkObj.href
+            $IWRResult = Invoke-WebRequest -Uri $OpenSSLWinBinariesUrl -UseBasicParsing
+            $LatestOpenSSLWinBinaryUrl = $($IWRResult.Links | Where-Object {$_.OuterHTML -match "win64\.zip"})[0].href
             $OutputFileName = $($LatestOpenSSLWinBinaryUrl -split '/')[-1]
             $OutputFilePath = "$HOME\Downloads\$OutputFileName"
             Invoke-WebRequest -Uri $LatestOpenSSLWinBinaryUrl -OutFile $OutputFilePath

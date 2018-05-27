@@ -222,6 +222,207 @@ function New-RootCA {
     
     }
 
+    function GetDomainController {
+        [CmdletBinding()]
+        Param (
+            [Parameter(Mandatory=$False)]
+            [String]$Domain,
+
+            [Parameter(Mandatory=$False)]
+            [switch]$UseLogonServer
+        )
+    
+        ##### BEGIN Helper Functions #####
+    
+        function Parse-NLTest {
+            [CmdletBinding()]
+            Param (
+                [Parameter(Mandatory=$True)]
+                [string]$Domain
+            )
+    
+            while ($Domain -notmatch "\.") {
+                Write-Warning "The provided value for the -Domain parameter is not in the correct format. Please use the entire domain name (including periods)."
+                $Domain = Read-Host -Prompt "Please enter the full domain name (including periods)"
+            }
+    
+            if (![bool]$(Get-Command nltest -ErrorAction SilentlyContinue)) {
+                Write-Error "Unable to find nltest.exe! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+    
+            $DomainPrefix = $($Domain -split '\.')[0]
+            $PrimaryDomainControllerPrep = Invoke-Expression "nltest /dclist:$DomainPrefix 2>null"
+            if (![bool]$($PrimaryDomainControllerPrep | Select-String -Pattern 'PDC')) {
+                Write-Error "Can't find the Primary Domain Controller for domain $DomainPrefix"
+                return
+            }
+            $PrimaryDomainControllerPrep = $($($PrimaryDomainControllerPrep -match 'PDC').Trim() -split ' ')[0]
+            if ($PrimaryDomainControllerPrep -match '\\\\') {
+                $PrimaryDomainController = $($PrimaryDomainControllerPrep -replace '\\\\','').ToLower() + ".$Domain"
+            }
+            else {
+                $PrimaryDomainController = $PrimaryDomainControllerPrep.ToLower() + ".$Domain"
+            }
+    
+            $PrimaryDomainController
+        }
+    
+        ##### END Helper Functions #####
+    
+    
+        ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
+    
+        $ComputerSystemCim = Get-CimInstance Win32_ComputerSystem
+        $PartOfDomain = $ComputerSystemCim.PartOfDomain
+    
+        ##### END Variable/Parameter Transforms and PreRun Prep #####
+    
+    
+        ##### BEGIN Main Body #####
+    
+        if (!$PartOfDomain -and !$Domain) {
+            Write-Error "$env:ComputerName is NOT part of a Domain and the -Domain parameter was not used in order to specify a domain! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+        
+        $ThisMachinesDomain = $ComputerSystemCim.Domain
+    
+        # If we're in a PSSession, [system.directoryservices.activedirectory] won't work due to Double-Hop issue
+        # So just get the LogonServer if possible
+        if ($Host.Name -eq "ServerRemoteHost" -or $UseLogonServer) {
+            if (!$Domain -or $Domain -eq $ThisMachinesDomain) {
+                $Counter = 0
+                while ([string]::IsNullOrWhitespace($DomainControllerName) -or $Counter -le 20) {
+                    $DomainControllerName = $(Get-CimInstance win32_ntdomain).DomainControllerName
+                    if ([string]::IsNullOrWhitespace($DomainControllerName)) {
+                        Write-Warning "The win32_ntdomain CimInstance has a null value for the 'DomainControllerName' property! Trying again in 15 seconds (will try for 5 minutes total)..."
+                        Start-Sleep -Seconds 15
+                    }
+                    $Counter++
+                }
+
+                if ([string]::IsNullOrWhitespace($DomainControllerName)) {
+                    $IPOfDNSServerWhichIsProbablyDC = $(Resolve-DNSName $ThisMachinesDomain).IPAddress
+                    $DomainControllerFQDN = $(ResolveHost -HostNameOrIP $IPOfDNSServerWhichIsProbablyDC).FQDN
+                }
+                else {
+                    $LogonServer = $($DomainControllerName | Where-Object {![string]::IsNullOrWhiteSpace($_)}).Replace('\\','').Trim()
+                    $DomainControllerFQDN = $LogonServer + '.' + $RelevantSubCANetworkInfo.DomainName
+                }
+    
+                [pscustomobject]@{
+                    FoundDomainControllers      = [array]$DomainControllerFQDN
+                    PrimaryDomainController     = $DomainControllerFQDN
+                }
+    
+                return
+            }
+            else {
+                Write-Error "Unable to determine Domain Controller(s) network location due to the Double-Hop Authentication issue! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+    
+        if ($Domain) {
+            try {
+                $Forest = [system.directoryservices.activedirectory.Forest]::GetCurrentForest()
+            }
+            catch {
+                Write-Verbose "Cannot connect to current forest."
+            }
+    
+            if ($ThisMachinesDomain -eq $Domain -and $Forest.Domains -contains $Domain) {
+                [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | Where-Object {$_.Name -eq $Domain} | foreach {$_.DomainControllers} | foreach {$_.Name}
+                $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
+            }
+            if ($ThisMachinesDomain -eq $Domain -and $Forest.Domains -notcontains $Domain) {
+                try {
+                    $GetCurrentDomain = [system.directoryservices.activedirectory.domain]::GetCurrentDomain()
+                    [System.Collections.ArrayList]$FoundDomainControllers = $GetCurrentDomain | foreach {$_.DomainControllers} | foreach {$_.Name}
+                    $PrimaryDomainController = $GetCurrentDomain.PdcRoleOwner.Name
+                }
+                catch {
+                    try {
+                        Write-Warning "Only able to report the Primary Domain Controller for $Domain! Other Domain Controllers most likely exist!"
+                        Write-Warning "For a more complete list, try running this function on a machine that is part of the domain $Domain!"
+                        $PrimaryDomainController = Parse-NLTest -Domain $Domain
+                        [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                    }
+                    catch {
+                        Write-Error $_
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                }
+            }
+            if ($ThisMachinesDomain -ne $Domain -and $Forest.Domains -contains $Domain) {
+                [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | foreach {$_.DomainControllers} | foreach {$_.Name}
+                $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
+            }
+            if ($ThisMachinesDomain -ne $Domain -and $Forest.Domains -notcontains $Domain) {
+                try {
+                    Write-Warning "Only able to report the Primary Domain Controller for $Domain! Other Domain Controllers most likely exist!"
+                    Write-Warning "For a more complete list, try running this function on a machine that is part of the domain $Domain!"
+                    $PrimaryDomainController = Parse-NLTest -Domain $Domain
+                    [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                }
+                catch {
+                    Write-Error $_
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+        }
+        else {
+            try {
+                $Forest = [system.directoryservices.activedirectory.Forest]::GetCurrentForest()
+                [System.Collections.ArrayList]$FoundDomainControllers = $Forest.Domains | foreach {$_.DomainControllers} | foreach {$_.Name}
+                $PrimaryDomainController = $Forest.Domains.PdcRoleOwner.Name
+            }
+            catch {
+                Write-Verbose "Cannot connect to current forest."
+    
+                try {
+                    $GetCurrentDomain = [system.directoryservices.activedirectory.domain]::GetCurrentDomain()
+                    [System.Collections.ArrayList]$FoundDomainControllers = $GetCurrentDomain | foreach {$_.DomainControllers} | foreach {$_.Name}
+                    $PrimaryDomainController = $GetCurrentDomain.PdcRoleOwner.Name
+                }
+                catch {
+                    $Domain = $ThisMachinesDomain
+    
+                    try {
+                        $CurrentUser = "$(whoami)"
+                        Write-Warning "Only able to report the Primary Domain Controller for the domain that $env:ComputerName is joined to (i.e. $Domain)! Other Domain Controllers most likely exist!"
+                        Write-Host "For a more complete list, try one of the following:" -ForegroundColor Yellow
+                        if ($($CurrentUser -split '\\') -eq $env:ComputerName) {
+                            Write-Host "- Try logging into $env:ComputerName with a domain account (as opposed to the current local account $CurrentUser" -ForegroundColor Yellow
+                        }
+                        Write-Host "- Try using the -Domain parameter" -ForegroundColor Yellow
+                        Write-Host "- Run this function on a computer that is joined to the Domain you are interested in" -ForegroundColor Yellow
+                        $PrimaryDomainController = Parse-NLTest -Domain $Domain
+                        [System.Collections.ArrayList]$FoundDomainControllers = @($PrimaryDomainController)
+                    }
+                    catch {
+                        Write-Error $_
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                }
+            }
+        }
+    
+        [pscustomobject]@{
+            FoundDomainControllers      = $FoundDomainControllers
+            PrimaryDomainController     = $PrimaryDomainController
+        }
+    
+        ##### END Main Body #####
+    }
+
     function SetupRootCA {
         [CmdletBinding()]
         param (
@@ -229,13 +430,6 @@ function New-RootCA {
             [pscredential]$DomainAdminCredentials,
 
             [Parameter(Mandatory=$True)]
-            [ValidateScript({
-                $NoteProperties = $($_[0] | Get-Member -MemberType NoteProperty).Name
-                $_.Count -gt 0 -and $NoteProperties -contains "SeverPurpose" -and
-                $NoteProperties -contains "FQDN" -and $NoteProperties -contains "IPAddress" -and
-                $NoteProperties -contains "DomainName" -and $NoteProperties -contains "DomainShortName" -and
-                $NoteProperties -contains "DomainLDAPString"
-            })]
             [System.Collections.ArrayList]$NetworkInfoPSObjects,
 
             [Parameter(Mandatory=$True)]
@@ -278,7 +472,20 @@ function New-RootCA {
 
         #region >> Prep
 
-        $FinalCryptoProvider = $KeyAlgorithmValue + "#" + $CryptoProvider
+        # Make sure we can find the Domain Controller(s)
+        try {
+            $DomainControllerInfo = GetDomainController -Domain $(Get-CimInstance win32_computersystem).Domain -WarningAction SilentlyContinue
+            if (!$DomainControllerInfo -or $DomainControllerInfo.PrimaryDomainController -eq $null) {throw "Unable to find Primary Domain Controller! Halting!"}
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Make sure time is synchronized with NTP Servers/Domain Controllers (i.e. might be using NT5DS instead of NTP)
+        # See: https://giritharan.com/time-synchronization-in-active-directory-domain/
+        $null = W32tm /resync /rediscover /nowait
 
         if (!$(Test-Path $FileOutputDirectory)) {
             $null = New-Item -ItemType Directory -Path $FileOutputDirectory 
@@ -329,10 +536,51 @@ function New-RootCA {
 
         $RelevantRootCANetworkInfo = $NetworkInfoPSObjects | Where-Object {$_.ServerPurpose -eq "RootCA"}
 
+        # Make sure WinRM in Enabled and Running on $env:ComputerName
+        try {
+            $null = Enable-PSRemoting -Force -ErrorAction Stop
+        }
+        catch {
+            $null = Get-NetConnectionProfile | Where-Object {$_.NetworkCategory -eq 'Public'} | Set-NetConnectionProfile -NetworkCategory 'Private'
+
+            try {
+                $null = Enable-PSRemoting -Force
+            }
+            catch {
+                Write-Error $_
+                Write-Error "Problem with Enabble-PSRemoting WinRM Quick Config! Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+        }
+
+        # If $env:ComputerName is not part of a Domain, we need to add this registry entry to make sure WinRM works as expected
+        if (!$(Get-CimInstance Win32_Computersystem).PartOfDomain) {
+            $null = reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
+        }
+
+        # Add the New Server's IP Addresses to $env:ComputerName's TrustedHosts
+        $CurrentTrustedHosts = $(Get-Item WSMan:\localhost\Client\TrustedHosts).Value
+        [System.Collections.ArrayList][array]$CurrentTrustedHostsAsArray = $CurrentTrustedHosts -split ','
+
+        $ItemsToAddToWSMANTrustedHosts = @(
+            $RelevantRootCANetworkInfo.FQDN
+            $RelevantRootCANetworkInfo.HostName
+            $RelevantRootCANetworkInfo.IPAddress
+        )
+        foreach ($NetItem in $ItemsToAddToWSMANTrustedHosts) {
+            if ($CurrentTrustedHostsAsArray -notcontains $NetItem) {
+                $null = $CurrentTrustedHostsAsArray.Add($NetItem)
+            }
+        }
+        $UpdatedTrustedHostsString = $($CurrentTrustedHostsAsArray | Where-Object {![string]::IsNullOrWhiteSpace($_)}) -join ','
+        Set-Item WSMan:\localhost\Client\TrustedHosts $UpdatedTrustedHostsString -Force
+
         #endregion >> Prep
 
         #region >> Install ADCSCA
         try {
+            $FinalCryptoProvider = $KeyAlgorithmValue + "#" + $CryptoProvider
             $InstallADCSCertAuthSplatParams = @{
                 Credential                  = $DomainAdminCredentials
                 CAType                      = $CAType
@@ -347,7 +595,7 @@ function New-RootCA {
                 Force                       = $True
                 ErrorAction                 = "Stop"
             }
-            Install-AdcsCertificationAuthority @InstallADCSCertAuthSplatParams
+            $null = Install-AdcsCertificationAuthority @InstallADCSCertAuthSplatParams
         }
         catch {
             Write-Error $_
@@ -366,17 +614,17 @@ function New-RootCA {
 
             # Update the Local CDP
             $LocalCDP = (Get-CACrlDistributionPoint)[0]
-            $LocalCDP | Remove-CACrlDistributionPoint -Force
+            $null = $LocalCDP | Remove-CACrlDistributionPoint -Force
             $LocalCDP.PublishDeltaToServer = $false
-            $LocalCDP | Add-CACrlDistributionPoint -Force
+            $null = $LocalCDP | Add-CACrlDistributionPoint -Force
 
             # Remove pre-existing ldap/http CDPs, add custom CDP
-            Get-CACrlDistributionPoint | Where-Object { $_.URI -like "http*" -or $_.Uri -like "ldap*" } | Remove-CACrlDistributionPoint -Force
-            Add-CACrlDistributionPoint -Uri $CDPUrl -AddToCertificateCdp -Force
+            $null = Get-CACrlDistributionPoint | Where-Object { $_.URI -like "http*" -or $_.Uri -like "ldap*" } | Remove-CACrlDistributionPoint -Force
+            $null = Add-CACrlDistributionPoint -Uri $CDPUrl -AddToCertificateCdp -Force
 
             # Remove pre-existing ldap/http AIAs, add custom AIA
-            Get-CAAuthorityInformationAccess | Where-Object { $_.Uri -like "http*" -or $_.Uri -like "ldap*" } | Remove-CAAuthorityInformationAccess -Force
-            Add-CAAuthorityInformationAccess -Uri $AIAUrl -AddToCertificateAIA -Force
+            $null = Get-CAAuthorityInformationAccess | Where-Object { $_.Uri -like "http*" -or $_.Uri -like "ldap*" } | Remove-CAAuthorityInformationAccess -Force
+            $null = Add-CAAuthorityInformationAccess -Uri $AIAUrl -AddToCertificateAIA -Force
 
             Write-Host "Done CDP and AIA cmdlets..."
 
@@ -516,9 +764,12 @@ function New-RootCA {
         Get-CertificationAuthority -Name $env:ComputerName | Get-CATemplate | Add-CATemplate -Name $NewWebServerTemplateCommonName | Set-CATemplate
 
         # Export New Certificate Templates to NewCert-Templates Directory
-        $null = ldifde -m -v -d "CN=$NewComputerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$ConfigContext" -f "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf"
-        $null = ldifde -m -v -d "CN=$NewWebServerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,$ConfigContext" -f "$FileOutputDirectory\$NewWebServerTemplateCommonName.ldf"
-        
+        $ldifdeUserName = $($DomainAdminCredentials.UserName -split "\\")[-1]
+        $ldifdeDomain = $RelevantRootCANetworkInfo.DomainName
+        $ldifdePwd = $DomainAdminCredentials.GetNetworkCredential().Password
+        $null = ldifde -m -v -b $ldifdeUserName $ldifdeDomain $ldifdePwd -d "CN=$NewComputerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,$ConfigContext" -f "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf"
+        $null = ldifde -m -v -b $ldifdeUserName $ldifdeDomain $ldifdePwd -d "CN=$NewWebServerTemplateCommonName,CN=Certificate Templates,CN=Public Key Services,CN=Services,$ConfigContext" -f "$FileOutputDirectory\$NewWebServerTemplateCommonName.ldf"
+
         # Side Note: You can import Certificate Templates on another Certificate Authority via ldife.exe with:
         <#
         ldifde -i -k -f "$FileOutputDirectory\$NewComputerTemplateCommonName.ldf"
@@ -538,13 +789,19 @@ function New-RootCA {
         # IMPORTANT NOTE: The below -CATimeout parameter should be in Seconds. So after 12000 seconds, the SMB Share
         # will no longer be available
         # IMPORTANT NOTE: The below -Temporary switch means that the SMB Share will NOT survive a reboot
-        New-SMBShare -Name RootCAFiles -Path $FileOutputDirectory -CATimeout 12000 -Temporary
+        $null = New-SMBShare -Name RootCAFiles -Path $FileOutputDirectory -CATimeout 12000 -Temporary
         # Now the SMB Share  should be available
-        $RootCASMBShareNetworkLocation = '\\' + $RelevantRootCANetworkInfo.FQDN + "\RootCAFiles"
+        $RootCASMBShareFQDNLocation = '\\' + $RelevantRootCANetworkInfo.FQDN + "\RootCAFiles"
+        $RootCASMBShareIPLocation = '\\' + $RelevantRootCANetworkInfo.IPAddress + "\RootCAFiles"
 
-        Write-Host "RootCAFiles needed by the Subordinate/Issuing/Intermediate CA Server(s) are now available here: $RootCASMBShareNetworkLocation" -ForegroundColor Green
-        $RootCASMBShareNetworkLocation
-
+        Write-Host "Successfully configured Root Certificate Authority" -ForegroundColor Green
+        Write-Host "RootCA Files needed by the new Subordinate/Issuing/Intermediate CA Server(s) are now TEMPORARILY available at SMB Share located:`n$RootCASMBShareFQDNLocation`nOR`n$RootCASMBShareIPLocation" -ForegroundColor Green
+        
+        [pscustomobject] @{
+            SMBShareIPLocation = $RootCASMBShareIPLocation
+            SMBShareFQDNLocation = $RootCASMBShareFQDNLocation
+        }
+        
         #endregion >> Finish
     }
 
@@ -565,7 +822,7 @@ function New-RootCA {
 
     [System.Collections.ArrayList]$NetworkLocationObjsToResolve = @()
     if ($PSBoundParameters['RootCAIPOrFQDN']) {
-        $SubCAPSObj = [pscustomobject]@{
+        $RootCAPSObj = [pscustomobject]@{
             ServerPurpose       = "RootCA"
             NetworkLocation     = $RootCAIPOrFQDN
         }
@@ -580,14 +837,17 @@ function New-RootCA {
 
     [System.Collections.ArrayList]$NetworkInfoPSObjects = @()
     foreach ($NetworkLocationObj in $NetworkLocationObjsToResolve) {
-        if ($NetworkLocation -split "\.")[0] -ne $env:ComputerName) {
+        if ($($NetworkLocation -split "\.")[0] -ne $env:ComputerName -and
+        $NetworkLocation -ne $PrimaryIP -and
+        $NetworkLocation -ne "$env:ComputerName.$($(Get-CimInstance win32_computersystem).Domain)"
+        ) {
             try {
                 $NetworkInfo = ResolveHost -HostNameOrIP $NetworkLocationObj.NetworkLocation
                 $DomainName = $NetworkInfo.Domain
                 $FQDN = $NetworkInfo.FQDN
                 $IPAddr = $NetworkInfo.IPAddressList[0]
                 $DomainShortName = $($DomainName -split "\.")[0]
-                $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$Part"}) -join ','
+                $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$StringPart"}) -join ','
 
                 if (!$NetworkInfo -or $DomainName -eq "Unknown" -or !$DomainName -or $FQDN -eq "Unknown" -or !$FQDN) {
                     throw "Unable to gather Domain Name and/or FQDN info about '$NetworkLocation'! Please check DNS. Halting!"
@@ -632,13 +892,13 @@ function New-RootCA {
                     $null = $CurrentTrustedHostsAsArray.Add($NetItem)
                 }
             }
-            $UpdatedTrustedHostsString = $CurrentTrustedHostsAsArray -join ','
+            $UpdatedTrustedHostsString = $($CurrentTrustedHostsAsArray | Where-Object {![string]::IsNullOrWhiteSpace($_)}) -join ','
             Set-Item WSMan:\localhost\Client\TrustedHosts $UpdatedTrustedHostsString -Force
         }
         else {
             $DomainName = $(Get-CimInstance win32_computersystem).Domain
             $DomainShortName = $($DomainName -split "\.")[0]
-            $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$Part"}) -join ','
+            $DomainLDAPString = $(foreach ($StringPart in $($DomainName -split "\.")) {"DC=$StringPart"}) -join ','
             $FQDN = $env:ComputerName + '.' + $DomainName
             $IPAddr = $PrimaryIP
         }
@@ -741,6 +1001,7 @@ function New-RootCA {
         }
 
         $FunctionsForRemoteUse = @(
+            ${Function:GetDomainController}.Ast.Extent.Text
             ${Function:SetupRootCA}.Ast.Extent.Text
         )
         Invoke-Command -Session $RootCAPSSession -ScriptBlock {
@@ -760,8 +1021,8 @@ function New-RootCA {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUx+LJLJSL8G3OsZW/25f+0aq6
-# Uw+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfetX9eZlyMG0hL/M+e0gY/DD
+# j1mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -818,11 +1079,11 @@ function New-RootCA {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAnoxksrg2dcXBdL
-# edqTN+ZG2NaTMA0GCSqGSIb3DQEBAQUABIIBAGV22Pb+DKFOLBsWyInjIHN/QnU5
-# NgPKwi+ebBII+1MUHHf1xO1IXKmpXVt8KHxcFpuojdTwRzs/cG4aKzs6sxyxirjB
-# 2XF9ViHXEH/kum2EeHCmiU24ixd9YnOvj1Tg5XbQP5a+YY4ywWd4Nx7FbqUzor+f
-# X+9+TcfchmFy8TZIfCiHaHJKLuMupx6EG7VVTMrWjHBejrNfuBeEErOCYAWXIjwU
-# RYOuCd9y57x9qzFZZR5DoeVuj4npvJvqOvooHY7d1U2F3rdjOYUQxYFQ25Dpe5Uw
-# fY08FYVCLDf4RVvUleKNJdi0VHJ1Y4lTTDFCiB6FvkmY9SXizcPC9J9l4qo=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFN2r1jrTLBPub9xv
+# ZYoxJ+La9wg2MA0GCSqGSIb3DQEBAQUABIIBACKeZy0HOSujWu1i+IgRsSLwVbiv
+# hkt838l+DuySTxq66Fvz5Z1Dx6f8cdPaxxJp6EO5LTm1//vCs0uI+hL3rYY40igw
+# Vx7p7xiVMP9T/bNF416ATJ59BCZnUNyg0zAFtrDw+bylGIjmVNUCjbuse9TlasjH
+# nr6q8IGYo4MeKqnRZaZuOvmG5oh20RsJuLXfl392SDpnOiu8QCIIgYHThKhy5MSU
+# Gd17nDqR9YZ//zomg0DmOQ1MrqOdWsVpel6xdlBLcydo2j3qOSrpwKZZbFIWMGsI
+# TPZ7hggTFsgPTlibwDeVIV6zJb9XCJ0mehG6TZfokh2zC9+I+3FvplUQAW8=
 # SIG # End signature block

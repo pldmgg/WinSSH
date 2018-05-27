@@ -443,6 +443,7 @@ function Manage-HyperVVM {
             
             # Also fix permissions on "$env:SystemDrive\Users\Public" and "$env:SystemDrive\ProgramData\Microsoft\Windows\Hyper-V"
             # the because lots of software (like Docker) likes throwing stuff in these locations
+            <#
             $PublicUserDirectoryPath = "$env:SystemDrive\Users\Public"
             $HyperVConfigDir = "$env:SystemDrive\ProgramData\Microsoft\Windows\Hyper-V"
             [System.Collections.ArrayList]$DirsToPotentiallyFix = @($PublicUserDirectoryPath,$HyperVConfigDir)
@@ -458,6 +459,7 @@ function Manage-HyperVVM {
                     return
                 }
             }
+            #>
 
             ## END Try and Update Permissions ##
 
@@ -646,8 +648,8 @@ function Manage-HyperVVM {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQ8MrNmxKeIDxDGMCZTRPwQw3
-# veagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUg/5y3Llb67rky/kWViErXdn6
+# 9Nagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -704,11 +706,11 @@ function Manage-HyperVVM {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBRBPsvwcr6a28sH
-# jlAtXLWi0jNJMA0GCSqGSIb3DQEBAQUABIIBAIvrJzFVmn1yt1eZgWsEamlKNUiG
-# GmBoEADtQoUCpSMs5ftHF0oJHLps46/kQrPuLg5LPM7Y5B8p9H9oO5WxvyckFK9a
-# SgdctkZakuD8uq2VbSv0eR2PC3B2ivkzjD4RgnB0PPOwrx/FZzvm1l1ortJwm0o9
-# JBoYJUKO00lycniLJrwankJR7oxgkBltw4FyhblTHxSwuDOIblnDQ1anyrs+825s
-# WDOFPQ8ZpQAGphv3IWbR1iqMGLQNcN38PiQ3y5mAsOcAL7SP9aGlTMYj7NYn9OrO
-# yP9QQtviSYgOdOqqcQgTe85zpCP3EFbSZhekHiLYxywffR1iaFBdmuQ4Oxk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNeaHJG2d97Upi/S
+# mseuX4USRqjoMA0GCSqGSIb3DQEBAQUABIIBACA4q9qt3X0mQjz2qkf7RWeXP6B8
+# kbtXXuP/ZJBEsqOCgpDcw41q51ONdTHiOiZzh0IHiuvLB9qx/Wk+kIcIun2OLWuA
+# TV+vGsegPfSJwP0qHJ7fajG/DSD90LVwPe59wDq4iJ/A+KXZJfzNvVyECnwLtxDG
+# suDRXj24PBzu4Usgq9bf2b01ZgHdSCnZRTIunkLEYNhDI5V5GNiAq9zb+uUgocqI
+# QJDOFpAtffVzOwNaV2N6mvafHvlMczJqgvfWKrs6h4pTcsi6NvHmJYR3ScSs1c5s
+# gXRyCEH3Rcm+r8QqLU3F4J6pRuOTHil8PXCk/YZRyUKG4ag88TJ2efqzGHE=
 # SIG # End signature block

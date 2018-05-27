@@ -4,7 +4,10 @@ function GetDomainController {
     [CmdletBinding()]
     Param (
         [Parameter(Mandatory=$False)]
-        [String]$Domain
+        [String]$Domain,
+
+        [Parameter(Mandatory=$False)]
+        [switch]$UseLogonServer
     )
 
     ##### BEGIN Helper Functions #####
@@ -64,6 +67,43 @@ function GetDomainController {
     }
     
     $ThisMachinesDomain = $ComputerSystemCim.Domain
+
+    # If we're in a PSSession, [system.directoryservices.activedirectory] won't work due to Double-Hop issue
+    # So just get the LogonServer if possible
+    if ($Host.Name -eq "ServerRemoteHost" -or $UseLogonServer) {
+        if (!$Domain -or $Domain -eq $ThisMachinesDomain) {
+            $Counter = 0
+            while ([string]::IsNullOrWhitespace($DomainControllerName) -or $Counter -le 20) {
+                $DomainControllerName = $(Get-CimInstance win32_ntdomain).DomainControllerName
+                if ([string]::IsNullOrWhitespace($DomainControllerName)) {
+                    Write-Warning "The win32_ntdomain CimInstance has a null value for the 'DomainControllerName' property! Trying again in 15 seconds (will try for 5 minutes total)..."
+                    Start-Sleep -Seconds 15
+                }
+                $Counter++
+            }
+
+            if ([string]::IsNullOrWhitespace($DomainControllerName)) {
+                $IPOfDNSServerWhichIsProbablyDC = $(Resolve-DNSName $ThisMachinesDomain).IPAddress
+                $DomainControllerFQDN = $(ResolveHost -HostNameOrIP $IPOfDNSServerWhichIsProbablyDC).FQDN
+            }
+            else {
+                $LogonServer = $($DomainControllerName | Where-Object {![string]::IsNullOrWhiteSpace($_)}).Replace('\\','').Trim()
+                $DomainControllerFQDN = $LogonServer + '.' + $RelevantSubCANetworkInfo.DomainName
+            }
+
+            [pscustomobject]@{
+                FoundDomainControllers      = [array]$DomainControllerFQDN
+                PrimaryDomainController     = $DomainControllerFQDN
+            }
+
+            return
+        }
+        else {
+            Write-Error "Unable to determine Domain Controller(s) network location due to the Double-Hop Authentication issue! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
 
     if ($Domain) {
         try {
@@ -164,8 +204,8 @@ function GetDomainController {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0K5IfP3cS3ng/s9vx5NIi7fM
-# hrugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU3rJpad0TBijH7oHDRphPukyM
+# Zq+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -222,11 +262,11 @@ function GetDomainController {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHrvoKROlQUCMSaI
-# LYMqeGv+H+fVMA0GCSqGSIb3DQEBAQUABIIBABKw/5GM8FGX3A+Ez1r4YY5Wwg4r
-# k/t1gZhpsYMxPjHDdJsXy8G0ULYbntO1eQivU0tfA2vGLDK/Xj83ru/sr0Z29twd
-# Bzg5ZrNHk1eTYD/ErTrE4eWbJgY7k8qZ+rnYAZo2h1khHAJgGdvlcGo7nWI/51d5
-# PlR5dGzl3hOoAw1pcaVaapZXiEg8CZ4su8Rh2VAr++OIPIGfrOcIN77McIqEpM8n
-# lLNk9VUVu8NOBICgnNoJvS8BdEENB6GrPd66qJxThnWqq9MAwNxJ8r2TF8G6671O
-# 8pzfoGbZ81CZZoLQewkojX8fBc+tzBXmZ9deTpK9TNf2c+gunEB8aKjO3L8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHeerlX2mvm+MHey
+# jLJe5ciH35QNMA0GCSqGSIb3DQEBAQUABIIBACfhh/v4KZoFksjd5J8dw9A3Kwt6
+# 35wHFUkFMy1e8PdJiL1+EjxaPmw89+h5ChBaioT4zsd777L1ODxqoWZu0OnTlzBK
+# S0tyXRLnvVfG3XmpM7JESzrXexCPUXwA0R1VIzVqk41iswPtODd37yyU46iJkcYg
+# 2RicQO2OJaTweFDyDaimXq8gTou3vHPck1cgD33auq+pB0lwWag7kRQ6+t3ENv7B
+# +JLgK2x95qEXqD/uede5geP6bXUD0CqwrFJ8pGAt3h7CUydm1IiOBqFjBOtX0i5i
+# DRtR6ANwgJhIIqKiY+PgqiXqWKZRxB+IZyKT9IebZ2oToDPIx+3u5Tr0w7M=
 # SIG # End signature block
