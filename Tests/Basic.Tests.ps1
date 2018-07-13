@@ -61,11 +61,14 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'GetDomainController' | Should Be $False
         $Commands -contains 'GetElevation' | Should Be $False
         $Commands -contains 'GetGroupObjectsInLDAP' | Should Be $False
+        $Commands -contains 'GetModuleDependencies' | Should Be $False
         $Commands -contains 'GetNativePath' | Should Be $False
         $Commands -contains 'GetUserObjectsInLDAP' | Should Be $False
         $Commands -contains 'GetVSwitchAllRelatedInfo' | Should Be $False
         $Commands -contains 'InstallFeatureDism' | Should Be $False
         $Commands -contains 'InstallHyperVFeatures' | Should Be $False
+        $Commands -contains 'InvokeModuleDependencies' | Should Be $False
+        $Commands -contains 'InvokePSCompatibility' | Should Be $False
         $Commands -contains 'NewUniqueString' | Should Be $False
         $Commands -contains 'PauseForWarning' | Should Be $False
         $Commands -contains 'TestIsValidIPAddress' | Should Be $False
@@ -78,23 +81,19 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Check-Cert' | Should Be $True
         $Commands -contains 'Configure-VaultServerForLDAPAuth' | Should Be $True
         $Commands -contains 'Configure-VaultServerForSSHManagement' | Should Be $True
-        $Commands -contains 'Deploy-HyperVVagrantBoxManually' | Should Be $True
         $Commands -contains 'Fix-SSHPermissions' | Should Be $True
         $Commands -contains 'Generate-AuthorizedPrincipalsFile' | Should Be $True
-        $Commands -contains 'Generate-Certificate' | Should Be $True
         $Commands -contains 'Generate-SSHUserDirFileInfo' | Should Be $True
         $Commands -contains 'Get-LDAPCert' | Should Be $True
         $Commands -contains 'Get-PublicKeyAuthInstructions' | Should Be $True
         $Commands -contains 'Get-SSHClientAuthSanity' | Should Be $True
         $Commands -contains 'Get-SSHFileInfo' | Should Be $True
-        $Commands -contains 'Get-VagrantBoxManualDownload' | Should Be $True
         $Commands -contains 'Get-VaultAccessorLookup' | Should Be $True
         $Commands -contains 'Get-VaultLogin' | Should Be $True
         $Commands -contains 'Get-VaultTokenAccessors' | Should Be $True
         $Commands -contains 'Get-VaultTokens' | Should Be $True
         $Commands -contains 'Install-SSHAgentService' | Should Be $True
         $Commands -contains 'Install-WinSSH' | Should Be $True
-        $Commands -contains 'Manage-HyperVVM' | Should Be $True
         $Commands -contains 'New-SSHCredentials' | Should Be $True
         $Commands -contains 'New-SSHDServer' | Should Be $True
         $Commands -contains 'New-SSHKey' | Should Be $True
@@ -103,11 +102,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'Sign-SSHHostPublicKey' | Should Be $True
         $Commands -contains 'Sign-SSHUserPublicKey' | Should Be $True
         $Commands -contains 'Uninstall-WinSSH' | Should Be $True
-        $Commands -contains 'Update-PowerShellCore' | Should Be $True
         $Commands -contains 'Validate-SSHPrivateKey' | Should Be $True
-        $Commands -contains 'Create-TwoTierPKI' | Should Be $True
-        $Commands -contains 'New-SelfSignedCertificateEx' | Should Be $True
-        $Commands -contains 'Get-DSCEncryptionCert' | Should Be $True
     }
 
     It "Module '$env:BHProjectName' Private Functions Are Available in Internal Scope" {
@@ -118,11 +113,14 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         [bool]$Module.Invoke({Get-Item function:GetDomainController}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetElevation}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetGroupObjectsInLDAP}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetModuleDependencies}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetNativePath}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetUserObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetVSwitchAllRelatedInfo}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallFeatureDism}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:InstallHyperVFeatures}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:InvokeModuleDependencies}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:InvokePSCompatibility}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:NewUniqueString}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:PauseForWarning}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:TestIsValidIPAddress}) | Should Be $True
@@ -135,8 +133,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyLySKrN6Zl7idCgyxREjhB7k
-# kcKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdy1vukrbwd7WUMTgEd0FFBCf
+# HZ6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -193,11 +191,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJW/hggWHIUO2QqN
-# AtZijC43jCirMA0GCSqGSIb3DQEBAQUABIIBAIxpDjXSflVjid/MV58A9XUenD0x
-# PqFARoD9OzCByf24nrzfqlHsW8GoZtlOtAcHZUZarvqctEgMscaVAAEGlG5brzFu
-# BVaUVau53G14Qi9MEpLELhu/ndVSZYYRCMLBJ5x0NT9iI3BzYu49H83NhVr7Vx30
-# JX+aB98GbcNiMk/TcGLXm8o6rSVI7Q7vG1XUGLxz5Q+In7MzOECUrvxLrceCepsI
-# QeDGb6FeWjcaoSIYxbXnnYOs+KpCxu7dKLUNe89r8VZHWaudRym/SaFrsiLrlxOZ
-# EJXxQagn9PDSYwhSCgojaTq6RMlykojrWp/gsqKMDdU1su91IB3drRK1E2I=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJryn00XtrA5tY2/
+# WaMwKeANDX2VMA0GCSqGSIb3DQEBAQUABIIBAJgMBTT0AcVrCwrqlYNTmSIh9GKc
+# fKiRlDP/eziLXI8h7s0KfUBWMZ2CTF/KBQhp4jd/0zM4pX4jlmOJ93vuBQjSQ4ar
+# ixgrXR1PqkfCNc6KWqtiHoBARBWxei4nkdpnFYUo2ZfE2iZlnoiLknwGuFoUaLfu
+# 9QKXObshJWktxQMvWjUzCDfsSe1sMYtyinq7ejmzk5GGBdcW3jrvf3SEkf/2lenj
+# XnnLURA574b+2wJkFjrysIVKVFzaC+aR8XG15uEP8yYlt8Cp97ShgS2UkPFLtpDH
+# vRWTTJ6mRCLIjNngEgK23dqtWo8mDuMGd1RNxCPGYUjQJ+KqnkqN09QGjXY=
 # SIG # End signature block

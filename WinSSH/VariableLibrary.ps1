@@ -1,60 +1,60 @@
-<#
-    .SYNOPSIS
-        Bootstrap PSDepend
-
-    .DESCRIPTION
-        Bootstrap PSDepend
-
-        Why? No reliance on PowerShellGallery
-
-            * Downloads nuget to your ~\ home directory
-            * Creates $Path (and full path to it)
-            * Downloads module to $Path\PSDepend
-            * Moves nuget.exe to $Path\PSDepend (skips nuget bootstrap on initial PSDepend import)
-
-    .PARAMETER Path
-        Module path to install PSDepend
-
-        Defaults to Profile\Documents\WindowsPowerShell\Modules
-
-    .EXAMPLE
-        .\Install-PSDepend.ps1 -Path C:\Modules
-
-        # Installs to C:\Modules\PSDepend
-#>
-[cmdletbinding()]
-param(
-    [string]$Path = $( Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules')
+[System.Collections.ArrayList]$script:FunctionsForSBUse = @(
+    ${Function:ConfigureGlobalKnownHosts}.Ast.Extent.Text 
+    ${Function:ConvertFromHCLToPrintF}.Ast.Extent.Text
+    ${Function:FixNTVirtualMachinesPerms}.Ast.Extent.Text
+    ${Function:GetCurrentUser}.Ast.Extent.Text
+    ${Function:GetDomainController}.Ast.Extent.Text
+    ${Function:GetElevation}.Ast.Extent.Text
+    ${Function:GetGroupObjectsInLDAP}.Ast.Extent.Text
+    ${Function:GetModuleDependencies}.Ast.Extent.Text
+    ${Function:GetNativePath}.Ast.Extent.Text
+    ${Function:GetUserObjectsInLDAP}.Ast.Extent.Text
+    ${Function:GetVSwitchAllRelatedInfo}.Ast.Extent.Text
+    ${Function:InstallFeatureDism}.Ast.Extent.Text
+    ${Function:InstallHyperVFeatures}.Ast.Extent.Text
+    ${Function:InvokeModuleDependencies}.Ast.Extent.Text
+    ${Function:InvokePSCompatibility}.Ast.Extent.Text
+    ${Function:NewUniqueString}.Ast.Extent.Text
+    ${Function:PauseForWarning}.Ast.Extent.Text
+    ${Function:ResolveHost}.Ast.Extent.Text
+    ${Function:TestIsValidIPAddress}.Ast.Extent.Text
+    ${Function:TestLDAP}.Ast.Extent.Text
+    ${Function:TestPort}.Ast.Extent.Text
+    ${Function:UnzipFile}.Ast.Extent.Text
+    ${Function:Add-CAPubKeyToSSHAndSSHDConfig}.Ast.Extent.Text
+    ${Function:Add-PublicKeyToRemoteHost}.Ast.Extent.Text
+    ${Function:Check-Cert}.Ast.Extent.Text
+    ${Function:Configure-VaultServerForLDAPAuth}.Ast.Extent.Text
+    ${Function:Configure-VaultServerForSSHManagement}.Ast.Extent.Text
+    ${Function:Fix-SSHPermissions}.Ast.Extent.Text
+    ${Function:Generate-AuthorizedPrincipalsFile}.Ast.Extent.Text
+    ${Function:Generate-SSHUserDirFileInfo}.Ast.Extent.Text
+    ${Function:Get-LDAPCert}.Ast.Extent.Text
+    ${Function:Get-PublicKeyAuthInstructions}.Ast.Extent.Text
+    ${Function:Get-SSHClientAuthSanity}.Ast.Extent.Text
+    ${Function:Get-SSHFileInfo}.Ast.Extent.Text
+    ${Function:Get-VaultAccessorLookup}.Ast.Extent.Text
+    ${Function:Get-VaultLogin}.Ast.Extent.Text
+    ${Function:Get-VaultTokenAccessors}.Ast.Extent.Text
+    ${Function:Get-VaultTokens}.Ast.Extent.Text
+    ${Function:Install-SSHAgentService}.Ast.Extent.Text
+    ${Function:Install-WinSSH}.Ast.Extent.Text
+    ${Function:New-SSHCredentials}.Ast.Extent.Text
+    ${Function:New-SSHDServer}.Ast.Extent.Text
+    ${Function:New-SSHKey}.Ast.Extent.Text
+    ${Function:Revoke-VaultToken}.Ast.Extent.Text
+    ${Function:Set-DefaultShell}.Ast.Extent.Text
+    ${Function:Sign-SSHHostPublicKey}.Ast.Extent.Text
+    ${Function:Sign-SSHUserPublicKey}.Ast.Extent.Text
+    ${Function:Uninstall-WinSSH}.Ast.Extent.Text
+    ${Function:Validate-SSHPrivateKey}.Ast.Extent.Text
 )
-$ExistingProgressPreference = "$ProgressPreference"
-$ProgressPreference = 'SilentlyContinue'
-try {
-    # Bootstrap nuget if we don't have it
-    if(-not ($NugetPath = (Get-Command 'nuget.exe' -ErrorAction SilentlyContinue).Path)) {
-        $NugetPath = Join-Path $ENV:USERPROFILE nuget.exe
-        if(-not (Test-Path $NugetPath)) {
-            Invoke-WebRequest -uri 'https://dist.nuget.org/win-x86-commandline/latest/nuget.exe' -OutFile $NugetPath
-        }
-    }
-
-    # Bootstrap PSDepend, re-use nuget.exe for the module
-    if($path) { $null = mkdir $path -Force }
-    $NugetParams = 'install', 'PSDepend', '-Source', 'https://www.powershellgallery.com/api/v2/',
-                '-ExcludeVersion', '-NonInteractive', '-OutputDirectory', $Path
-    & $NugetPath @NugetParams
-    if (!$(Test-Path "$(Join-Path $Path PSDepend)\nuget.exe")) {
-        Move-Item -Path $NugetPath -Destination "$(Join-Path $Path PSDepend)\nuget.exe" -Force
-    }
-}
-finally {
-    $ProgressPreference = $ExistingProgressPreference
-}
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzjMbJrM7u2AEHqRtgy0szKTk
-# GJegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoI5upC9pOz9WSiIuLiQJVGiD
+# SDWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -111,11 +111,11 @@ finally {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPhFOL6/a9IpTfcP
-# XRU2cU/99trhMA0GCSqGSIb3DQEBAQUABIIBAL3G7cC4WnDUnXAyu3Vp4BjXEaAm
-# zRO8/DYSqyNMiD0GxO53Wmk5wjEZr0Vrntqf2PANyT2dm4Fs0Kte6SjYFE7M2gtW
-# kdqMZ+3iGu0P+2CkVLRtoj3s1ljGM8NbwZ0f/9uR7y30b0coCFihhx1q8T75v3t+
-# NtDBOfSFydXHPMqvAmWyvgMj30uMVY+Kzyi/8t9aNBrQ5QUaRgFK0LXGVI/c17Bk
-# koXEUx1F5Fts3YDdof3+KTWMhCOs5W5PjyacpBP4Csy3kPrPOWm0st8JiqHdkDtR
-# hrbduZgP/vkpUdMLFOtAVcV8AxBu4gqNd3DNRbiV0DB0ewTTgYiTftQwWUc=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPPtUENSOAbckytl
+# C5ALdJn0TNtEMA0GCSqGSIb3DQEBAQUABIIBAL8BlGZGzyqsthWu15xDTGXyMxWl
+# we1P6y16KLIeqyDf6JVFnIz6bSD+DVJNDohQdUj0eH389yF0zq0FLIeDHSlMh1DO
+# EzPlOG4ofeC8J5Ecuz1KeigfjfuI4VwLtmYoOXO4XEEb262XfYDjfdwOF9+D+PyX
+# xr6Dz52EjiBsDiP8U+w/AwsxrKCAnOOqOAudOEbDbM1sQLx+unGhyzH3bRF2FVSf
+# Dxhn1UIfme2+5tAYXOAMtLnsys0qNBhwVMb0XhRRA3m7sJPb6llF1fedTr8zcajF
+# Px6A3WyF/0t+wqx0ZYlZO57MTE82eOyuEaz1w/QQIjeKHgnoRQF+qJhj1a8=
 # SIG # End signature block

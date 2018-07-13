@@ -44,34 +44,12 @@
         priority in your $env:Path. This is especially useful if you have ssh binaries in your path from other
         program installs (like git).
 
-    .PARAMETER UsePowerShellGet
-        This parameter is OPTIONAL.
-
-        This parameter is a switch. If used, OpenSSH binaries will be installed via PowerShellGet/PackageManagement
-        Modules.
-
-    .PARAMETER UseChocolateyCmdLine
-        This parameter is OPTIONAL.
-
-        This parameter is a switch. If used, OpenSSH binaries will be installed via the Chocolatey CmdLine. If
-        the Chocolatey CmdLine is not already installed, it will be installed.
-
     .PARAMETER GitHubInstall
         This parameter is OPTIONAL.
 
         This parameter is a switch. If used, OpenSSH binaries will be installed by downloading the .zip
         from https://github.com/PowerShell/Win32-OpenSSH/releases/latest/, expanding the archive, moving
         the files to the approproiate location(s), and setting permissions appropriately.
-
-    .PARAMETER UpdatePackageManagement
-        This parameter is OPTIONAL.
-
-        This parameter is a switch. If used, PowerShellGet/PackageManagement Modules will be updated to their
-        latest version before installation of OpenSSH binaries.
-
-        WARNING: Using this parameter could break certain PowerShellGet/PackageManagement cmdlets. Recommend
-        using the dedicated function "Update-PackageManagemet" and starting a fresh PowerShell session after
-        it finishes.
 
     .PARAMETER SkipWinCapabilityAttempt
         This parameter is OPTIONAL.
@@ -119,16 +97,7 @@ function Install-WinSSH {
         [switch]$GiveWinSSHBinariesPathPriority,
 
         [Parameter(Mandatory=$False)]
-        [switch]$UsePowerShellGet,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$UseChocolateyCmdLine,
-
-        [Parameter(Mandatory=$False)]
         [switch]$GitHubInstall,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$UpdatePackageManagement,
 
         [Parameter(Mandatory=$False)]
         [switch]$SkipWinCapabilityAttempt,
@@ -142,26 +111,6 @@ function Install-WinSSH {
     if (!$(GetElevation)) {
         Write-Verbose "You must run PowerShell as Administrator before using this function! Halting!"
         Write-Error "You must run PowerShell as Administrator before using this function! Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-
-    if ($UsePowerShellGet -or $UseChocolateyCmdLine -or $GitHubInstall) {
-        $SkipWinCapabilityAttempt = $True
-    }
-
-    if ($UsePowerShellGet -and $($UseChocolateyCmdLine -or $GitHubInstall)) {
-        Write-Error "Please use EITHER the -UsePowerShellGet switch OR the -UseChocolateyCmdLine switch OR the -GitHubInstall switch. Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-    if ($UseChocolateyCmdLine -and $($UsePowerShellGet -or $GitHubInstall)) {
-        Write-Error "Please use EITHER the -UseUseChocolateyCmdLine switch OR the -UsePowerShellGet switch OR the -GitHubInstall switch. Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-    if ($GitHubInstall -and $($UsePowerShellGet -or $UseChocolateyCmdLine)) {
-        Write-Error "Please use EITHER the -GitHubInstall switch OR the -UsePowerShellGet switch OR the -UseChocolateyCmdLine switch. Halting!"
         $global:FunctionResult = "1"
         return
     }
@@ -182,15 +131,6 @@ function Install-WinSSH {
     $InstallSSHAgentSplatParams = @{
         ErrorAction         = "SilentlyContinue"
         ErrorVariable       = "ISAErr"
-    }
-    if ($UpdatePackageManagement) {
-        $InstallSSHAgentSplatParams.Add("UpdatePackageManagement",$True)
-    }
-    if ($UsePowerShellGet) {
-        $InstallSSHAgentSplatParams.Add("UsePowerShellGet",$True)  
-    }
-    if ($UseChocolateyCmdLine) {
-        $InstallSSHAgentSplatParams.Add("UseChocolateyCmdLine",$True)
     }
     if ($GitHubInstall) {
         $InstallSSHAgentSplatParams.Add("GitHubInstall",$True)
@@ -282,8 +222,8 @@ function Install-WinSSH {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUaXHEy4NG1YeeTHYh1qFSHRJf
-# UCagggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUodk/4dHbWv4OkQXLE4XBCJN6
+# 5GWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -340,11 +280,11 @@ function Install-WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFChzFctSQOcIjzjY
-# rvIeqKjM23RsMA0GCSqGSIb3DQEBAQUABIIBAD7rZTdYKloGOiUOiKG6yHTz0KGz
-# iUa+WKYd48MDIyO3quw1E8hgrsZglwbV48ewJClaiz/58J7a/ZZQNB4BJ5WCA5dW
-# gnYSmHkIU/+tu5ondjJQJ/Yt4clhDXzg9cNs/JyXvOT5iNRDEOkleoJsWt0/kMuz
-# EBj++BlffwkRqlr4ALD6NQ/7ENz1jJJ916fr84GvMX8tnRHegvTl3OW/5LwRFqqN
-# qfgJbnYAD7va2auWjGYJzCFoYeS+BZhWET8ga8U5EtHsmfDMJXYqSBTer5BPXGAl
-# W6UafDihws6WJvng8pMRN+HAfIgEbsnYUi8jRi7Xew8f/mE8mHY3JMlMVPI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDGWkoBIxaKf6oGs
+# AyfaT49wSHXMMA0GCSqGSIb3DQEBAQUABIIBAE10nP5Zpy7RhqTZ9lzxknd1EsrM
+# +VQcCOq28G9V6eFqbf3vF3dCzkWWZvqtKvLp4j9xI5ydzkDw7PnyApuOsV4qJc7o
+# L/wSYKLOcH9NBM8XM79bHyoSe9+7b348meYQv9b3S2qGyDOsevUYWMyB0d5XHMro
+# /Rkx2PAplev1JU9MGMG4hhIjuimzIKZ8HT5QPjHEHLmjx0z6tnVArsdLU92iJ6bW
+# 39qRTTpWFDq98/4wh7XZ1SyxGU7xBXMuDOx8S6t0nRhLE0lW+84qiEdWEXOlU4Mo
+# BSD3ab2MRX1nOQXLp36WyBviXQMx8+s//7LhXDLBcfyvILaz1gvVdTYnGLU=
 # SIG # End signature block

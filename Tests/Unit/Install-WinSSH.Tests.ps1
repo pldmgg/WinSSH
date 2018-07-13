@@ -26,6 +26,7 @@ param(
     }
 #>
 
+<#
 # Load CustomAssertions.psm1
 Import-Module "$env:BHProjectPath\Tests\CustomAssertions.psm1" -Force
 Add-AssertionOperator -Name 'BeTypeOrType' -Test $Function:BeTypeOrType
@@ -224,6 +225,7 @@ $Functions = @(
     ${Function:CommonTestSeries}.Ast.Extent.Text
     ${Function:StartTesting}.Ast.Extent.Text
 )
+#>
 
 # Install-WinSSH Params
 <#
@@ -261,6 +263,7 @@ $Functions = @(
 [switch]$Force
 #>
 
+<#
 $TestSplatParams = @(
     @{
         GiveWinSSHBinariesPathPriority  = $True
@@ -412,12 +415,13 @@ InModuleScope WinSSH {
         }
     }
 }
+#>
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPJzcaL3peurugCtsoMCc0XMw
-# drKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUnpqskIJxu15yyy+FQtB/EPA9
+# phGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -474,11 +478,11 @@ InModuleScope WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMrvdoRmEgJjul6D
-# y3P3iQU9XXp8MA0GCSqGSIb3DQEBAQUABIIBAJLhsKGL1lFqLB88w18T1/7YiNoq
-# CR90tbrLXCQSrNgnYR5JqwM/jpfGUGme1dSZ8l8QymyNHII6PA2hDL87NqkaaHBI
-# H1BMXt88QEjAyzIZIqmWQ04P1yTGaDiWZ8qNi1Ri5KJD//fUszuOZogvsJStlhQB
-# xjPjN4xM5O4XWOFd+kyu3zdNNzE2vBcADdBOUDrNlNUfvdMDSUyeg79aBEhcZyQH
-# omjeXkflWlLr2wXH9RHhG7z0iNJaTAs0uzuXRy+digsg9nKbuekOzKZD/wbQ41v7
-# cvP7jn7+WHMpYAcbqSWvDd+1Ij/uDSGPxtQXTQZHSS26ZBHdENDmAzgc9LA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFF6/rerpUJ5D/jxH
+# jgTDGGtcmNRjMA0GCSqGSIb3DQEBAQUABIIBALcWJ6CbpE7fmO3weTAs6uw11vnt
+# vroLXQgHk/5FTVwND5VChGwpHc7V6SAcxD8ZXK/1L46cCpdNqk5HhjHW8/SC+2rI
+# Gz2k5t0Qctey0/GynBqCHOTHWS5QW3P75MIV+0h9lDT5d+Ulgclmr9L+im25/6EE
+# R2TxLGrVI79OrOdrwzWEwiuvLuozW+Alt86ed+kjgNY3MXSe3EsmRg1jpiwBMylq
+# o+qZD+CqkfQwgBju7j2mU7Cwjan3nNhojq8YSsd1QxK7i4ZKxB3CpcBDVFFzCRII
+# toz5JzWB+1aMlYToy6jluQlJgolVSbCtXpBIbhkSjSjqf8dS0eoYf5KbUoI=
 # SIG # End signature block

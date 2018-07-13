@@ -79,13 +79,7 @@ function Install-SSHAgentService {
         [switch]$UseChocolateyCmdLine,
 
         [Parameter(Mandatory=$False)]
-        [switch]$UsePowerShellGet,
-
-        [Parameter(Mandatory=$False)]
         [switch]$GitHubInstall,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$UpdatePackageManagement,
 
         [Parameter(Mandatory=$False)]
         [switch]$SkipWinCapabilityAttempt,
@@ -96,35 +90,18 @@ function Install-SSHAgentService {
     ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
 
     if (!$(GetElevation)) {
-        Write-Verbose "You must run PowerShell as Administrator before using this function! Halting!"
         Write-Error "You must run PowerShell as Administrator before using this function! Halting!"
         $global:FunctionResult = "1"
         return
     }
 
-    if ($(Get-Module -ListAvailable).Name -notcontains "NTFSSecurity") {
-        try {
-            Install-Module -Name NTFSSecurity -ErrorAction SilentlyContinue -ErrorVariable NTFSSecInstallErr
-            if ($NTFSSecInstallErr) {throw "Problem installing the NTFSSecurity Module!"}
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
-    if ($(Get-Module).Name -notcontains "NTFSSecurity") {
-        try {
-            $NTFSSecImport = Import-Module NTFSSecurity -ErrorAction SilentlyContinue -PassThru
-            if (!$NTFSSecImport) {throw "Problem importing module NTFSSecurity!"}
-        }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
-        }
-    }
+    $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
+    $tempfile = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName())
 
+    # NOTE: In this context, 'installing' OpenSSH simply means getting ssh.exe and all related files into $OpenSSHWinPath
+
+    #region >> Install OpenSSH Via Windows Capability
+    
     if ([Environment]::OSVersion.Version -ge [version]"10.0.17063" -and !$SkipWinCapabilityAttempt) {
         # Import the Dism Module
         if ($(Get-Module).Name -notcontains "Dism") {
@@ -177,27 +154,22 @@ function Install-SSHAgentService {
         }
     }
 
-    if ([Environment]::OSVersion.Version -lt [version]"10.0.17063" -or $AddWindowsCapabilityFailure -or $SkipWinCapabilityAttempt -or $Force) {
-        # BEGIN OpenSSH Program Installation #
+    #endregion >> Install OpenSSH Via Windows Capability
 
+
+    #region >> Install OpenSSH via Traditional Methods
+
+    if ([Environment]::OSVersion.Version -lt [version]"10.0.17063" -or $AddWindowsCapabilityFailure -or $SkipWinCapabilityAttempt -or $Force) {
+        #region >> Get OpenSSH-Win64 Files
+        
         if (!$GitHubInstall) {
             $InstallProgramSplatParams = @{
-                ProgramName         = "OpenSSH"
-                CommandName         = "ssh.exe"
-                ErrorAction         = "SilentlyContinue"
-                ErrorVariable       = "IPErr"
-            }
-            if ($UpdatePackageManagement) {
-                $InstallProgramSplatParams.Add("UpdatePackageManagement",$True)
-            }
-            if ($Force) {
-                $InstallProgramSplatParams.Add("Force",$True)
-            }
-            if ($UsePowerShellGet) {
-                $InstallProgramSplatParams.Add("UsePowerShellGet",$True)  
-            }
-            elseif ($UseChocolateyCmdLine) {
-                $InstallProgramSplatParams.Add("UseChocolateyCmdLine",$True)
+                ProgramName                 = "openssh"
+                CommandName                 = "ssh.exe"
+                ExpectedInstallLocation     = $OpenSSHWinPath
+                ErrorAction                 = "SilentlyContinue"
+                ErrorVariable               = "IPErr"
+                WarningAction               = "SilentlyContinue"
             }
 
             try {
@@ -247,39 +219,24 @@ function Install-SSHAgentService {
     
             $WinSSHFileNameSansExt = "OpenSSH-Win64"
             if ($NeedNewerVersion -or $NotInstalled) {
-                # We need the NTFSSecurity Module
-                if ($(Get-Module -ListAvailable).Name -contains "NTFSSecurity") {
-                    if ($(Get-Module NTFSSecurity).Name -notcontains "NTFSSecurity") {
-                        $null = Import-Module NTFSSecurity
-                    }
-                }
-                else {    
-                    try {
-                        $null = Install-Module -Name NTFSSecurity
-                        $null = Import-Module NTFSSecurity
-                    }
-                    catch {
-                        Write-Error $_
-                        $global:FunctionResult = "1"
-                        return
-                    }
-                }
-    
                 try {
                     $WinOpenSSHDLLink = $([String]$response.GetResponseHeader("Location")).Replace('tag','download') + "/$WinSSHFileNameSansExt.zip"
                     Write-Host "Downloading OpenSSH-Win64 from $WinOpenSSHDLLink..."
                     Invoke-WebRequest -Uri $WinOpenSSHDLLink -OutFile "$HOME\Downloads\$WinSSHFileNameSansExt.zip"
                     # NOTE: OpenSSH-Win64.zip contains a folder OpenSSH-Win64, so no need to create one before extraction
                     $null = UnzipFile -PathToZip "$HOME\Downloads\$WinSSHFileNameSansExt.zip" -TargetDir "$HOME\Downloads"
-                    if (Test-Path "$env:ProgramFiles\$WinSSHFileNameSansExt") {
-                        Get-Service ssh-agent -ErrorAction SilentlyContinue | Stop-Service -ErrorAction SilentlyContinue
-                        Get-Service sshd -ErrorAction SilentlyContinue | Stop-Service -ErrorAction SilentlyContinue
-                        Get-Process -Name ssh-keygen -ErrorAction SilentlyContinue | Stop-Process -ErrorAction SilentlyContinue
+                    if (Test-Path $OpenSSHWinPath) {
+                        $SSHAgentService = Get-Service ssh-agent -ErrorAction SilentlyContinue
+                        if ($SSHAgentService) {$SSHAgentService | Stop-Service -ErrorAction SilentlyContinue}
+                        $SSHDService = Get-Service sshd -ErrorAction SilentlyContinue
+                        if ($SSHDService) {Stop-Service -ErrorAction SilentlyContinue}
+                        $SSHKeyGenProcess = Get-Process -name ssh-keygen -ErrorAction SilentlyContinue
+                        if ($SSHKeyGenProcess) {$SSHKeyGenProcess | Stop-Process -ErrorAction SilentlyContinue}
 
-                        Remove-Item "$env:ProgramFiles\$WinSSHFileNameSansExt" -Recurse -Force
+                        Remove-Item $OpenSSHWinPath -Recurse -Force
                     }
-                    Move-Item "$HOME\Downloads\$WinSSHFileNameSansExt" "$env:ProgramFiles\$WinSSHFileNameSansExt"
-                    Enable-NTFSAccessInheritance -Path "$env:ProgramFiles\$WinSSHFileNameSansExt" -RemoveExplicitAccessRules
+                    Move-Item "$HOME\Downloads\$WinSSHFileNameSansExt" $OpenSSHWinPath
+                    Enable-NTFSAccessInheritance -Path $OpenSSHWinPath -RemoveExplicitAccessRules
                 }
                 catch {
                     Write-Error $_
@@ -293,31 +250,82 @@ function Install-SSHAgentService {
                 $global:FunctionResult = "1"
                 return
             }
+
+            # Make sure $OpenSSHWinPath is part of $env:Path
+            [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+            if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+                $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+                $env:Path = $CurrentEnvPathArray -join ";"
+            }
         }
 
-        # END OpenSSH Program Installation #
+        #endregion >> Get OpenSSH-Win64 Files
 
-        $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
+        # Now ssh.exe and related should be available, but the ssh-agent service has not been installed yet
+
         if (!$(Test-Path $OpenSSHWinPath)) {
             Write-Error "The path $OpenSSHWinPath does not exist! Halting!"
             $global:FunctionResult = "1"
             return
         }
+
+        # If the ssh-agent service exists from a previous OpenSSH install, make sure it is Stopped
+        # Also, ssh-keygen might be running too, so make sure that process is stopped. 
+        $SSHAgentService = Get-Service ssh-agent -ErrorAction SilentlyContinue
+        if ($SSHAgentService) {$SSHAgentService | Stop-Service -ErrorAction SilentlyContinue}
+        $SSHKeyGenProcess = Get-Process -name ssh-keygen -ErrorAction SilentlyContinue
+        if ($SSHKeyGenProcess) {$SSHKeyGenProcess | Stop-Process -ErrorAction SilentlyContinue}
+
         #$sshdpath = Join-Path $OpenSSHWinPath "sshd.exe"
         $sshagentpath = Join-Path $OpenSSHWinPath "ssh-agent.exe"
+        $etwman = Join-Path $OpenSSHWinPath "openssh-events.man"
         $sshdir = "$env:ProgramData\ssh"
         $logsdir = Join-Path $sshdir "logs"
+
+        #region >> Setup openssh Windows Event Log
+
+        # unregister etw provider
+        wevtutil um `"$etwman`"
+
+        # adjust provider resource path in instrumentation manifest
+        [XML]$xml = Get-Content $etwman
+        $xml.instrumentationManifest.instrumentation.events.provider.resourceFileName = $sshagentpath.ToString()
+        $xml.instrumentationManifest.instrumentation.events.provider.messageFileName = $sshagentpath.ToString()
+
+        $streamWriter = $null
+        $xmlWriter = $null
+        try {
+            $streamWriter = new-object System.IO.StreamWriter($etwman)
+            $xmlWriter = [System.Xml.XmlWriter]::Create($streamWriter)    
+            $xml.Save($xmlWriter)
+        }
+        finally {
+            if($streamWriter) {
+                $streamWriter.Close()
+            }
+        }
+
+        #register etw provider
+        $null = wevtutil im `"$etwman`" *>$tempfile
+
+        #endregion >> Setup openssh Windows Event Log
+
+        #region >> Create teh ssh-agent service
 
         try {
             if ([bool]$(Get-Service ssh-agent -ErrorAction SilentlyContinue)) {
                 Write-Host "Recreating ssh-agent service..."
                 Stop-Service ssh-agent
-                sc.exe delete ssh-agent 1>$null
+                $null = sc.exe delete ssh-agent
+            }
+            else {
+                Write-Host "Creating ssh-agent service..."
             }
 
-            New-Service -Name ssh-agent -BinaryPathName "$sshagentpath" -Description "SSH Agent" -StartupType Automatic | Out-Null
-            # pldmgg NOTE: I have no idea about the below...ask the original authors...
-            cmd.exe /c 'sc.exe sdset ssh-agent D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;RP;;;AU)' 1>$null
+            $agentDesc = "Agent to hold private keys used for public key authentication."
+            $null = New-Service -Name ssh-agent -DisplayName "OpenSSH Authentication Agent" -BinaryPathName $sshagentpath -Description $agentDesc -StartupType Automatic
+            $null = sc.exe sdset ssh-agent "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;RP;;;AU)"
+            $null = sc.exe privs ssh-agent SeImpersonatePrivilege
         }
         catch {
             Write-Error $_
@@ -325,6 +333,9 @@ function Install-SSHAgentService {
             return
         }
 
+        # IMPORTANT NOTE: Starting the sshd service is what creates the directory C:\ProgramData\ssh and
+        # all of its contents
+        <#
         try {
             # Create the C:\ProgramData\ssh folder and set its permissions
             if (-not (Test-Path $sshdir -PathType Container)) {
@@ -366,17 +377,22 @@ function Install-SSHAgentService {
             $global:FunctionResult = "1"
             return
         }
+        #>
     }
 
     Write-Host -ForegroundColor Green "The ssh-agent service was successfully installed! Starting the service..."
     Start-Service ssh-agent -Passthru
+
+    if (Test-Path $tempfile) {
+        Remove-Item $tempfile -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTZ0EjsiTOmfyRydNgD7IXfvL
-# I/6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmLkSMykR6OiFZw3RTLKK3TrY
+# M0agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -433,11 +449,11 @@ function Install-SSHAgentService {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBX2gURFfTyx6uER
-# MBNFspN2fHwVMA0GCSqGSIb3DQEBAQUABIIBAKdD3CxN0qb3jMyF334NWjCDawE1
-# 9DTycCj90e1BVznizYL/Tgni4kKYfGQQtX2/gsxNoSI0sIxg27CUtrpi6wVInUMM
-# 1yRNrrwf7u848yDE0yw1Jl/pv89RjzFgIBxeKPKlzJoQRqLQsyS9i7fO74Loze2w
-# iEu2egBI16GtFLVHxgr8FMY52Q0eZaksR33Wog8lPNX/yDAxJgU/EZloerKra1tB
-# sKqk6WaWdZelElaos4OZVhsGDDmppkUc/VNrLiRyq8BO423CjPx0ekMIoIGnDqLT
-# ZpTe3r609UuxDPwqMQcP9ojO8aa5A3r51sfy2LZB0G0uav9rVxkqpho0FvE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFICTlk96Gkguk7TN
+# OEhwKAZTZjfdMA0GCSqGSIb3DQEBAQUABIIBAEJ1DtJIU+0U5ijhF+cCPe1DR+KX
+# oD6CwVJm5QIQ6bQ0Qe/g3lbUPVMWQFunNkjDRFsD7MtB/O2+obeLm4241rYeRhLd
+# KhyJOWYjNlglounMpcJJwDPxH7uQH1YYGQSKXzXZRuPjL04+DEgPp5p9dQG8aype
+# LT4ZD/8n42YJJc4b/20oOlmxkUQXSuqJgBdaYB6QDJfILz4p13RPrnYKu6EKSt34
+# Wd+67wBsrUCQMg+SEKFNDxB9bcsbEQu0nNXgQJb3hUtw04PZAlo9dPq+ELJYe6fc
+# LZXw7pGMdEKFs8RiSoAH7OyAYfQWgjYCotau1KE8IP3zJ0bgtXFfCr579mA=
 # SIG # End signature block

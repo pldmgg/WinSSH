@@ -25,7 +25,7 @@ param(
         Creds           = $Creds
     }
 #>
-
+<#
 # Load CustomAssertions.psm1
 Import-Module "$env:BHProjectPath\Tests\CustomAssertions.psm1" -Force
 Add-AssertionOperator -Name 'BeTypeOrType' -Test $Function:BeTypeOrType
@@ -88,11 +88,12 @@ catch {
 }
 
 $CurrentlyLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
-<#
+
+#
 if (![bool]$($CurrentlyLoadedAssemblies.FullName -match "System.ServiceProcess,")) {
     Add-Type -AssemblyName "System.ServiceProcess"
 }
-#>
+#
 
 $FakeUninstallWinSSHOutput = [pscustomobject]@{
     DirectoriesThatMightNeedToBeRemoved = [array]@("C:\Python36")
@@ -126,7 +127,7 @@ function CommonTestSeries {
         }
     }
 
-    <#
+    #
     it "Should return a PSCustomObject Property DirectoriesThatMightNeedToBeRemoved of Type Object Array" {
         $InputObject.DirectoriesThatMightNeedToBeRemoved | Assert-Type System.Object[]
     }
@@ -142,9 +143,11 @@ function CommonTestSeries {
     it "Should return a PSCustomObject Property RegistryProperties of Type Object Array" {
         $InputObject.RegistryProperties | Assert-Type System.Object[]
     }
-    #>
+    #
 }
+#>
 
+<#
 function Cleanup {
     [CmdletBinding()]
     Param ()
@@ -212,10 +215,10 @@ $Functions = @(
 )
 
 # Uninstall-WinSSH Params
-<#
+#
 [Parameter(Mandatory=$False)]
 [switch]$KeepSSHAgent
-#>
+#
 
 $TestSplatParams = @(
     @{
@@ -288,12 +291,13 @@ InModuleScope WinSSH {
         }
     }
 }
+#>
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBD44tLbnUcdSWhCvvPzQIkcq
-# 23igggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5Q/AxkZhtR+vn9qBUhV4gRMX
+# HW6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -350,11 +354,11 @@ InModuleScope WinSSH {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDPw4uNY9gofPTLL
-# 1bbDHIV7OcdgMA0GCSqGSIb3DQEBAQUABIIBAE5+7Z2Nmr6ZsB+/Sk43vm5VSfqJ
-# BBpzn8F3Nk1OOCErw+AcVhTejXs19BoU1/6HJ7BhmB4jsVERgN99AN/dfxM/vpvs
-# CQyEVLTk35LKOF1YCw+128SQ3sxt5KsBENBjRIKK/Ym23cBTyBnTSb0kdCi9ZOGd
-# 7N3oJKeMo+e1rOYflOuDTInIBEjnCYs4RrX4Lh5sKewH43Rc1YNOfqUild4gidsN
-# mfSe34qtHTaLNNo/AutsJ/0DVsw+Z8s4e1ueVs6qaZv+b+/hJrHBo3rW2orFonD3
-# /tqOf5iZR+8PrYQuPXSWeYId8hO6iiTTQtRxpbAt8fRDzNze1B+YfZ0f4gY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKsMFCDJ64VDG6az
+# xiVS1megDPCcMA0GCSqGSIb3DQEBAQUABIIBACf2hcMchVSVrK0VPh7GHs8k8sNY
+# X/pA6m+MNch9ngyRYACqroVzLfmo+1gZeE6xQChBr6ozJvfeu8kmoQUMZXKwqTm8
+# 984/z2BDmhQJ/+XMfPly1WngkgbUu79lLJaI838fArc/WakeKvTYcs8oR0PaFaR1
+# hQbuR6StF9IgLeL1g9xwuNFpbdNCTdAryByBrNBnFoMFZY5oqT+XgMP5fpZnid9F
+# sjyPDu+PD5fSV45ZnbMVu4IWPIitoCTK6PWfH2OJ5ic5LExu5xjiaK+72v5+Mzuh
+# MLkuzU7kSI3uogmS0I9gxpKIZkI7pootaiiyehzyXkspuQ1NtC305KwBKsc=
 # SIG # End signature block

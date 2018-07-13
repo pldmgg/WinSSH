@@ -63,12 +63,13 @@ Task Init -RequiredVariables  {
 }
 
 Task Compile -Depends Init {
-    $BoilerPlatePrivateFunctionSourcing = @'
+    $BoilerPlateFunctionSourcing = @'
 [Net.ServicePointManager]::SecurityProtocol = "tls12, tls11, tls"
 
 # Get public and private function definition files.
 [array]$Public  = Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -ErrorAction SilentlyContinue
 [array]$Private = Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -ErrorAction SilentlyContinue
+$ThisModule = $(Get-Item $PSCommandPath).BaseName
 
 # Dot source the Private functions
 foreach ($import in $Private) {
@@ -80,71 +81,31 @@ foreach ($import in $Private) {
     }
 }
 
-'@ | Set-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1"
-
-    # Optionally Install-PSDepend and install any dependency Modules
-    $PSDependOperations = @'
-try {
-    & "$PSScriptRoot\Install-PSDepend.ps1"
-}
-catch {
-    Remove-Module WinSSH -ErrorAction SilentlyContinue
-    Write-Error $_
-    Write-Error "Installing the PSDepend Module failed! The WinSSH Module will not be loaded. Halting!"
-    $global:FunctionResult = "1"
-    return
+[System.Collections.Arraylist]$ModulesToInstallAndImport = @()
+if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
+    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
+    $ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
 }
 
-try {
-    Import-Module PSDepend
-    $null = Invoke-PSDepend -Path "$PSScriptRoot\module.requirements.psd1" -Install -Import -Force
-}
-catch {
-    Remove-Module WinSSH -ErrorAction SilentlyContinue
-    Write-Error $_
-    Write-Error "Problem with PSDepend Installing/Importing Module Dependencies! The WinSSH Module will not be loaded. Halting!"
-    $global:FunctionResult = "1"
-    return
+if ($ModulesToInstallAndImport.Count -gt 0) {
+    # NOTE: If you're not sure if the Required Module is Locally Available or Externally Available,
+    # add it the the -RequiredModules string array just to be certain
+    $InvModDepSplatParams = @{
+        RequiredModules                     = $ModulesToInstallAndImport
+        InstallModulesNotAvailableLocally   = $True
+        ErrorAction                         = "SilentlyContinue"
+        WarningAction                       = "SilentlyContinue"
+    }
+    $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
 }
 
+# Public Functions
 '@
 
-    Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $PSDependOperations
+    Set-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $BoilerPlateFunctionSourcing
 
-    <#
-    Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value '& $PSScriptRoot\Install-PSDepend.ps1'
-    
-    $RequiredModules = @("NTFSSecurity","ProgramManagement")
-    $InstallImportRequiredModules = @'
-if (!$(Get-Module -ListAvailable RequiredModuleNameMatch)) {
-    try {
-        Install-Module RequiredModuleNameMatch -ErrorAction Stop
-    }
-    catch {
-        Write-Error $_
-        Write-Error "Problem installing Module PrimaryModuleNameMatch dependency Module RequiredModuleNameMatch! Module PrimaryModuleNameMatch will NOT be loaded. Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-}
-try {
-    Import-Module RequiredModuleNameMatch -ErrorAction Stop
-}
-catch {
-    Write-Error $_
-    Write-Error "Problem importing Module PrimaryModulenameMatch dependency Module RequiredModuleNameMatch! Module PrimaryModuleNameMatch will NOT be loaded. Halting!"
-    $global:FunctionResult = "1"
-    return
-}
-
-'@
-
-    foreach ($ModuleDependency in $RequiredModules) {
-        $UpdatedModuleInstallBlock = $InstallImportRequiredModules -replace 'RequiredModuleNameMatch',$ModuleDependency -replace 'PrimaryModuleNameMatch','$env:BHProjectName'
-        Add-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $UpdatedModuleInstallBlock
-    }
-    #>
-
+    ###### BEGIN Unique Additions to this Module ######
+    ###### END Unique Additions to this Module ######
 
     [System.Collections.ArrayList]$FunctionTextToAdd = @()
     foreach ($ScriptFileItem in $PublicScriptFiles) {
@@ -248,8 +209,8 @@ Task Deploy -Depends Build {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJszjefZVJmIRy9xnfxf3ErAN
-# KQKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcq8qxTX4HdIvK4CiiX7eS4yS
+# LwKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -306,11 +267,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFODmV+ftfOexJmmx
-# B8ZCtcVwzPORMA0GCSqGSIb3DQEBAQUABIIBACf+USDLCyfOqN9srZDRDJNSe+Bn
-# UfmeDDaZmEIy3FeawZGmyVLRCcaIh6P5WTTakSESTnVa2D2l15SnhJd5uUGWY2Q+
-# 5x6derX5GefBwoSBap8K1OTHbl52CZe16ek7LiWtaxl+drxgptzTC754kK+JVU/0
-# /jVT2MSqWbHDRMipcSRjYVpidlkdX+Q2aUnksCktPhTIkp57+8jfPOxgsy7+EGVv
-# wAw43tfNAnzVfqM9LJjuQbm6lKAPUY7vQtifxNyMDtIu+bkpIGSdVSdAfOE4BkX8
-# jr/cBX/PwrG/MUku/aHXtANrGfFKHeYg3rDCvnvkgEB3uvqnxtdCF9+gk8Q=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJWvRhunaS+a7BN0
+# HQqgS4dPnTrDMA0GCSqGSIb3DQEBAQUABIIBAGBvdTDa5MTfijeXYbVGL5BTflKc
+# sG5xMkPZ9sm8M/TnN/8a7SkOfsnU+W5vP1Y/UsmmdXF6feVKhgErOdr/+pHenul2
+# QPoy0U3+akZtL3YREvBFxuL6a1pc223z0a3HEl/9hJoxmEo6R6+rZYzppk9v5xSH
+# JIcEi1JQUHtJcH+z03nAqRnfQK6+OWct1jPAPxQJ1GOOceTRduzprMC9wfK5hYcD
+# 5aIEn1Ar8Tf2U3KrthDiZy8JhNP93A7t4T30Gf9JBvXIyf/zIO42EtlqYc1cd/A6
+# VgT5bJPeNJc6mTeaL0SDW8Y0nEgIzffTp5fdauhIfBuwy4U/zkiehXmIXzw=
 # SIG # End signature block

@@ -71,22 +71,14 @@ PowerShellVersion = '5.1'
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = 'Add-CAPubKeyToSSHAndSSHDConfig', 'Add-PublicKeyToRemoteHost',
                 'Check-Cert', 'Configure-VaultServerForLDAPAuth',
-                'Configure-VaultServerForSSHManagement', 'Deploy-HyperVVagrantBoxManually',
-                'Fix-SSHPermissions', 'Generate-AuthorizedPrincipalsFile',
-                'Generate-Certificate','Generate-SSHUserDirFileInfo',
-                'Get-LDAPCert','Get-PublicKeyAuthInstructions',
-                'Get-SSHClientAuthSanity','Get-SSHFileInfo',
-                'Get-VagrantBoxManualDownload','Get-VaultAccessorLookup',
-                'Get-VaultLogin','Get-VaultTOkenAccessors',
-                'Get-VaultTokens','Install-SSHAgentService',
-                'Install-WinSSH','Manage-HyperVVM',
-                'New-SSHCredentials','New-SSHDServer',
-                'New-SSHKey','Revoke-VaultToken',
-                'Set-DefaultShell','Sign-SSHHostPublicKey',
-                'Sign-SSHUserPublicKey','Uninstall-WinSSH',
-                'Update-PowerShellCore','Validate-SSHPrivateKey',
-                'Create-TwoTierPKI','New-SelfSignedCertificateEx',
-                'Get-DSCEncryptionCert'
+                'Configure-VaultServerForSSHManagement','Fix-SSHPermissions',
+                'Generate-AuthorizedPrincipalsFile','Generate-SSHUserDirFileInfo',
+                'Get-LDAPCert','Get-PublicKeyAuthInstructions','Get-SSHClientAuthSanity',
+                'Get-SSHFileInfo','Get-VaultAccessorLookup','Get-VaultLogin',
+                'Get-VaultTokenAccessors','Get-VaultTokens','Install-SSHAgentService',
+                'Install-WinSSH','New-SSHCredentials','New-SSHDServer',
+                'New-SSHKey','Revoke-VaultToken','Set-DefaultShell','Sign-SSHHostPublicKey',
+                'Sign-SSHUserPublicKey','Uninstall-WinSSH','Validate-SSHPrivateKey'
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'

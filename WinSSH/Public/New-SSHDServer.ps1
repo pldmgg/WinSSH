@@ -60,7 +60,7 @@ function New-SSHDServer {
         [switch]$SkipWinCapabilityAttempt
     )
 
-    ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
+    #region >> Prep
 
     if (!$(GetElevation)) {
         Write-Verbose "You must run PowerShell as Administrator before using this function! Halting!"
@@ -68,6 +68,14 @@ function New-SSHDServer {
         $global:FunctionResult = "1"
         return
     }
+
+    $tempfile = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName())
+    $OpenSSHWinPath = Join-Path $env:ProgramFiles "OpenSSH-Win64"
+    $sshagentpath = Join-Path $OpenSSHWinPath "ssh-agent.exe"
+    $sshdpath = Join-Path $OpenSSHWinPath "sshd.exe"
+    $sshdir = Join-Path $env:ProgramData "ssh"
+    $sshdConfigPath = Join-Path $sshdir "sshd_config"
+    $logsdir = Join-Path $sshdir "logs"
 
     # Make sure the dependency ssh-agent service is already installed
     if (![bool]$(Get-Service ssh-agent -ErrorAction SilentlyContinue)) {
@@ -94,6 +102,16 @@ function New-SSHDServer {
             return
         }
     }
+
+    if (!$(Test-Path $OpenSSHWinPath)) {
+        Write-Error "The path $OpenSSHWinPath does not exist! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    #endregion >> Prep
+
+    #region >> Install the sshd Service
 
     if ([Environment]::OSVersion.Version -ge [version]"10.0.17063" -and !$SkipWinCapabilityAttempt) {
         try {
@@ -153,12 +171,6 @@ function New-SSHDServer {
         }
         
         if (!$AddWindowsCapabilityFailure) {
-            $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
-            $sshdpath = Join-Path $OpenSSHWinPath "sshd.exe"
-            $sshdir = "$env:ProgramData\ssh"
-            $logsdir = Join-Path $sshdir "logs"
-            $sshdConfigPath = Join-Path $sshdir "sshd_config"
-
             try {
                 # NOTE: $sshdir won't actually be created until you start the SSHD Service for the first time
                 # Starting the service also creates all of the needed host keys.
@@ -179,9 +191,9 @@ function New-SSHDServer {
                     Invoke-WebRequest -Uri $SSHConfigUri -OutFile $sshdConfigPath
                 }
 
-                $PubPrivKeyPairFiles = Get-ChildItem -Path $sshdir | Where-Object {$_.CreationTime -gt (Get-Date).AddSeconds(-5) -and $_.Name -match "ssh_host"}
-                $PubKeys = $PubPrivKeyPairFiles | Where-Object {$_.Extension -eq ".pub"}
-                $PrivKeys = $PubPrivKeyPairFiles | Where-Object {$_.Extension -ne ".pub"}
+                $PubPrivKeyPairFiles = Get-ChildItem -Path $sshdir -File | Where-Object {$_.Name -match "ssh_host_rsa"}
+                $PubHostKey = $PubPrivKeyPairFiles | Where-Object {$_.Extension -eq ".pub"}
+                $PrivHostKey = $PubPrivKeyPairFiles | Where-Object {$_.Extension -ne ".pub"}
             }
             catch {
                 Write-Error $_
@@ -192,36 +204,14 @@ function New-SSHDServer {
     }
     
     if ([Environment]::OSVersion.Version -lt [version]"10.0.17063" -or $AddWindowsCapabilityFailure -or $SkipWinCapabilityAttempt) {
-        $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
-        if (!$(Test-Path $OpenSSHWinPath)) {
-            try {
-                $InstallSSHAgentResult = Install-SSHAgentService -ErrorAction SilentlyContinue -ErrorVariable ISAErr
-                if (!$InstallSSHAgentResult) {throw "The Install-SSHAgentService function failed!"}
-            }
-            catch {
-                Write-Error $_
-                Write-Host "Errors for the Install-SSHAgentService function are as follows:"
-                Write-Error $($ISAErr | Out-String)
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-
-        if (!$(Test-Path $OpenSSHWinPath)) {
-            Write-Error "The path $OpenSSHWinPath does not exist! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
-        $sshdpath = Join-Path $OpenSSHWinPath "sshd.exe"
         if (!$(Test-Path $sshdpath)) {
             Write-Error "The path $sshdpath does not exist! Halting!"
             $global:FunctionResult = "1"
             return
         }
-        $sshagentpath = Join-Path $OpenSSHWinPath "ssh-agent.exe"
-        $sshdir = "$env:ProgramData\ssh"
-        $logsdir = Join-Path $sshdir "logs"
 
+        # NOTE: Starting the sshd Service should create all below content and set appropriate permissions
+        <#
         try {
             # Create the C:\ProgramData\ssh folder and set its permissions
             if (-not (Test-Path $sshdir -PathType Container)) {
@@ -277,14 +267,17 @@ function New-SSHDServer {
             $global:FunctionResult = "1"
             return
         }
+        #>
 
         try {
             if (Get-Service sshd -ErrorAction SilentlyContinue) {
                Stop-Service sshd
-               sc.exe delete sshd 1>$null
+               $null = sc.exe delete sshd
             }
     
-            New-Service -Name sshd -BinaryPathName "$sshdpath" -Description "SSH Daemon" -StartupType Manual | Out-Null
+            $sshdDesc = "SSH protocol based service to provide secure encrypted communications between two untrusted hosts over an insecure network."
+            $null = New-Service -Name sshd -DisplayName "OpenSSH SSH Server" -BinaryPathName $sshdpath -Description $sshdDesc -StartupType Automatic
+            $null = sc.exe privs sshd SeAssignPrimaryTokenPrivilege/SeTcbPrivilege/SeBackupPrivilege/SeRestorePrivilege/SeImpersonatePrivilege
         }
         catch {
             Write-Error $_
@@ -292,6 +285,19 @@ function New-SSHDServer {
             return
         }
 
+        $SSHDServiceInfo = Get-Service sshd -ErrorAction Stop
+        if ($SSHDServiceInfo.Status -ne "Running") {
+            $SSHDServiceInfo | Start-Service -ErrorAction Stop
+        }
+        Start-Sleep -Seconds 5
+        if ($(Get-Service sshd).Status -ne "Running") {
+            Write-Error "The sshd service did not start succesfully (within 5 seconds) after initial install! Please check your sshd_config configuration. Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # NOTE: Starting the sshd Service should create the host keys, so we don't need to do it here
+        <#
         # Setup Host Keys
         $SSHKeyGenProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $SSHKeyGenProcessInfo.WorkingDirectory = $sshdir
@@ -314,60 +320,58 @@ function New-SSHDServer {
             $global:FunctionResult = "1"
             return
         }
+        #>
         
-        $PubPrivKeyPairFiles = Get-ChildItem -Path $sshdir | Where-Object {$_.CreationTime -gt (Get-Date).AddSeconds(-5) -and $_.Name -match "ssh_host"}
-        $PubKeys = $PubPrivKeyPairFiles | Where-Object {$_.Extension -eq ".pub"}
-        $PrivKeys = $PubPrivKeyPairFiles | Where-Object {$_.Extension -ne ".pub"}
-        # $PrivKeys = $PubPrivKeyPairFiles | foreach {if ($PubKeys -notcontains $_) {$_}}
-        
-        Start-Service ssh-agent
-        Start-Sleep -Seconds 5
+        # Add the ssh_host_rsa private key to the ssh-agent
+        $PubPrivKeyPairFiles = Get-ChildItem -Path $sshdir -File | Where-Object {$_.Name -match "ssh_host_rsa"}
+        $PubHostKey = $PubPrivKeyPairFiles | Where-Object {$_.Extension -eq ".pub"}
+        $PrivHostKey = $PubPrivKeyPairFiles | Where-Object {$_.Extension -ne ".pub"}
 
+        if ($(Get-Service ssh-agent).Status -ne "Running") {
+            Start-Service ssh-agent
+            Start-Sleep -Seconds 5
+        }
         if ($(Get-Service "ssh-agent").Status -ne "Running") {
-            Write-Error "The ssh-agent service did not start succesfully! Please check your config! Halting!"
+            Write-Error "The ssh-agent service did not start succesfully (within 5 seconds)! Please check your config! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        if (![bool]$(Get-Command ssh-add -ErrorAction SilentlyContinue)) {
+            Write-Error 'Unable to find ssh-add.exe! Is it part of your $env:Path? Halting!'
             $global:FunctionResult = "1"
             return
         }
         
-        foreach ($PrivKey in $PrivKeys) {
-            $SSHAddProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $SSHAddProcessInfo.WorkingDirectory = $sshdir
-            $SSHAddProcessInfo.FileName = "ssh-add.exe"
-            $SSHAddProcessInfo.RedirectStandardError = $true
-            $SSHAddProcessInfo.RedirectStandardOutput = $true
-            $SSHAddProcessInfo.UseShellExecute = $false
-            $SSHAddProcessInfo.Arguments = "$($PrivKey.FullName)"
-            $SSHAddProcess = New-Object System.Diagnostics.Process
-            $SSHAddProcess.StartInfo = $SSHAddProcessInfo
-            $SSHAddProcess.Start() | Out-Null
-            $SSHAddProcess.WaitForExit()
-            $SSHAddStdout = $SSHAddProcess.StandardOutput.ReadToEnd()
-            $SSHAddStderr = $SSHAddProcess.StandardError.ReadToEnd()
-            $SSHAddAllOutput = $SSHAddStdout + $SSHAddStderr
-            
-            if ($SSHAddAllOutput -match "fail|error") {
-                Write-Error $SSHAddAllOutput
-                Write-Error "The 'ssh-add $($PrivKey.FullName)' command failed!"
-            }
-            else {
-                if ($RemoveHostPrivateKeys) {
-                    Remove-Item $PrivKey
-                }
-            }
-
-            # Need to remove the above variables before next loop...
-            # TODO: Make the below not necessary...
-            $VariablesToRemove = @("SSHAddProcessInfo","SSHAddProcess","SSHAddStdout","SSHAddStderr","SSHAddAllOutput")
-            foreach ($VarName in $VariablesToRemove) {
-                Remove-Variable -Name $VarName
+        $SSHAddProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $SSHAddProcessInfo.WorkingDirectory = $sshdir
+        $SSHAddProcessInfo.FileName = "ssh-add.exe"
+        $SSHAddProcessInfo.RedirectStandardError = $true
+        $SSHAddProcessInfo.RedirectStandardOutput = $true
+        $SSHAddProcessInfo.UseShellExecute = $false
+        $SSHAddProcessInfo.Arguments = "$($PrivHostKey.FullName)"
+        $SSHAddProcess = New-Object System.Diagnostics.Process
+        $SSHAddProcess.StartInfo = $SSHAddProcessInfo
+        $SSHAddProcess.Start() | Out-Null
+        $SSHAddProcess.WaitForExit()
+        $SSHAddStdout = $SSHAddProcess.StandardOutput.ReadToEnd()
+        $SSHAddStderr = $SSHAddProcess.StandardError.ReadToEnd()
+        $SSHAddAllOutput = $SSHAddStdout + $SSHAddStderr
+        
+        if ($SSHAddAllOutput -match "fail|error") {
+            Write-Error $SSHAddAllOutput
+            Write-Error "The 'ssh-add $($PrivKey.FullName)' command failed!"
+        }
+        else {
+            if ($RemoveHostPrivateKeys) {
+                Remove-Item $PrivKey
             }
         }
 
-        $null = Set-Service ssh-agent -StartupType Automatic
-        $null = Set-Service sshd -StartupType Automatic
-
+        # EDIT: The below shouldn't be necessary...
         # IMPORTANT: It is important that File Permissions are "Fixed" at the end (as opposed to earlier in this function),
         # otherwise previous steps break
+        <#
         if (!$(Test-Path "$OpenSSHWinPath\FixHostFilePermissions.ps1")) {
             Write-Error "The script $OpenSSHWinPath\FixHostFilePermissions.ps1 cannot be found! Permissions in the $OpenSSHWinPath directory need to be fixed before the sshd service will start successfully! Halting!"
             $global:FunctionResult = "1"
@@ -382,114 +386,21 @@ function New-SSHDServer {
             $global:FunctionResult = "1"
             return
         }
+        #>
     }
 
-    # Make sure PowerShell Core is Installed
-    if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
-        # Search for pwsh.exe where we expect it to be
-        $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
-        if (!$PotentialPwshExes) {
-            try {
-                $null = Update-PowerShellCore -Latest -DownloadDirectory "$HOME\Downloads" -ErrorAction Stop
-            }
-            catch {
-                Write-Error $_
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-        $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
-        if (!$PotentialPwshExes) {
-            Write-Error "Unable to find pwsh.exe! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
-        $LatestLocallyAvailablePwsh = [array]$($PotentialPwshExes.VersionInfo | Sort-Object -Property ProductVersion)[-1].FileName
-        $LatestPwshParentDir = [System.IO.Path]::GetDirectoryName($LatestLocallyAvailablePwsh)
-
-        if ($($env:Path -split ";") -notcontains $LatestPwshParentDir) {
-            # TODO: Clean out older pwsh $env:Path entries if they exist...
-            $env:Path = "$LatestPwshParentDir;$env:Path"
-        }
+    # Set the default shell
+    if ($DefaultShell -eq "powershell" -or !$DefaultShell) {
+        $null = Set-DefaultShell -DefaultShell "powershell"
     }
-    if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
-        Write-Error "Unable to find pwsh.exe! Please check your `$env:Path! Halting!"
-        $global:FunctionResult = "1"
-        return
+    else {
+        $null = Set-DefaultShell -DefaultShell "pwsh"
     }
 
-    $PowerShellCorePath = $(Get-Command pwsh).Source
-    $PowerShellCorePathWithForwardSlashes = $PowerShellCorePath -replace "\\","/"
-
-    ##### END Variable/Parameter Transforms and PreRun Prep #####
+    #endregion >> Install the sshd Service
 
 
     ##### BEGIN Main Body #####
-
-    # Subsystem instructions: https://github.com/PowerShell/PowerShell/tree/master/demos/SSHRemoting#setup-on-windows-machine
-    [System.Collections.ArrayList]$sshdContent = Get-Content $sshdConfigPath
-    if (![bool]$($sshdContent -match "Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")) {
-        $InsertAfterThisLine = $sshdContent -match "sftp"
-        $InsertOnThisLine = $sshdContent.IndexOf($InsertAfterThisLine)+1
-        $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
-        Set-Content -Value $sshdContent -Path $sshdConfigPath
-    }
-
-    if ($DefaultShell) {
-        if ($DefaultShell -eq "powershell") {
-            $ForceCommandOptionLine = "ForceCommand powershell.exe -NoProfile"
-        }
-        if ($DefaultShell -eq "pwsh") {
-            $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
-            $LatestLocallyAvailablePwsh = [array]$($PotentialPwshExes.VersionInfo | Sort-Object -Property ProductVersion)[-1].FileName
-
-            $ForceCommandOptionLine = "ForceCommand `"$LatestLocallyAvailablePwsh`" -NoProfile"
-        }
-
-        [System.Collections.ArrayList]$sshdContent = Get-Content $sshdConfigPath
-
-        # Determine if sshd_config already has the 'ForceCommand' option active
-        $ExistingForceCommandOption = $sshdContent -match "ForceCommand" | Where-Object {$_ -notmatch "#"}
-
-        # Determine if sshd_config already has 'Match User' option active
-        $ExistingMatchUserOption = $sshdContent -match "Match User" | Where-Object {$_ -notmatch "#"}
-        
-        if (!$ExistingForceCommandOption) {
-            # If sshd_config already has the 'Match User' option available, don't touch it, else add it with ForceCommand
-            try {
-                if (!$ExistingMatchUserOption) {
-                    Add-Content -Value "Match User *`n$ForceCommandOptionLine" -Path $sshdConfigPath
-                }
-                else {
-                    Add-Content -Value "$ForceCommandOptionLine" -Path $sshdConfigPath
-                }
-            }
-            catch {
-                Write-Error $_
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-        else {
-            if ($ExistingForceCommandOption -ne $ForceCommandOptionLine) {
-                if (!$ExistingMatchUserOption) {
-                    $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"Match User *`n$ForceCommandOptionLine"
-                }
-                else {
-                    $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"$ForceCommandOptionLine"
-                }
-                
-                try {
-                    Set-Content -Value $UpdatedSSHDConfig -Path $sshdConfigPath
-                }
-                catch {
-                    Write-Error $_
-                    $global:FunctionResult = "1"
-                    return
-                }
-            }
-        }
-    }
 
     # Make sure port 22 is open
     if (!$(TestPort -Port 22).Open) {
@@ -509,7 +420,7 @@ function New-SSHDServer {
         }
     }
 
-    Start-Service sshd
+    Restart-Service sshd
     Start-Sleep -Seconds 5
 
     if ($(Get-Service sshd).Status -ne "Running") {
@@ -534,16 +445,16 @@ function New-SSHDServer {
     [pscustomobject]@{
         SSHDServiceStatus       = $(Get-Service sshd).Status
         SSHAgentServiceStatus   = $(Get-Service ssh-agent).Status
-        PublicKeysPaths         = $PubKeys.FullName
-        PrivateKeysPaths        = $PrivKeys.FullName
+        RSAHostPublicKey        = $PubHostKey
+        RSAHostPrivateKey       = $PrivHostKey
     }
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU3p0QFvg+uxTJM6u5HZahARel
-# fnmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKgv/w9Aj3Hkyt3aw3SQ1rzM4
+# kqmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -600,11 +511,11 @@ function New-SSHDServer {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEcxzqYccL3/N1P1
-# 1V4iInkeVkRVMA0GCSqGSIb3DQEBAQUABIIBAJYI9jnxNVRruDcYWQKuNEE8p3Sy
-# CvSDbPMN4IVPvuSudvDRrVHEKxLyh0NDROlnccwk3KOi2kt8sb1Po1bpzHZOPnLw
-# FJaBiOX+g2LA0UfjtV1cIjmuoh7tRoyGYNxXXdO6yfK/WLhVpAWM9ZJh5AU+vLPb
-# Q0QADnkOLMbXF6cgHdIfWocFNrz1ST/kktNsjOxmXZkJb/3m1zvR1+W+SeRWPnHk
-# ZAOFCUbymeNHtb+Xy1YaUpPphXVcYz0OFPj2iaLVbP01zKLxjdavjhGmyZ9MkHB9
-# 6k0EiJiTmfF/aMn542LIqd9TnogDTPDVB5jup+UqKc8MNSO28kjZh7Uv/Yw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG9d1LAjSaqhIEvt
+# CTFVqxcgwA5WMA0GCSqGSIb3DQEBAQUABIIBAFvfqzUjN1b8Gq7B+p3gcOzP211H
+# fppMEIIX2VHt/RDze9fPC9BMOxnotNHaalie0sgI9TiCO73LVkjiEb6P0fWxfydP
+# LCUIwoOWCIeKnJxoMBH4H2pbSP8KDXDns4xfdZ163fGN0HW92ahCw+ZAglyCG1W0
+# C52UEY6G9NnBNu0Tjh5PskF6a9oKvxaNDg3pnHmNFPhyfRwqoicbuoVsReqGKp/d
+# p01D5ASVe+MqKXwD0F6Cv5KOL4m9WD6YfbFqXA5gO60oW1tKhtSXaZZBaAkrE76a
+# ppTMuRxe7+OF1pHfQzyxwq9jGq2qSRtLJYFUrClLxdNyO1xrlXws4jfd7IQ=
 # SIG # End signature block

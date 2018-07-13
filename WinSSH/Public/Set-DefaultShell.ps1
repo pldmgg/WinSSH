@@ -46,40 +46,84 @@ function Set-DefaultShell {
     }
 
     if ($DefaultShell -eq "powershell") {
+        $WindowsPowerShellPath = $(Get-Command powershell).Source
+        $WindowsPowerShellPathWithForwardSlashes = $WindowsPowerShellPath -replace "\\","/"
+
         $ForceCommandOptionLine = "ForceCommand powershell.exe -NoProfile"
     }
     if ($DefaultShell -eq "pwsh") {
         # Search for pwsh.exe where we expect it to be
-        $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
-        if (!$PotentialPwshExes) {
+        [array]$PotentialPwshExes = @(Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe")
+        if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue) -or
+        $PSVersionTable.PSEdition -ne "Core" -or !$PotentialPwshExes
+        ) {
             try {
-                Update-PowerShellCore -Latest -DownloadDirectory "$HOME\Downloads" -ErrorAction Stop
+                $InstallPwshSplatParams = @{
+                    ProgramName                 = "powershell-core"
+                    CommandName                 = "pwsh.exe"
+                    ExpectedInstallLocation     = "C:\Program Files\PowerShell"
+                }
+                $InstallPwshResult = Install-Program @InstallPwshSplatParams
             }
             catch {
                 Write-Error $_
                 $global:FunctionResult = "1"
                 return
             }
+
+            [array]$PotentialPwshExes = @(Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe")
         }
-        $PotentialPwshExes = Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe"
-        if (!$PotentialPwshExes) {
-            Write-Error "Unable to find pwsh.exe! Halting!"
+        if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
+            Write-Error "Unable to find pwsh.exe! Please check your `$env:Path! Halting!"
             $global:FunctionResult = "1"
             return
         }
 
         $LatestLocallyAvailablePwsh = [array]$($PotentialPwshExes.VersionInfo | Sort-Object -Property ProductVersion)[-1].FileName
         $LatestPwshParentDir = [System.IO.Path]::GetDirectoryName($LatestLocallyAvailablePwsh)
+        $PowerShellCorePathWithForwardSlashes = $LatestLocallyAvailablePwsh -replace "\\","/"
 
+        # Update $env:Path to incloude pwsh
         if ($($env:Path -split ";") -notcontains $LatestPwshParentDir) {
             # TODO: Clean out older pwsh $env:Path entries if they exist...
             $env:Path = "$LatestPwshParentDir;$env:Path"
         }
+        
+        # Update SYSTEM Path to include pwsh
+        $CurrentSystemPath = $(Get-ItemProperty -Path 'Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment' -Name PATH).Path
+        $CurrentSystemPathArray = $CurrentSystemPath -split ";"
+        if ($CurrentSystemPathArray -notcontains $LatestPwshParentDir) {
+            $UpdatedSystemPath = "$LatestPwshParentDir;$CurrentSystemPath"
+        }
+        Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" -Name PATH -Value $UpdatedSystemPath
+        
 
-        $ForceCommandOptionLine = "ForceCommand `"$LatestLocallyAvailablePwsh`" -NoProfile"
+        $ForceCommandOptionLine = "ForceCommand pwsh.exe -NoProfile"
     }
 
+    # Subsystem instructions: https://github.com/PowerShell/PowerShell/tree/master/demos/SSHRemoting#setup-on-windows-machine
     [System.Collections.ArrayList]$sshdContent = Get-Content $sshdConfigPath
+    
+    if (![bool]$($sshdContent -match "Subsystem[\s]+powershell")) {
+        $InsertAfterThisLine = $sshdContent -match "sftp"
+        $InsertOnThisLine = $sshdContent.IndexOf($InsertAfterThisLine)+1
+        if ($DefaultShell -eq "pwsh") {
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
+        }
+        else {
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile")
+        }
+    }
+    elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$WindowsPowerShellPathWithForwardSlashes") -and $DefaultShell -eq "powershell") {
+        $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem    powershell    $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile"
+    }
+    elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$PowerShellCorePathWithForwardSlashes") -and $DefaultShell -eq "pwsh") {
+        $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile"
+    }
+
+    Set-Content -Value $sshdContent -Path $sshdConfigPath
 
     # Determine if sshd_config already has the 'ForceCommand' option active
     $ExistingForceCommandOption = $sshdContent -match "ForceCommand" | Where-Object {$_ -notmatch "#"}
@@ -135,8 +179,8 @@ function Set-DefaultShell {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/+3LKsopGgTu/hmMaAcCH9q0
-# YQKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUqHL8BaB6vYOEiEPNMuZkQzCs
+# Om6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -193,11 +237,11 @@ function Set-DefaultShell {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMRGfVeSEyEzvMA3
-# 8MAeNA03+H+0MA0GCSqGSIb3DQEBAQUABIIBAC4YZyhwRNSG2/6De7KcxV0BAK6e
-# 2snxYPXsTUtyKllx/lC0NW9mMT+6KhJDbyeSgI1moU1XHMGuzhbncx59RmQyOpyk
-# sQkZdJFx3ipx3J+KHvIJ6KY3fO1zNtGunLEwBsGThvzzLRptfgw0HnPps4Ae9DTh
-# pIStnPcNxb0RMlwkyWe8W+N/2eZbzMjnMaEDZT790QXMoPEJ3TSXu6wc4LZitndg
-# W1XyU04LFtK9ecqhkPK57XQm9WBI8eCF7DaQHYny7SyqOcjxXJZ+tHrwFJaRvoEb
-# XbAMxho23TPp7FmoRLqXTQL3ZttojS0WkmAw4qjQAN/uSJrsALyNAwjb1Mg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCgogrjyZk/rvZds
+# O14SCouocleJMA0GCSqGSIb3DQEBAQUABIIBAMBBuKtR/9ne4PQZ5OpwZ6rjvYe7
+# jpXMCjOwy7luMEPV3rWzXgl7ExfZ7yHM4UYYynaRvDzRFYPKxdUZuwKY/m0a+DUn
+# rwIVX7uWHyliFFsuubkR1DH9p2TwY9xBEuK+Q+jpEvleNxFefJJW0o8ls6GGqyW2
+# 5PH7sU5Bqe5WuIQunn75J9ZeFSRbCCZXZ8D4YzlshgpRydEQ0PJRJmG3pOCqyC+A
+# yUat5SceFuubJkZl+uGz6du9Csufvqevaql8milxIS5Y/HZ3es0fSWAPiP5t8aV6
+# Rnnc0mrv9ln0j0Zj7BrKfdyjl0ouc4Gki+z/lLfXDFA4Lu6nyYR3M0XKWQM=
 # SIG # End signature block
