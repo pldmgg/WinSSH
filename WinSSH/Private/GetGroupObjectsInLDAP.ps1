@@ -7,7 +7,7 @@ function GetGroupObjectsInLDAP {
     # PortsThatWork
     try {
         $DomainControllerInfo = GetDomainController -ErrorAction Stop
-        $LDAPInfo = Test-LDAP -ADServerHostNameOrIP $DomainControllerInfo.PrimaryDomainController -ErrorAction Stop
+        $LDAPInfo = TestLDAP -ADServerHostNameOrIP $DomainControllerInfo.PrimaryDomainController -ErrorAction Stop
         if (!$DomainControllerInfo) {throw "Problem with GetDomainController function! Halting!"}
         if (!$LDAPInfo) {throw "Problem with TestLDAP function! Halting!"}
     }
@@ -50,8 +50,8 @@ function GetGroupObjectsInLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEP++2JnORzdtyFp+lwO2mLFi
-# PSugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUg/G9KkGVk8gf2ThBs7F/xnN4
+# V0igggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -108,11 +108,11 @@ function GetGroupObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJZ3d/jJgt2gxzHd
-# NhwW60pVrYj2MA0GCSqGSIb3DQEBAQUABIIBAKNoJagyItz19XLneQnKGJyalkA2
-# PdPadbxjZQ2Ylc+nv6TWb4TJBzz59JcwIhUw8EYT8GByFHfy8RMpsBpEhuDoQHOR
-# 1T56QB0W1kMYQj242hqE7g+HE/sMmDHD5nfsxXKEdzDYsqO1u8Cmq5pIYrEOk0Bg
-# sVcplEf4DgRGsnbOn5CVR6qQtncmJUWZDC5MZgj9Qedb11uJxSTAjlHo2ZsO/7MP
-# G9gL0iMbbDTeRW7tbCiSxdtajiCOIY7Uhd2SxwRXsl2kGsRvRKaBEhHQJRGWJBfu
-# PQdtMNIW6vmYqgiLodoAlHdq0vO/YX4bzbmt7k/kTR6j+BsJ+pxJSDl9HWA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMMVogjJpddiuquu
+# jAdH4W2Gz9FZMA0GCSqGSIb3DQEBAQUABIIBAEKJ3WMx9X1wGPpGdSp3D9SmwUhh
+# dZ0af3WEZ0tdWjQxTKZNGQkxjOLjlKTcpcn+GCQIQ+ORpA1oCn9QYyH7V+YUxS6y
+# 5n+NTScnTl2souq9JhwiaftSYDKS5kKQ6XJdGRbnahcRaaSsIZAccwdGNE6UwDdS
+# OpyujmyAKA95iGSFIi+FbL7UdbZXoBxVJAhOuByyvZOR0y0vQj30kJ0M336QnkKy
+# 9ax0pZa9noaTQOv/cGFabvUCp7VsQ+0jggqFZTRtVW9IFOz++Myx6riTsMo9fTbl
+# xiXoQ4Dj+MOMHWr4B/zxOzZOow6g7szHcguZkfKCLYJ+g+K1DWBGxLqmXgU=
 # SIG # End signature block
