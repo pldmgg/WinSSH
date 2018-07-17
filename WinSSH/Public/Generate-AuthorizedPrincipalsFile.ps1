@@ -154,7 +154,7 @@ function Generate-AuthorizedPrincipalsFile {
             $LocalAdminAccounts = Get-LocalGroupMember -Group "Administrators" | Where-Object {$_.PrincipalSource -eq "Local"}
             $AccountsReformatted = foreach ($AcctItem in $LocalAdminAccounts) {
                 $AcctNameSplit = $AcctItem.Name -split "\\"
-                $ReformattedName = "$($AcctNameSplit[1])@$($AcctNameSplit[0])"
+                $ReformattedName = "$($AcctNameSplit[1])@$($AcctNameSplit[0].ToLowerInvariant())"
                 $ReformattedName
             }
 
@@ -174,7 +174,7 @@ function Generate-AuthorizedPrincipalsFile {
 
             $AccountsReformatted = foreach ($AcctItem in $LocalUserAccounts) {
                 $AcctNameSplit = $AcctItem.Name -split "\\"
-                $ReformattedName = "$($AcctNameSplit[1])@$($AcctNameSplit[0])"
+                $ReformattedName = "$($AcctNameSplit[1])@$($AcctNameSplit[0].ToLowerInvariant())"
                 $ReformattedName
             }
 
@@ -215,7 +215,14 @@ function Generate-AuthorizedPrincipalsFile {
             }
 
             $DomainAdminsPrep = $UserObjectsInLDAP | Where-Object {$_.Groups -match "Domain Admins"}
-            $DomainAdminAccounts = $DomainAdminsPrep.Name | foreach {$($_ -split "=")[-1]}
+            $DomainAdminAccounts = $DomainAdminsPrep.Name | foreach {
+                if ($_ -match '=') {
+                    $($_ -split "=")[-1]
+                }
+                else {
+                    $_
+                }
+            }
 
             $AccountsReformatted = $DomainAdminAccounts | foreach {
                 if (![System.String]::IsNullOrWhiteSpace($_)) {
@@ -261,7 +268,14 @@ function Generate-AuthorizedPrincipalsFile {
             }
 
             $DomainUsersPrep = $UserObjectsInLDAP | Where-Object {$_.Groups -match "Domain Users"}
-            $DomainUserAccounts = $DomainUsersPrep.Name | foreach {$($_ -split "=")[-1]}
+            $DomainUserAccounts = $DomainUsersPrep.Name | foreach {
+                if ($_ -match '=') {
+                    $($_ -split "=")[-1]
+                }
+                else {
+                    $_
+                }
+            }
 
             $AccountsReformatted = $DomainUserAccounts | foreach {
                 if (![System.String]::IsNullOrWhiteSpace($_)) {
@@ -304,8 +318,8 @@ function Generate-AuthorizedPrincipalsFile {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUk122Iow3f8VoLdzy9dPH6Q7Z
-# 4RSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUb1wZV0k7TfSJI7RnZxbV92IY
+# 9b2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -362,11 +376,11 @@ function Generate-AuthorizedPrincipalsFile {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG/gWNePl8mDdH6x
-# qNEWe2kKjmwzMA0GCSqGSIb3DQEBAQUABIIBAJmK5HQoeFHXuPMmNrC9pq7cVBlg
-# VWRrY2Up+91GWwve+41VWR4//0CUvXqklui67dV3tzZsrV7SEZAcoUv1asA6wX7K
-# 1ZY77V50HFMG6JVRjok38ymnxa7XTqPNIfHKMe8+aQsHLaHHFlxJ9yKMgA4LoG65
-# jqodylhIooBieKjjvHi7mwTqmpLa04G+jm9hWHxCziAqQq1MUhfrSZwwG1JNFDro
-# sEng5gGGYpi4fESiCVzjuA/T2814iB1eiI7qbUQoRxep2oLdyhd8pzoHwybgmYzr
-# YmzerCTW19PTVce9HGjTIlWK/locflce9kytbRXAxVTUt9RxRkk9cmvNzHQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFH3UtTV0BpcOpFk+
+# sPta4Ipa5tI9MA0GCSqGSIb3DQEBAQUABIIBAIRHs5fgl8SBtuCX/LkeypcHLrMP
+# pdt/2cT4t9uO83F0u3LPhMmphMYa27cvD16KZ8Nb2iof8IuTAv3ah2YzUNmfldff
+# nhaixStx5IEx+3BYXQ5EqieUq3VFmepZyMyrep6BLV6hEQDlbNtZwoeBTRKLNPU3
+# 1ZWFVkswsEykyCg18qI8V3aGnTFowiMOUqhzAG7cYFaIV2Xkak8EfE+t/mL1Zc7S
+# xlEsV+7rw4ylPoivjxf1/r9zjCrlXBzjMkTaAML/nPkaQ9dbvOp3Lnk1SLK+QHO8
+# MlUsVmw+Ck/m9td9UfTBOeQ2gQ3NcM0Dt69+wmUHoX5ioK27YL3eNiNXxCE=
 # SIG # End signature block
