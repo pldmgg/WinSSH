@@ -39,6 +39,20 @@ function Generate-SSHUserDirFileInfo {
         [string]$PathToHomeDotSSHDirectory
     )
 
+    $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
+
+    if (!$(Test-Path $OpenSSHWinPath)) {
+        Write-Error "The path $OpenSSHWinPath was not found! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     # Make sure we have access to ssh binaries
     if (![bool]$(Get-Command ssh-keygen -ErrorAction SilentlyContinue)) {
         Write-Error "Unable to find 'ssh-keygen.exe'! Halting!"
@@ -100,8 +114,8 @@ function Generate-SSHUserDirFileInfo {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8/11vxyKZglks2/UAKkt2LQ4
-# +HGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUI3wlgfvowAjPlKWTX0+KfVnx
+# oBWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -158,11 +172,11 @@ function Generate-SSHUserDirFileInfo {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAxTVNYdqj8sKTCb
-# q/WoYAhXKJ74MA0GCSqGSIb3DQEBAQUABIIBAEHLea2QRIxYyYMh03l7TUGtwj7M
-# VKCiIZwJG04b2AEsvF4l8m4zTjZU1Pu8/JdnLS9XCZc1fSgIvrKWUFDKAvVelaek
-# DxXgw+4UOGheWTl5qQqhSggvDZi3Me6xBo8bfnUOuNHvbSKn16ca46LI6uSUvbJa
-# 67L/RKeR+9mDHgSM3qln0JebRvO5qzdvUXik3iq8hij23mEhwX9pGzu5ETEydbis
-# bEAIXbNGnsIasWfwr15nzqtwRhApjIWNYjlygLE5GWyu2xYwyfsXgNm9kVT2Pay/
-# Nop8o6H0pb431FOmTa/KZ1+LgPflyHaBy/FuVcdu4wTW1BRBvDaUZqthaj4=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOAJk+RMXN9X10n7
+# CduYTq0xGLZlMA0GCSqGSIb3DQEBAQUABIIBAAo8sVshw6AdNdak8h9NDN+vqhsS
+# 8Pvjbl29uakjS8Efet1hLzLWzmOIIeVDQoSjN8e5LUDiCVvG5N7bnULFQ9LjTP8M
+# X+4LLu0y+9WTQEQE1wz7VoIG5cxBp/eYaxa5ZqOTMJLZjhtbxkiEvM7dMYQMfb3s
+# aH9aLRfE7bHI0AxqkGM/D8neju8cr6yCuOELs3F/+wM4pDOLkW6Q5D3YlXU+2Cai
+# BYI8jhUYd4Pps/UZl+MP0ZW/FhhX09KIAepwGEsnGONkD47lJZJuWFhKgrJrmDE3
+# iPNY4ZI4VmbiQX/FLzFw/tQwYmHp6XwJjF21R+q3RxoPiRBQsKnYIT2o5PU=
 # SIG # End signature block

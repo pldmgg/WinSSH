@@ -77,6 +77,13 @@ function New-SSHDServer {
     $sshdConfigPath = Join-Path $sshdir "sshd_config"
     $logsdir = Join-Path $sshdir "logs"
 
+    # Make sure $OpenSSHWinPath is part of $env:Path
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     # Make sure the dependency ssh-agent service is already installed
     if (![bool]$(Get-Service ssh-agent -ErrorAction SilentlyContinue)) {
         try {
@@ -453,8 +460,8 @@ function New-SSHDServer {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKgv/w9Aj3Hkyt3aw3SQ1rzM4
-# kqmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKJB5jJms5I+Hzr0SaWs/rBUy
+# Nn2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -511,11 +518,11 @@ function New-SSHDServer {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG9d1LAjSaqhIEvt
-# CTFVqxcgwA5WMA0GCSqGSIb3DQEBAQUABIIBAFvfqzUjN1b8Gq7B+p3gcOzP211H
-# fppMEIIX2VHt/RDze9fPC9BMOxnotNHaalie0sgI9TiCO73LVkjiEb6P0fWxfydP
-# LCUIwoOWCIeKnJxoMBH4H2pbSP8KDXDns4xfdZ163fGN0HW92ahCw+ZAglyCG1W0
-# C52UEY6G9NnBNu0Tjh5PskF6a9oKvxaNDg3pnHmNFPhyfRwqoicbuoVsReqGKp/d
-# p01D5ASVe+MqKXwD0F6Cv5KOL4m9WD6YfbFqXA5gO60oW1tKhtSXaZZBaAkrE76a
-# ppTMuRxe7+OF1pHfQzyxwq9jGq2qSRtLJYFUrClLxdNyO1xrlXws4jfd7IQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPauHe+ZUubx/6LW
+# K5WppIze0GTnMA0GCSqGSIb3DQEBAQUABIIBALsWhk6p42WVIrRKBGD1TIEhBeab
+# f03E9puL4dFKeaWCw9KvTi1ZY5L0a3FgCy0xtBxnrP1q3r2aBOA2ZYL7w6iJuNgL
+# cg0hO4rXSpJZfI/IJRnvuc8OBeJnfP6LHrUrWUE/nOV1ZW61HM6fioUJtKg5L6aP
+# /ya3vs5U6Twq6A+0iY2mQC8tL0TR0v6gbvoICnPZK26IRYhfXkE1OXMik4RaSbYy
+# OD7oagjr/IZaCJajbrpgF4DRR22G4935I47xeRcA/JgqgDUDGauXmwAw2RF7D+3p
+# AfQ403eK8Xi6cj0mRBYQhkQC7OCAs8feXF6ZBRKexvHsboy8+itg/UlXBhU=
 # SIG # End signature block

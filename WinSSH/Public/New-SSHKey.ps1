@@ -38,17 +38,6 @@
 
         This parameter is a switch. If used, the new SSH Key Pair will be added to the ssh-agent service.
 
-    .PARAMETER AllowAwaitModuleInstall
-        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
-        -BlankSSHPrivateKeyPwd switch.
-
-        This parameter is a switch.
-
-        If you would like the Private Key file to be unprotected, and if you would like to avoid the
-        ssh-keygen prompt for a password, the PowerShell Await Module is required.
-
-        Use this switch along with the -BlankSSHPrivateKeyPwd switch to avoid prompts altogether.
-
     .PARAMETER RemovePrivateKey
         This parameter is OPTIONAL. This parameter should only be used in conjunction with the
         -AddtoSSHAgent switch.
@@ -101,9 +90,6 @@ function New-SSHKey {
         [Parameter(Mandatory=$False)]
         [ValidatePattern("^\w*$")] # No spaces allowed
         [string]$NewSSHKeyPurpose,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$AllowAwaitModuleInstall,
 
         [Parameter(Mandatory=$False)]
         [switch]$AddToSSHAgent,
@@ -163,6 +149,12 @@ function New-SSHKey {
         return
     }
 
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     if (!$(Test-Path "$HOME\.ssh")) {
         $null = New-Item -Type Directory -Path "$HOME\.ssh"
     }
@@ -189,7 +181,7 @@ function New-SSHKey {
     if ($NewSSHKeyPwd) {
         $ProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $ProcessInfo.WorkingDirectory = $OpenSSHWinPath
-        $ProcessInfo.FileName = "ssh-keygen.exe"
+        $ProcessInfo.FileName = $(Get-Command ssh-keygen.exe).Source
         $ProcessInfo.RedirectStandardError = $true
         $ProcessInfo.RedirectStandardOutput = $true
         #$ProcessInfo.StandardOutputEncoding = [System.Text.Encoding]::Unicode
@@ -211,6 +203,7 @@ function New-SSHKey {
         }
     }
     else {
+        <#
         if (!$AllowAwaitModuleInstall -and $(Get-Module -ListAvailable).Name -notcontains "Await") {
             Write-Warning "This function needs to install the PowerShell Await Module in order to generate a private key with a null password."
             $ProceedChoice = Read-Host -Prompt "Would you like to proceed? [Yes\No]"
@@ -237,6 +230,9 @@ function New-SSHKey {
                 if (!$(Test-Path "$HOME\Documents\WindowsPowerShell\Modules\Await")) {
                     $null = New-Item -Type Directory "$HOME\Documents\WindowsPowerShell\Modules\Await"
                 }
+                else {
+                    Remove-Item "$HOME\Documents\WindowsPowerShell\Modules\Await" -Recurse -Force
+                }
                 Copy-Item -Recurse -Path "$tempDirectory\PoshAwait-master\*" -Destination "$HOME\Documents\WindowsPowerShell\Modules\Await"
                 Remove-Item -Recurse -Path $tempDirectory -Force
 
@@ -245,10 +241,13 @@ function New-SSHKey {
                 }
             }
         }
+        #>
 
         # Make private key password $null
-        Import-Module Await
-        if (!$?) {
+        try {
+            Import-Module "$PSScriptRoot\Await\Await.psd1" -ErrorAction Stop
+        }
+        catch {
             Write-Error "Unable to load the Await Module! Halting!"
             $global:FunctionResult = "1"
             return
@@ -257,7 +256,7 @@ function New-SSHKey {
         Start-AwaitSession
         Start-Sleep -Seconds 1
         Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
-        $PSAwaitProcess = $($(Get-Process | ? {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
+        $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
         Start-Sleep -Seconds 1
         Send-AwaitCommand "`$env:Path = '$env:Path'; Push-Location '$OpenSSHWinPath'"
         Start-Sleep -Seconds 1
@@ -320,7 +319,7 @@ function New-SSHKey {
         # Add the New Private Key to the ssh-agent
         $SSHAddProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $SSHAddProcessInfo.WorkingDirectory = $OpenSSHWinPath
-        $SSHAddProcessInfo.FileName = "ssh-add.exe"
+        $SSHAddProcessInfo.FileName = $(Get-Command ssh-add.exe).Source
         $SSHAddProcessInfo.RedirectStandardError = $true
         $SSHAddProcessInfo.RedirectStandardOutput = $true
         $SSHAddProcessInfo.UseShellExecute = $false
@@ -429,8 +428,8 @@ function New-SSHKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHbAFvFaCBRTEeqfj8dYhMCmp
-# yw+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4Ap9zk/YhsWkZd2XcGFG3tp3
+# L+Kgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -487,11 +486,11 @@ function New-SSHKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCmlN6HIFUFsNcb8
-# 1FG+vHYDVlN9MA0GCSqGSIb3DQEBAQUABIIBADSO1XQxXNwhjZOWU06SWjXdWFZ6
-# wvSYFEp0Bn9o0je3C+WKHy4mJiWUAObl+MgeUFPwte5naHKFGjehP1WkPhu+bFMW
-# 0lBVYF+nuM8Uq6DyV6N9CivQGvcuElD7l9aPt4bR6Mzh0IYpuMIB1YRVxl1e8M4h
-# uLK6d4VjkJD+F39HQuIh8QAMWYn9ahbCSfATQs0YEADkwucANBk8TyRlCPu6pKer
-# bI1evXuryeZCSWwcJsmsIPzU0egdmCEhmXzakINGrm6qPHWmi8OaX7RnP4ka5dhV
-# +APi8pT93RwSQjBnpTgaIv9JvmVey5rzhT7QYlXBkmWEIMq8K2cbllVzclI=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDT0CAxrcGbA87I2
+# z6c+l77WkfFbMA0GCSqGSIb3DQEBAQUABIIBAH35vI1r0wYRnndhOV91ErRPuD9n
+# tmXX4HVzaJd8o598O2SNT/ZVTs9PnLqkB1anktqorq8/sa1d9vL49QkKpnBalznW
+# AiYCDGgxN8mgE2oVy9EgpKQF5g1PQxRs84CWjkWluHZ74CaVbp3Na2MsKArFzOaG
+# KslTCFuBRrwiI6uqwLlj0HYSVKLW3BPDa7ExYps9jxRRLcnwhAW3c4t7bPUq51ue
+# 3FzYEuqvVw7fEYJqb1VqEJ3PxstVBVXppgLh6z4+xry4ddIn4gD7JlOEmuKe0y9h
+# Q0IOVvP1M/FZB8irEmX74+hIrFqePSoHtX5urtmygkQa4qS2tKCL6xi5uLE=
 # SIG # End signature block

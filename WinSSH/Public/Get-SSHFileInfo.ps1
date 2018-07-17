@@ -44,6 +44,20 @@ function Get-SSHFileInfo {
         [string]$PathToKeyFile
     )
 
+    $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
+
+    if (!$(Test-Path $OpenSSHWinPath)) {
+        Write-Error "The path $OpenSSHWinPath was not found! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     # Make sure we have access to ssh binaries
     if (![bool]$(Get-Command ssh-keygen -ErrorAction SilentlyContinue)) {
         Write-Error "Unable to find 'ssh-keygen.exe'! Halting!"
@@ -97,9 +111,10 @@ function Get-SSHFileInfo {
     $stderr = $Process.StandardError.ReadToEnd()
     $SSHKeyGenOutput = $stdout + $stderr
 
+    $KeyFileContent = Get-Content $PathToKeyFile
     if ($SSHKeyGenOutput -match "(RSA-CERT)") {
         $PublicKeyCertInfo = ssh-keygen -L -f "$PathToKeyFile"
-        $PublicKeyCertContent = Get-Content $PathToKeyFile
+        $PublicKeyCertContent = $KeyFileContent
         $FingerPrint = ssh-keygen -l -f "$PathToKeyFile"
         $IsPublicKeyCert = $True
     }
@@ -108,29 +123,31 @@ function Get-SSHFileInfo {
         $PrivateKeyAttempt = Validate-SSHPrivateKey -PathToPrivateKeyFile $PathToKeyFile
         if (!$PrivateKeyAttempt.ValidSSHPrivateKeyFormat) {
             $IsPublicKey = $True
-            $PublicKeyContent = Get-Content $PathToKeyFile
+            $PublicKeyContent = $KeyFileContent
             $PublicKeyInfo = $FingerPrint = ssh-keygen -l -f "$PathToKeyFile"
         }
         else {
             $IsPrivateKey = $True
-            $PrivateKeyContent = $PrivateKeyInfo = Get-Content $PathToKeyFile
+            $PrivateKeyContent = $PrivateKeyInfo = $KeyFileContent
             $FingerPrint = ssh-keygen -l -f "$PathToKeyFile"
             $PasswordProtected = $PrivateKeyAttempt.PasswordProtected
         }
     }
     elseif ($SSHKeyGenOutput -match "passphrase|pass phrase" -or $($SSHKeyGenOutput -eq $null -and $ProcessKilled)) {
         $IsPrivateKey = $True
-        $PrivateKeyContent = $PrivateKeyInfo = Get-Content $PathToKeyFile
+        $PrivateKeyContent = $PrivateKeyInfo = $KeyFileContent
         $PasswordProtected = $True
     }
-    elseif ($(Get-Content $PathToKeyFile)[0] -match "SSH2") {
-        [pscustomobject]@{
-            File                = $PathToKeyFile
-            FileType            = "SSH2_RFC4716"
-            Contents            = $(Get-Content $PathToKeyFile)
-            Info                = $(Get-Content $PathToKeyFile)
-            FingerPrint         = $null
-            PasswordProtected   = $null
+    elseif ($KeyFileContent.Count -gt 0) {
+        if ($(Get-Content $PathToKeyFile)[0] -match "SSH2") {
+            [pscustomobject]@{
+                File                = $PathToKeyFile
+                FileType            = "SSH2_RFC4716"
+                Contents            = $(Get-Content $PathToKeyFile)
+                Info                = $(Get-Content $PathToKeyFile)
+                FingerPrint         = $null
+                PasswordProtected   = $null
+            }
         }
 
         return
@@ -176,8 +193,8 @@ function Get-SSHFileInfo {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOc17nVEW1mQvpdD+2nu5aDwo
-# jKqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUplOeUrn3XcHpVuUNUcFIgTxh
+# 09mgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -234,11 +251,11 @@ function Get-SSHFileInfo {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGUVVPrHEd1gwMDF
-# AdkuCQsyvwWgMA0GCSqGSIb3DQEBAQUABIIBAIYFJnhWsfahEKKsrF7C9LLlovTj
-# BmVXAZYQ9wOS202aU53gUGRn719jmpVDDFLlE1XE1d48lx2MrGQWRYF6mZ+Bvq+Y
-# qxRhkp6cYQ49eQfZEwlsyD3G6NSBZYuJAtXBlfIsyX/XnxA2iJb3JO8HNSbvYQ5p
-# p7p5ML4QVr59WaT7Ud4TPzAkom9Cct/XtTK6uDyWhODQkjLq7aUXZ2buewyvpEmu
-# zDAH4v7NI4uSX5c7JLmodiazSKykvRUCpORPKVum6A2BOIKRnWNZ5gl9h7aM2+we
-# 1tjXKCuRO7hZeZRWuN5QdATW2qwgg0DFbhORexUnu0xSOhcHXy4R3Lh59e8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFP9W4biGo/hoIj6O
+# OurRZauJuFpNMA0GCSqGSIb3DQEBAQUABIIBAMPPyfp0lVKHUJp7oGWrEQPQ7A9f
+# YZQ0zsWpukjuJLsUjfRHOL2oaISQa5Rj2V/HtC/OtyBB0rcjIVXRPV96JZqFnMGY
+# xXh1rzjtuBO2ez+8WWf/FGgVBTXNVRrs2zQ8MB/lzfLdv1UYNz9O8NJwDGk2IGt/
+# WutbYmrFaVOBwgrpNn6fnL1wdEzLHygzgyL21ntsxAo/I5oiIg8oYaQNe/VGe/Oo
+# N662u6tnnGoMrlegFqzuJX0dOUR97pk0+yT9eW8cbSc5hPyEfFBQdp/zLI+bxh7W
+# CIw9FuuiT+wIj0JklKpQEW8GGEL93i56JfX5CGOSG7DRMuR7yfAPRB3gvT8=
 # SIG # End signature block

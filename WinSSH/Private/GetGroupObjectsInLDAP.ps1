@@ -36,7 +36,7 @@ function GetGroupObjectsInLDAP {
         $LDAPUri = $LDAPInfo.LDAPBaseUri + ":3269"
     }
 
-    $Connection = [ADSI]($LDAPUri)
+    $Connection = [System.DirectoryServices.DirectoryEntry]($LDAPUri)
     #$UsersLDAPContainer = $Connection.Children | Where-Object {$_.distinguishedName -match "Users"}
     #$UserObjectsInLDAP = $UsersLDAPContainer.Children | Where-Object {$_.objectClass -contains "user" -and $_.objectClass -notcontains "group"}
     $Searcher = New-Object System.DirectoryServices.DirectorySearcher
@@ -50,8 +50,8 @@ function GetGroupObjectsInLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUg/G9KkGVk8gf2ThBs7F/xnN4
-# V0igggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8iUJJfHUZio0enfAE0+KrxQe
+# zVWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -108,11 +108,11 @@ function GetGroupObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMMVogjJpddiuquu
-# jAdH4W2Gz9FZMA0GCSqGSIb3DQEBAQUABIIBAEKJ3WMx9X1wGPpGdSp3D9SmwUhh
-# dZ0af3WEZ0tdWjQxTKZNGQkxjOLjlKTcpcn+GCQIQ+ORpA1oCn9QYyH7V+YUxS6y
-# 5n+NTScnTl2souq9JhwiaftSYDKS5kKQ6XJdGRbnahcRaaSsIZAccwdGNE6UwDdS
-# OpyujmyAKA95iGSFIi+FbL7UdbZXoBxVJAhOuByyvZOR0y0vQj30kJ0M336QnkKy
-# 9ax0pZa9noaTQOv/cGFabvUCp7VsQ+0jggqFZTRtVW9IFOz++Myx6riTsMo9fTbl
-# xiXoQ4Dj+MOMHWr4B/zxOzZOow6g7szHcguZkfKCLYJ+g+K1DWBGxLqmXgU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMSPB+pq5WZgfZ81
+# B9nficW/MxAnMA0GCSqGSIb3DQEBAQUABIIBAGqYrYiW2tzXn6+BhqlPf3yVfprx
+# vbiP3/K2UOwqqEOixcCNhoN9/C3UNo1/KoyAscaR0YqqALhh676z8JcVknvC2hMD
+# bEd/E924DMj0mc8pcxIfn4Kurn9hQEUPjtmA7UJm+SjzkU8j24QV6jK3zYlhgcpH
+# 1XB/yITeejkXn1G1C+w8MMo+kJP0+AhC6cu4m8WSfpVf8SXbje5IKslg+SknDVJZ
+# C+ZVcrd50lEdOaerjfbxizCUBRMGaxRlMomG5Onzy0pl3A41kc37QoHtcVOYuLfn
+# vmF/77zl3MitDCzX/W+qiJe8fs5xyEFKgifCBftdMhv+chMfmTRmK6apUkU=
 # SIG # End signature block

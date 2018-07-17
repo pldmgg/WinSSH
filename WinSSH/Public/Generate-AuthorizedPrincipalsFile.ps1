@@ -201,11 +201,27 @@ function Generate-AuthorizedPrincipalsFile {
                     throw
                 }
             }
-            
-            $DomainAdminsPrep = $UserObjectsInLDAP | Where-Object {$_.memberOf -match "Domain Admins"}
-            $DomainAdminAccounts = $DomainAdminsPrep.distinguishedName | foreach {$($($_ -split ",")[0] -split "=")[-1]}
 
-            $AccountsReformatted = $DomainAdminAccounts | foreach {"$_" + "@" + $ThisDomainName}
+            foreach ($DirectoryEntry in $UserObjectsInLDAP) {
+                if (![bool]$($DirectoryEntry | Get-Member -MemberType NoteProperty -Name Groups)) {
+                    $searcher = [System.DirectoryServices.DirectorySearcher]::new($DirectoryEntry)
+                    $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Base
+                    $searcher.ExtendedDN = [System.DirectoryServices.ExtendedDN]::Standard
+                    $searcher.PropertiesToLoad.Clear()
+                    $null = $searcher.PropertiesToLoad.Add("memberof")
+                    $Groups = $searcher.FindOne().Properties.memberof | foreach {$($_ -split ';')[-1]}
+                    $DirectoryEntry | Add-Member -Type NoteProperty -Name Groups -Value $Groups -Force
+                }
+            }
+
+            $DomainAdminsPrep = $UserObjectsInLDAP | Where-Object {$_.Groups -match "Domain Admins"}
+            $DomainAdminAccounts = $DomainAdminsPrep.Name | foreach {$($_ -split "=")[-1]}
+
+            $AccountsReformatted = $DomainAdminAccounts | foreach {
+                if (![System.String]::IsNullOrWhiteSpace($_)) {
+                    $_ + "@" + $ThisDomainName.ToLowerInvariant()
+                }
+            }
 
             foreach ($Acct in $AccountsReformatted) {
                 if ($AccountsAdded -notcontains $Acct -and $OriginalAuthPrincContent -notcontains $Acct) {
@@ -231,10 +247,27 @@ function Generate-AuthorizedPrincipalsFile {
                 }
             }
 
-            $DomainUsersPrep = $UserObjectsInLDAP | Where-Object {$_.memberOf -match "Users"}
-            $DomainUserAccounts = $DomainUsersPrep.distinguishedName | foreach {$($($_ -split ",")[0] -split "=")[-1]}
+            foreach ($DirectoryEntry in $UserObjectsInLDAP) {
+                if (![bool]$($DirectoryEntry | Get-Member -MemberType NoteProperty -Name Groups)) {
+                    $searcher = [System.DirectoryServices.DirectorySearcher]::new($DirectoryEntry)
+                    $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Base
+                    $searcher.ExtendedDN = [System.DirectoryServices.ExtendedDN]::Standard
+                    $searcher.PropertiesToLoad.Clear()
+                    $null = $searcher.PropertiesToLoad.Add("memberof")
+                    $null = $searcher.PropertiesToLoad.Add("distinguishedname")
+                    $Groups = $searcher.FindOne().Properties.memberof | foreach {$($_ -split ';')[-1]}
+                    $DirectoryEntry | Add-Member -Type NoteProperty -Name Groups -Value $Groups -Force
+                }
+            }
 
-            $AccountsReformatted = $DomainAdminAccounts | foreach {"$_" + "@" + $ThisDomainName}
+            $DomainUsersPrep = $UserObjectsInLDAP | Where-Object {$_.Groups -match "Domain Users"}
+            $DomainUserAccounts = $DomainUsersPrep.Name | foreach {$($_ -split "=")[-1]}
+
+            $AccountsReformatted = $DomainUserAccounts | foreach {
+                if (![System.String]::IsNullOrWhiteSpace($_)) {
+                    $_ + "@" + $ThisDomainName.ToLowerInvariant()
+                }
+            }
 
             foreach ($Acct in $AccountsReformatted) {
                 if ($AccountsAdded -notcontains $Acct -and $OriginalAuthPrincContent -notcontains $Acct) {
@@ -271,8 +304,8 @@ function Generate-AuthorizedPrincipalsFile {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKuq7M6h0z1Xe7+71qK7XSu/1
-# CVegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUk122Iow3f8VoLdzy9dPH6Q7Z
+# 4RSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -329,11 +362,11 @@ function Generate-AuthorizedPrincipalsFile {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMgqrO+Z9vJ8d+uV
-# gLOB6L9sRRbNMA0GCSqGSIb3DQEBAQUABIIBAJag8VbXs4S8NpiJyfdD57lG56YS
-# 9HvvT1d9SK2xyGZ6hstzHHvHRBOyZTa27Cp49DS+/InZLVf4j4xu9qZq+RHmUP0L
-# 8l4BXAFJMPLzIE/95kHUtBgPiwG/CIg+/zHpm7SwewK2hjUOvf7X04TkgvTDffZi
-# /Qla+na9gNA6SAiaOSqhnC0BJ3Jd2B4cqIL/5HFxowAc6q5rUh3SwbA/YfgcvE85
-# Kil/oBxDnDhXTRaNfX2aGiXyHwwTixmqdTOvd+PJgJs6s3A7V8gxZH8mt+ecddzY
-# g5VZ6vhZXTjNDjU+onOwoaHBybpnr0JaCEXhzDnPv1BKXrsKbp4qhMfL8Bk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG/gWNePl8mDdH6x
+# qNEWe2kKjmwzMA0GCSqGSIb3DQEBAQUABIIBAJmK5HQoeFHXuPMmNrC9pq7cVBlg
+# VWRrY2Up+91GWwve+41VWR4//0CUvXqklui67dV3tzZsrV7SEZAcoUv1asA6wX7K
+# 1ZY77V50HFMG6JVRjok38ymnxa7XTqPNIfHKMe8+aQsHLaHHFlxJ9yKMgA4LoG65
+# jqodylhIooBieKjjvHi7mwTqmpLa04G+jm9hWHxCziAqQq1MUhfrSZwwG1JNFDro
+# sEng5gGGYpi4fESiCVzjuA/T2814iB1eiI7qbUQoRxep2oLdyhd8pzoHwybgmYzr
+# YmzerCTW19PTVce9HGjTIlWK/locflce9kytbRXAxVTUt9RxRkk9cmvNzHQ=
 # SIG # End signature block

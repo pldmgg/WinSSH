@@ -31,7 +31,7 @@ Function TestLDAP {
     try {
         $LDAP = $LDAPPrep + ":3269"
         # This does NOT throw an error because it doen't actually try to reach out to make the connection yet
-        $Connection = [ADSI]($LDAP)
+        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
         # This WILL throw an error
         $Connection.Close()
         $GlobalCatalogConfiguredForSSL = $True
@@ -50,7 +50,7 @@ Function TestLDAP {
 
     try {
         $LDAP = $LDAPPrep + ":3268"
-        $Connection = [ADSI]($LDAP)
+        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
         $Connection.Close()
         $GlobalCatalogConfigured = $True
     } 
@@ -70,7 +70,7 @@ Function TestLDAP {
     try {
         $LDAP = $LDAPPrep + ":636"
         # This does NOT throw an error because it doen't actually try to reach out to make the connection yet
-        $Connection = [ADSI]($LDAP)
+        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
         # This WILL throw an error
         $Connection.Close()
         $ConfiguredForSSL = $True
@@ -89,7 +89,7 @@ Function TestLDAP {
 
     try {
         $LDAP = $LDAPPrep + ":389"
-        $Connection = [ADSI]($LDAP)
+        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
         $Connection.Close()
         $Configured = $True
     }
@@ -131,8 +131,8 @@ Function TestLDAP {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbNrzE197m1OgswSR+tSfMmkL
-# DBSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUV45yOhs4pOAXDuSw/H/v3nCC
+# 8Qygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -189,11 +189,11 @@ Function TestLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFINn34dY3fb+8s9T
-# VAUqwXboT3GaMA0GCSqGSIb3DQEBAQUABIIBAI9OSiROx0jlw01o0/5l6fDWL7GA
-# bNlzQf9jql37+NHCIsKvxiuo9RfcT3R8uhxlpM4bxLKg5ELvfa8TK5joxIArbMxb
-# PteV0R9oxZasYVTMK1rV0uEV+NR0zXwgL4LMpkvSLbge804rqAjQH0MTsk54Faup
-# 3nhEGYKRn35jYOCMcAQaY4hW5cqQJIUigX1USPbO2fnrA3eCm/iR223b1FRdsGaZ
-# WyCd8geixz0+SEwmLqol1Lyic3Pb43id2irVFZKlAgZfpMLDwjUn5zW007XSpyRV
-# 9PTyGuHuOG9dFHviODrKZV/MFapObeAKRlaYV2wQwddfOn+v3sqd8lLocak=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHvK90Zq6x/rM63S
+# prN3xGNbip86MA0GCSqGSIb3DQEBAQUABIIBAB+naAh/5X9rWU/ovxU+X+f+GTLK
+# ZxrYHif3E5GEwIg6jQE+fM1JKNjf1s8byTZYIfDvP0OVGxF2Dxpq3Wy2UK5QR+Oc
+# EPiM5iojfRdN3N5v23o+x6TiKm8Ryq4fgpr7sE56EJUscT4XrTsCArZxfPufykaY
+# g1V4oRcWBPyQ7ctkGacuKYRvZsLVTxKRlKfHXe9Sn17YDV23pzqYmPsu2SvcACje
+# lFlna5SvcTh2TbidVlI40qAfG7TmdkGGz8SNgNSHiqRLgLWls8+2Dp4H+U76Q94S
+# /iIWFQP2iq3DgmfRivo5pAyILwozT0O1xZHiRVKNpM0+NaSpgBNMKd+VRRo=
 # SIG # End signature block

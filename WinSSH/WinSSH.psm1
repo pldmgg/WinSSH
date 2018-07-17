@@ -632,11 +632,27 @@ function Generate-AuthorizedPrincipalsFile {
                     throw
                 }
             }
-            
-            $DomainAdminsPrep = $UserObjectsInLDAP | Where-Object {$_.memberOf -match "Domain Admins"}
-            $DomainAdminAccounts = $DomainAdminsPrep.distinguishedName | foreach {$($($_ -split ",")[0] -split "=")[-1]}
 
-            $AccountsReformatted = $DomainAdminAccounts | foreach {"$_" + "@" + $ThisDomainName}
+            foreach ($DirectoryEntry in $UserObjectsInLDAP) {
+                if (![bool]$($DirectoryEntry | Get-Member -MemberType NoteProperty -Name Groups)) {
+                    $searcher = [System.DirectoryServices.DirectorySearcher]::new($DirectoryEntry)
+                    $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Base
+                    $searcher.ExtendedDN = [System.DirectoryServices.ExtendedDN]::Standard
+                    $searcher.PropertiesToLoad.Clear()
+                    $null = $searcher.PropertiesToLoad.Add("memberof")
+                    $Groups = $searcher.FindOne().Properties.memberof | foreach {$($_ -split ';')[-1]}
+                    $DirectoryEntry | Add-Member -Type NoteProperty -Name Groups -Value $Groups -Force
+                }
+            }
+
+            $DomainAdminsPrep = $UserObjectsInLDAP | Where-Object {$_.Groups -match "Domain Admins"}
+            $DomainAdminAccounts = $DomainAdminsPrep.Name | foreach {$($_ -split "=")[-1]}
+
+            $AccountsReformatted = $DomainAdminAccounts | foreach {
+                if (![System.String]::IsNullOrWhiteSpace($_)) {
+                    $_ + "@" + $ThisDomainName.ToLowerInvariant()
+                }
+            }
 
             foreach ($Acct in $AccountsReformatted) {
                 if ($AccountsAdded -notcontains $Acct -and $OriginalAuthPrincContent -notcontains $Acct) {
@@ -662,10 +678,27 @@ function Generate-AuthorizedPrincipalsFile {
                 }
             }
 
-            $DomainUsersPrep = $UserObjectsInLDAP | Where-Object {$_.memberOf -match "Users"}
-            $DomainUserAccounts = $DomainUsersPrep.distinguishedName | foreach {$($($_ -split ",")[0] -split "=")[-1]}
+            foreach ($DirectoryEntry in $UserObjectsInLDAP) {
+                if (![bool]$($DirectoryEntry | Get-Member -MemberType NoteProperty -Name Groups)) {
+                    $searcher = [System.DirectoryServices.DirectorySearcher]::new($DirectoryEntry)
+                    $searcher.SearchScope = [System.DirectoryServices.SearchScope]::Base
+                    $searcher.ExtendedDN = [System.DirectoryServices.ExtendedDN]::Standard
+                    $searcher.PropertiesToLoad.Clear()
+                    $null = $searcher.PropertiesToLoad.Add("memberof")
+                    $null = $searcher.PropertiesToLoad.Add("distinguishedname")
+                    $Groups = $searcher.FindOne().Properties.memberof | foreach {$($_ -split ';')[-1]}
+                    $DirectoryEntry | Add-Member -Type NoteProperty -Name Groups -Value $Groups -Force
+                }
+            }
 
-            $AccountsReformatted = $DomainAdminAccounts | foreach {"$_" + "@" + $ThisDomainName}
+            $DomainUsersPrep = $UserObjectsInLDAP | Where-Object {$_.Groups -match "Domain Users"}
+            $DomainUserAccounts = $DomainUsersPrep.Name | foreach {$($_ -split "=")[-1]}
+
+            $AccountsReformatted = $DomainUserAccounts | foreach {
+                if (![System.String]::IsNullOrWhiteSpace($_)) {
+                    $_ + "@" + $ThisDomainName.ToLowerInvariant()
+                }
+            }
 
             foreach ($Acct in $AccountsReformatted) {
                 if ($AccountsAdded -notcontains $Acct -and $OriginalAuthPrincContent -notcontains $Acct) {
@@ -740,6 +773,20 @@ function Generate-SSHUserDirFileInfo {
         [Parameter(Mandatory=$False)]
         [string]$PathToHomeDotSSHDirectory
     )
+
+    $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
+
+    if (!$(Test-Path $OpenSSHWinPath)) {
+        Write-Error "The path $OpenSSHWinPath was not found! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
 
     # Make sure we have access to ssh binaries
     if (![bool]$(Get-Command ssh-keygen -ErrorAction SilentlyContinue)) {
@@ -1845,6 +1892,20 @@ function Get-SSHFileInfo {
         [string]$PathToKeyFile
     )
 
+    $OpenSSHWinPath = "$env:ProgramFiles\OpenSSH-Win64"
+
+    if (!$(Test-Path $OpenSSHWinPath)) {
+        Write-Error "The path $OpenSSHWinPath was not found! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     # Make sure we have access to ssh binaries
     if (![bool]$(Get-Command ssh-keygen -ErrorAction SilentlyContinue)) {
         Write-Error "Unable to find 'ssh-keygen.exe'! Halting!"
@@ -1898,9 +1959,10 @@ function Get-SSHFileInfo {
     $stderr = $Process.StandardError.ReadToEnd()
     $SSHKeyGenOutput = $stdout + $stderr
 
+    $KeyFileContent = Get-Content $PathToKeyFile
     if ($SSHKeyGenOutput -match "(RSA-CERT)") {
         $PublicKeyCertInfo = ssh-keygen -L -f "$PathToKeyFile"
-        $PublicKeyCertContent = Get-Content $PathToKeyFile
+        $PublicKeyCertContent = $KeyFileContent
         $FingerPrint = ssh-keygen -l -f "$PathToKeyFile"
         $IsPublicKeyCert = $True
     }
@@ -1909,29 +1971,31 @@ function Get-SSHFileInfo {
         $PrivateKeyAttempt = Validate-SSHPrivateKey -PathToPrivateKeyFile $PathToKeyFile
         if (!$PrivateKeyAttempt.ValidSSHPrivateKeyFormat) {
             $IsPublicKey = $True
-            $PublicKeyContent = Get-Content $PathToKeyFile
+            $PublicKeyContent = $KeyFileContent
             $PublicKeyInfo = $FingerPrint = ssh-keygen -l -f "$PathToKeyFile"
         }
         else {
             $IsPrivateKey = $True
-            $PrivateKeyContent = $PrivateKeyInfo = Get-Content $PathToKeyFile
+            $PrivateKeyContent = $PrivateKeyInfo = $KeyFileContent
             $FingerPrint = ssh-keygen -l -f "$PathToKeyFile"
             $PasswordProtected = $PrivateKeyAttempt.PasswordProtected
         }
     }
     elseif ($SSHKeyGenOutput -match "passphrase|pass phrase" -or $($SSHKeyGenOutput -eq $null -and $ProcessKilled)) {
         $IsPrivateKey = $True
-        $PrivateKeyContent = $PrivateKeyInfo = Get-Content $PathToKeyFile
+        $PrivateKeyContent = $PrivateKeyInfo = $KeyFileContent
         $PasswordProtected = $True
     }
-    elseif ($(Get-Content $PathToKeyFile)[0] -match "SSH2") {
-        [pscustomobject]@{
-            File                = $PathToKeyFile
-            FileType            = "SSH2_RFC4716"
-            Contents            = $(Get-Content $PathToKeyFile)
-            Info                = $(Get-Content $PathToKeyFile)
-            FingerPrint         = $null
-            PasswordProtected   = $null
+    elseif ($KeyFileContent.Count -gt 0) {
+        if ($(Get-Content $PathToKeyFile)[0] -match "SSH2") {
+            [pscustomobject]@{
+                File                = $PathToKeyFile
+                FileType            = "SSH2_RFC4716"
+                Contents            = $(Get-Content $PathToKeyFile)
+                Info                = $(Get-Content $PathToKeyFile)
+                FingerPrint         = $null
+                PasswordProtected   = $null
+            }
         }
 
         return
@@ -2227,16 +2291,16 @@ function Install-SSHAgentService {
                 $global:FunctionResult = "1"
                 return
             }
-
-            # Make sure $OpenSSHWinPath is part of $env:Path
-            [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
-            if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
-                $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
-                $env:Path = $CurrentEnvPathArray -join ";"
-            }
         }
 
         #endregion >> Get OpenSSH-Win64 Files
+
+        # Make sure $OpenSSHWinPath is part of $env:Path
+        [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+        if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+            $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+            $env:Path = $CurrentEnvPathArray -join ";"
+        }
 
         # Now ssh.exe and related should be available, but the ssh-agent service has not been installed yet
 
@@ -2667,6 +2731,13 @@ function New-SSHDServer {
     $sshdConfigPath = Join-Path $sshdir "sshd_config"
     $logsdir = Join-Path $sshdir "logs"
 
+    # Make sure $OpenSSHWinPath is part of $env:Path
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     # Make sure the dependency ssh-agent service is already installed
     if (![bool]$(Get-Service ssh-agent -ErrorAction SilentlyContinue)) {
         try {
@@ -3081,17 +3152,6 @@ function New-SSHDServer {
 
         This parameter is a switch. If used, the new SSH Key Pair will be added to the ssh-agent service.
 
-    .PARAMETER AllowAwaitModuleInstall
-        This parameter is OPTIONAL. This parameter should only be used in conjunction with the
-        -BlankSSHPrivateKeyPwd switch.
-
-        This parameter is a switch.
-
-        If you would like the Private Key file to be unprotected, and if you would like to avoid the
-        ssh-keygen prompt for a password, the PowerShell Await Module is required.
-
-        Use this switch along with the -BlankSSHPrivateKeyPwd switch to avoid prompts altogether.
-
     .PARAMETER RemovePrivateKey
         This parameter is OPTIONAL. This parameter should only be used in conjunction with the
         -AddtoSSHAgent switch.
@@ -3144,9 +3204,6 @@ function New-SSHKey {
         [Parameter(Mandatory=$False)]
         [ValidatePattern("^\w*$")] # No spaces allowed
         [string]$NewSSHKeyPurpose,
-
-        [Parameter(Mandatory=$False)]
-        [switch]$AllowAwaitModuleInstall,
 
         [Parameter(Mandatory=$False)]
         [switch]$AddToSSHAgent,
@@ -3206,6 +3263,12 @@ function New-SSHKey {
         return
     }
 
+    [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+    if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+        $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+        $env:Path = $CurrentEnvPathArray -join ";"
+    }
+
     if (!$(Test-Path "$HOME\.ssh")) {
         $null = New-Item -Type Directory -Path "$HOME\.ssh"
     }
@@ -3232,7 +3295,7 @@ function New-SSHKey {
     if ($NewSSHKeyPwd) {
         $ProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $ProcessInfo.WorkingDirectory = $OpenSSHWinPath
-        $ProcessInfo.FileName = "ssh-keygen.exe"
+        $ProcessInfo.FileName = $(Get-Command ssh-keygen.exe).Source
         $ProcessInfo.RedirectStandardError = $true
         $ProcessInfo.RedirectStandardOutput = $true
         #$ProcessInfo.StandardOutputEncoding = [System.Text.Encoding]::Unicode
@@ -3254,6 +3317,7 @@ function New-SSHKey {
         }
     }
     else {
+        <#
         if (!$AllowAwaitModuleInstall -and $(Get-Module -ListAvailable).Name -notcontains "Await") {
             Write-Warning "This function needs to install the PowerShell Await Module in order to generate a private key with a null password."
             $ProceedChoice = Read-Host -Prompt "Would you like to proceed? [Yes\No]"
@@ -3280,6 +3344,9 @@ function New-SSHKey {
                 if (!$(Test-Path "$HOME\Documents\WindowsPowerShell\Modules\Await")) {
                     $null = New-Item -Type Directory "$HOME\Documents\WindowsPowerShell\Modules\Await"
                 }
+                else {
+                    Remove-Item "$HOME\Documents\WindowsPowerShell\Modules\Await" -Recurse -Force
+                }
                 Copy-Item -Recurse -Path "$tempDirectory\PoshAwait-master\*" -Destination "$HOME\Documents\WindowsPowerShell\Modules\Await"
                 Remove-Item -Recurse -Path $tempDirectory -Force
 
@@ -3288,10 +3355,13 @@ function New-SSHKey {
                 }
             }
         }
+        #>
 
         # Make private key password $null
-        Import-Module Await
-        if (!$?) {
+        try {
+            Import-Module "$PSScriptRoot\Await\Await.psd1" -ErrorAction Stop
+        }
+        catch {
             Write-Error "Unable to load the Await Module! Halting!"
             $global:FunctionResult = "1"
             return
@@ -3300,7 +3370,7 @@ function New-SSHKey {
         Start-AwaitSession
         Start-Sleep -Seconds 1
         Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
-        $PSAwaitProcess = $($(Get-Process | ? {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
+        $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
         Start-Sleep -Seconds 1
         Send-AwaitCommand "`$env:Path = '$env:Path'; Push-Location '$OpenSSHWinPath'"
         Start-Sleep -Seconds 1
@@ -3363,7 +3433,7 @@ function New-SSHKey {
         # Add the New Private Key to the ssh-agent
         $SSHAddProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $SSHAddProcessInfo.WorkingDirectory = $OpenSSHWinPath
-        $SSHAddProcessInfo.FileName = "ssh-add.exe"
+        $SSHAddProcessInfo.FileName = $(Get-Command ssh-add.exe).Source
         $SSHAddProcessInfo.RedirectStandardError = $true
         $SSHAddProcessInfo.RedirectStandardOutput = $true
         $SSHAddProcessInfo.UseShellExecute = $false
@@ -3894,8 +3964,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUG7UGRKkAQsVbSIWOqnB/AA61
-# nZCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUacWjz7SRq81JEEkYOYyij64A
+# 23igggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -3952,11 +4022,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFA+sZrzGpUT0rXZV
-# jpApvx6aIo8lMA0GCSqGSIb3DQEBAQUABIIBAEenZTIDbFEQWHk7l4E3XFnjECB+
-# nnH8evl5WZ/aqmG5U3LjGWCeodkFShGvIUHptC8RJjEj9Z1Vdbnc+n6kWb54e2gU
-# 7tIMgBZa7yrVozskUNNJ5FlWJu4u0nitKdOO2wrlRsfijK+n1tB4I4xBByIbk4HT
-# 6ZYH019nTV72ErrpX3aQr8WCvsPBsc+dCEMg1J9kDH2IUootReKt+syBcvDRL5gf
-# 9f58cqnc2D/g2lSxZNHuTaA4Bce5uERF7ik/SAaWyQ3kUDpVDDyoaO+R86IEbHL+
-# cO3K6LLKL9srAGjMAXC8LBzFpK/lLtyBS1Ldb61FcVGYUNnzFwR12pnEB60=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBdvPVtyDiYh00MG
+# 1xjUMWTq+amYMA0GCSqGSIb3DQEBAQUABIIBABfo+xTvRnlDdqT2RNQ2cCflKHQp
+# 7U2TtvaNJpIelxAoY3TCzDXPAJg7CgX7aS3RpWPNfAPdgTu9xvApvdt+IGFKonhd
+# dAUnRnljhC/c3tSzvKT42gVGfYqbE5zbi4bJMeVddF6iAllCkR2Uum5PVfmLnPD5
+# FiqKuyHr9Eo+qZTEFU/KQk1kKQS6CnIbnoitQRntGAEQe0xYXC6F1PqBvWOQGi2F
+# ZBfMmq8UWFIX1ldyGuIJ6fKDsuLm7H3jSLovzv58b/zhv/2tmVd8ODcujxu4iAEs
+# YrhksSKn9VvAhK02LDL0hkBDfjRZAveChez8+jXNgMSxrPc8B6rlqPTBAaw=
 # SIG # End signature block

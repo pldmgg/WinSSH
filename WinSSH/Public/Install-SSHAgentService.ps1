@@ -250,16 +250,16 @@ function Install-SSHAgentService {
                 $global:FunctionResult = "1"
                 return
             }
-
-            # Make sure $OpenSSHWinPath is part of $env:Path
-            [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
-            if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
-                $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
-                $env:Path = $CurrentEnvPathArray -join ";"
-            }
         }
 
         #endregion >> Get OpenSSH-Win64 Files
+
+        # Make sure $OpenSSHWinPath is part of $env:Path
+        [System.Collections.Arraylist][array]$CurrentEnvPathArray = $env:Path -split ";" | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+        if ($CurrentEnvPathArray -notcontains $OpenSSHWinPath) {
+            $CurrentEnvPathArray.Insert(0,$OpenSSHWinPath)
+            $env:Path = $CurrentEnvPathArray -join ";"
+        }
 
         # Now ssh.exe and related should be available, but the ssh-agent service has not been installed yet
 
@@ -391,8 +391,8 @@ function Install-SSHAgentService {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmLkSMykR6OiFZw3RTLKK3TrY
-# M0agggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUGb54fWLTnjoxk8vCN/g4JlC
+# rRugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -449,11 +449,11 @@ function Install-SSHAgentService {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFICTlk96Gkguk7TN
-# OEhwKAZTZjfdMA0GCSqGSIb3DQEBAQUABIIBAEJ1DtJIU+0U5ijhF+cCPe1DR+KX
-# oD6CwVJm5QIQ6bQ0Qe/g3lbUPVMWQFunNkjDRFsD7MtB/O2+obeLm4241rYeRhLd
-# KhyJOWYjNlglounMpcJJwDPxH7uQH1YYGQSKXzXZRuPjL04+DEgPp5p9dQG8aype
-# LT4ZD/8n42YJJc4b/20oOlmxkUQXSuqJgBdaYB6QDJfILz4p13RPrnYKu6EKSt34
-# Wd+67wBsrUCQMg+SEKFNDxB9bcsbEQu0nNXgQJb3hUtw04PZAlo9dPq+ELJYe6fc
-# LZXw7pGMdEKFs8RiSoAH7OyAYfQWgjYCotau1KE8IP3zJ0bgtXFfCr579mA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIgC8xWZXWZB3Tng
+# YEZ3oO+fqYmXMA0GCSqGSIb3DQEBAQUABIIBAAKUXyOhRC4lc6pEH6WyecbF/K9C
+# Ht97h6hU/Arv58M6a9lwnyWLI459e+jLlPWYF1Ju0kZdbqfPT1heyT+n01bhoMdk
+# sm/RH+DSgQktPTX6f1STNENaKeuzl0MlwmhMV2qseydOeYlXuvm+0xxGTBmHwO50
+# cxR6vplaK/lJmArYH+orMPYaPHM8SaAkC2rrtZ/BuEvskWhzMQrcfS3KU4wjTUSB
+# K6N3uvXlO+nF99D70iEHNYA4Xb3NNcQuxdoM7w00me0xyc32VhtE+2dSD90cdz6g
+# UpIcpriEQ3DcMTBPWf7Gid8dMFyr9RKt06jbLtaloAbWvV33JOdxJmnJvgY=
 # SIG # End signature block
