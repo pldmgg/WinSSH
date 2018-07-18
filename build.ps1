@@ -141,6 +141,34 @@ if ($Cert) {
     }
 }
 
+if (!$(Get-Module -ListAvailable PSDepend)) {
+    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
+}
+try {
+    Import-Module PSDepend
+    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
+
+    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
+    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
+    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
+    # This is more a problem with PowerShellGet than PSDeploy.
+    <#
+    Remove-Module PSDeploy
+    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
+    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
+    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
+    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
+    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
+    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
+    #>
+    Import-Module PSDeploy
+}
+catch {
+    Write-Error $_
+    $global:FunctionResult = "1"
+    return
+}
+
 Set-BuildEnvironment -Force -Path $PSScriptRoot -ErrorAction SilentlyContinue
 
 # Now the following Environment Variables with similar values should be available to use...
@@ -211,32 +239,6 @@ if ($Cert) {
     }
 }
 
-if (!$(Get-Module -ListAvailable PSDepend)) {
-    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
-}
-try {
-    Import-Module PSDepend
-    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
-
-    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
-    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
-    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
-    # This is more a problem with PowerShellGet than PSDeploy.
-    Remove-Module PSDeploy -ErrorAction SilentlyContinue
-    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
-    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
-    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
-    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
-    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
-    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
-    Import-Module PSDeploy
-}
-catch {
-    Write-Error $_
-    $global:FunctionResult = "1"
-    return
-}
-
 if ([bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) {
     Remove-Module $env:BHProjectName -Force -ErrorAction SilentlyContinue
 }
@@ -290,8 +292,8 @@ exit ( [int]( -not $psake.build_success ) )
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+o/GvtTMtPqNcYRhpG2X1Kv3
-# WU2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjqQ4kcRJckdiF36D40hhTybY
+# Thegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -348,11 +350,11 @@ exit ( [int]( -not $psake.build_success ) )
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHJuOU2/RRaAOaeH
-# GwSUg75v04wPMA0GCSqGSIb3DQEBAQUABIIBAL117q7B/moilvNRaWzG5t/yHCfl
-# HjLs3Ovf03bJV9sQM5t2OsxtcHJPqkPYtVnHIrNWFxdKWHlN915LCPZyB1MCdtIN
-# /5X/gOPh6QtVOYzIeVbifflK4+/5KTvRUAeEAVh15KHzzH3JoFkn8sPyC81b/A1E
-# 8iZn8UTTOoZEHZs5d9DdhPQQUdpYgZaqwG4KQ4S85S1uuKkAm3tP6puXIl1xZ1V5
-# qdYV2KkjBk7rVBktFh2j8nTR+zrmv+0IWK1Rqm0LoA05t3VD7/mt/bVuvToTU6YV
-# 6HrdbPA6kvqyeyoX26nCJ9EdnyBPkVEGxbOB0gSgPmocxmtlI6UqMCEOvUY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFE2awPH+8de3HFmN
+# pYfxfpCi9ikMMA0GCSqGSIb3DQEBAQUABIIBAITmxa1WLpfj2yVFco1MDnIgejZ4
+# ytFbYIKEDgWoi9plDlgJGPqRuvk/T5HUSvrOA4yBl0be7wxTHK6USf4eJVmWbk6r
+# BuEnx5JZAlar/tb2ass3TSeePSQ93jup3Ibk8DIOQFPFm3JESS0luTmZwjSmysi7
+# mxeFpRtA2O70Y10E8stb1unDL3NcP+rH10oi4oCSaW88SXux9Ds0b2lvNfHeJJyW
+# AwmsvDc7Q5lJD05yD5EZa6YYyf7wg8FIPYY5ew6qmbqw2F64GZf0Km7u8EgPuUfK
+# R5z5dKqc7gHNWWgELxc3v5UXpNvOVV2SQS2O+lpoOaK6W6dfIti1OnPpcrA=
 # SIG # End signature block
