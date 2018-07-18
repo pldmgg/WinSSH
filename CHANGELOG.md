@@ -1,5 +1,9 @@
 # Change log
 
+## 0.8.4 (July 18, 2018)
+
+- Updated README.md
+
 ## 0.8.3 (July 18, 2018)
 
 - Added link to GitHub Repo in description

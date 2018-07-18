@@ -4,6 +4,8 @@
 # WinSSH
 Install OpenSSH-Win64, optionally install ssh-agent and sshd Services. Also includes functions to help configure sshd_config, fix permissions, and check keys.
 
+Compatible with Windows PowerShell 5.1 and PowerShell Core 6.X (on Windows).
+
 ## Getting Started
 
 ```powershell
