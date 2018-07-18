@@ -1,5 +1,9 @@
 # Change log
 
+## 0.8.5 (July 18, 2018)
+
+- Updated GetModuleDependencies Private function to help Module load faster in PSCore
+
 ## 0.8.4 (July 18, 2018)
 
 - Updated README.md
