@@ -1,5 +1,9 @@
 # Change log
 
+## 0.8.3 (July 18, 2018)
+
+- Added link to GitHub Repo in description
+
 ## 0.8.2 (July 18, 2018)
 
 - Initial deployment to PSGallery

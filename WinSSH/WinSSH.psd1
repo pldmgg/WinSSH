@@ -12,7 +12,7 @@
 RootModule = 'WinSSH.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.8.2'
+ModuleVersion = '0.8.3'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -30,7 +30,7 @@ CompanyName = 'pldmgg'
 Copyright = '(c) 2018 pldmgg. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Install OpenSSH-Win64, optionally install ssh-agent, sshd. Also includes functions to help configure sshd_config, fix permissions, and check keys.'
+Description = 'Install OpenSSH-Win64, optionally install ssh-agent and sshd Services. Also includes functions to help configure sshd_config, fix permissions, and check keys. GitHub: https://github.com/pldmgg/WinSSH'
 
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '5.1'
