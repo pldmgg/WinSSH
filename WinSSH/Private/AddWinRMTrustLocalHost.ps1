@@ -1,61 +1,65 @@
-[System.Collections.ArrayList]$script:FunctionsForSBUse = @(
-    ${Function:AddWinRMTrustLocalHost}.Ast.Extent.Text
-    ${Function:ConfigureGlobalKnownHosts}.Ast.Extent.Text
-    ${Function:ConvertFromHCLToPrintF}.Ast.Extent.Text
-    ${Function:FixNTVirtualMachinesPerms}.Ast.Extent.Text
-    ${Function:GetCurrentUser}.Ast.Extent.Text
-    ${Function:GetDomainController}.Ast.Extent.Text
-    ${Function:GetElevation}.Ast.Extent.Text
-    ${Function:GetGroupObjectsInLDAP}.Ast.Extent.Text
-    ${Function:GetModuleDependencies}.Ast.Extent.Text
-    ${Function:GetNativePath}.Ast.Extent.Text
-    ${Function:GetUserObjectsInLDAP}.Ast.Extent.Text
-    ${Function:GetVSwitchAllRelatedInfo}.Ast.Extent.Text
-    ${Function:InstallFeatureDism}.Ast.Extent.Text
-    ${Function:InstallHyperVFeatures}.Ast.Extent.Text
-    ${Function:InvokeModuleDependencies}.Ast.Extent.Text
-    ${Function:InvokePSCompatibility}.Ast.Extent.Text
-    ${Function:NewUniqueString}.Ast.Extent.Text
-    ${Function:PauseForWarning}.Ast.Extent.Text
-    ${Function:ResolveHost}.Ast.Extent.Text
-    ${Function:TestIsValidIPAddress}.Ast.Extent.Text
-    ${Function:TestLDAP}.Ast.Extent.Text
-    ${Function:TestPort}.Ast.Extent.Text
-    ${Function:UnzipFile}.Ast.Extent.Text
-    ${Function:Add-CAPubKeyToSSHAndSSHDConfig}.Ast.Extent.Text
-    ${Function:Add-PublicKeyToRemoteHost}.Ast.Extent.Text
-    ${Function:Check-Cert}.Ast.Extent.Text
-    ${Function:Configure-VaultServerForLDAPAuth}.Ast.Extent.Text
-    ${Function:Configure-VaultServerForSSHManagement}.Ast.Extent.Text
-    ${Function:Fix-SSHPermissions}.Ast.Extent.Text
-    ${Function:Generate-AuthorizedPrincipalsFile}.Ast.Extent.Text
-    ${Function:Generate-SSHUserDirFileInfo}.Ast.Extent.Text
-    ${Function:Get-LDAPCert}.Ast.Extent.Text
-    ${Function:Get-PublicKeyAuthInstructions}.Ast.Extent.Text
-    ${Function:Get-SSHClientAuthSanity}.Ast.Extent.Text
-    ${Function:Get-SSHFileInfo}.Ast.Extent.Text
-    ${Function:Get-VaultAccessorLookup}.Ast.Extent.Text
-    ${Function:Get-VaultLogin}.Ast.Extent.Text
-    ${Function:Get-VaultTokenAccessors}.Ast.Extent.Text
-    ${Function:Get-VaultTokens}.Ast.Extent.Text
-    ${Function:Install-SSHAgentService}.Ast.Extent.Text
-    ${Function:Install-WinSSH}.Ast.Extent.Text
-    ${Function:New-SSHCredentials}.Ast.Extent.Text
-    ${Function:New-SSHDServer}.Ast.Extent.Text
-    ${Function:New-SSHKey}.Ast.Extent.Text
-    ${Function:Revoke-VaultToken}.Ast.Extent.Text
-    ${Function:Set-DefaultShell}.Ast.Extent.Text
-    ${Function:Sign-SSHHostPublicKey}.Ast.Extent.Text
-    ${Function:Sign-SSHUserPublicKey}.Ast.Extent.Text
-    ${Function:Uninstall-WinSSH}.Ast.Extent.Text
-    ${Function:Validate-SSHPrivateKey}.Ast.Extent.Text
-)
+function AddWinRMTrustLocalHost {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$False)]
+        [string]$NewRemoteHost = "localhost"
+    )
+
+    # Make sure WinRM in Enabled and Running on $env:ComputerName
+    try {
+        $null = Enable-PSRemoting -Force -ErrorAction Stop
+    }
+    catch {
+        if ($PSVersionTable.PSEdition -eq "Core") {
+            Import-WinModule NetConnection
+        }
+
+        $NICsWPublicProfile = @(Get-NetConnectionProfile | Where-Object {$_.NetworkCategory -eq 0})
+        if ($NICsWPublicProfile.Count -gt 0) {
+            foreach ($Nic in $NICsWPublicProfile) {
+                Set-NetConnectionProfile -InterfaceIndex $Nic.InterfaceIndex -NetworkCategory 'Private'
+            }
+        }
+
+        try {
+            $null = Enable-PSRemoting -Force
+        }
+        catch {
+            Write-Error $_
+            Write-Error "Problem with Enable-PSRemoting WinRM Quick Config! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    # If $env:ComputerName is not part of a Domain, we need to add this registry entry to make sure WinRM works as expected
+    if (!$(Get-CimInstance Win32_Computersystem).PartOfDomain) {
+        $null = reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f
+    }
+
+    # Add the New Server's IP Addresses to $env:ComputerName's TrustedHosts
+    $CurrentTrustedHosts = $(Get-Item WSMan:\localhost\Client\TrustedHosts).Value
+    [System.Collections.ArrayList][array]$CurrentTrustedHostsAsArray = $CurrentTrustedHosts -split ','
+
+    $HostsToAddToWSMANTrustedHosts = @($NewRemoteHost)
+    foreach ($HostItem in $HostsToAddToWSMANTrustedHosts) {
+        if ($CurrentTrustedHostsAsArray -notcontains $HostItem) {
+            $null = $CurrentTrustedHostsAsArray.Add($HostItem)
+        }
+        else {
+            Write-Warning "Current WinRM Trusted Hosts Config already includes $HostItem"
+            return
+        }
+    }
+    $UpdatedTrustedHostsString = $($CurrentTrustedHostsAsArray | Where-Object {![string]::IsNullOrWhiteSpace($_)}) -join ','
+    Set-Item WSMan:\localhost\Client\TrustedHosts $UpdatedTrustedHostsString -Force
+}
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUV0sB6rYpzm/AllwoXUPeLCJy
-# R6ugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUgJPfoQv6PBa8VE2dwjhQaovv
+# x+igggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -112,11 +116,11 @@
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCI6ynvSXA5hlKNt
-# jd8zrJ5Mph/OMA0GCSqGSIb3DQEBAQUABIIBAK1QZM7ADtlWiKUF4jwaboHHjCTc
-# Rn1lyI1hmloBSUBgW7yrNFDne2bC5GtanWqaHyqEDNpWrWDP+A3wR7YKAx7Z5rm+
-# MqXa896BdAqHsKG1Kj2AaqOZj70ZrEICZZyj1poOsp8TuvowCGOyj4hyQkH+SGgc
-# klO+A1OE7gE3PD/iMLrX/xUr/uatTtjqQlfDQ5DGNwHjI3nloflFZ4QC+1PjhEUK
-# k8jXp309/Ne4kwX1ldRMb2Xy3uKGwoNAItgwF97SdGk62Yy1X7ImnhE2Ga/Dc7+M
-# spP1L4D77rCeiZ7pFrHvCcdUvzfH5nWXIJVgNrndcI3V+oo4f/4uP2Kz2Lg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEfbGSGMj6QfG5et
+# W/OsBh36F792MA0GCSqGSIb3DQEBAQUABIIBAAeQcNjvv34QidP/aJU/TfVS5QcA
+# 5pyXgqnsMzoJMiS/pFqbnJuXVzTzSJz7SO6h2QbpNbHm7bNDrLIU+ghKiqjFvEpx
+# Xq4BLDgzw3d219206JJP92YLF61iom7dAAJZ3J9qG4WhGkQaXUGZsmhpyNlH+vYt
+# 7dJ2PFz7X7QVc6k9FspKw+v5GHbFSaUCDfkEHoKQczspBCBlNRJWmWU/9fNsGLiA
+# Q+l1jB3IE7HMSXcbzvQFk13ttg9r3isy1CJK0HtH/qI5UdLzaJHp17rJL7hLA7k4
+# 0pHFkCIKA8EbC6Y3QradnjRSHRizmlZcs2PDSxEjYITDYFXH2tuUENJprHQ=
 # SIG # End signature block

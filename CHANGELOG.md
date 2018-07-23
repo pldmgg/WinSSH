@@ -1,5 +1,9 @@
 # Change log
 
+## 0.8.8 (July 23, 2018)
+
+- Updated InvokePSCompatibility Private to improve import speed in PSCore
+
 ## 0.8.7 (July 23, 2018)
 
 - Updated InvokeModuleDependencies Private function to ensure Module Dependencies are installed even when function names overlap
