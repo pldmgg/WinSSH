@@ -1,5 +1,9 @@
 # Change log
 
+## 0.8.6 (July 23, 2018)
+
+- Updated InvokePSCompatibility Private function to ensure Module Dependencies are installed even when function names overlap
+
 ## 0.8.5 (July 18, 2018)
 
 - Updated GetModuleDependencies Private function to help Module load faster in PSCore
