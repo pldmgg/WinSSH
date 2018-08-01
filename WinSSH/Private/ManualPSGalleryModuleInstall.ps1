@@ -1,56 +1,86 @@
-function GetUserObjectsInLDAP {
+function ManualPSGalleryModuleInstall {
     [CmdletBinding()]
-    Param()
+    Param (
+        [Parameter(Mandatory=$True)]
+        [string]$ModuleName,
 
-    # Below $LDAPInfo Output is PSCustomObject with properties: DirectoryEntryInfo, LDAPBaseUri,
-    # GlobalCatalogConfigured3268, GlobalCatalogConfiguredForSSL3269, Configured389, ConfiguredForSSL636,
-    # PortsThatWork
+        [Parameter(Mandatory=$False)]
+        [switch]$PreRelease,
+
+        [Parameter(Mandatory=$False)]
+        [string]$DownloadDirectory
+    )
+
+    if (!$DownloadDirectory) {
+        $DownloadDirectory = $(Get-Location).Path
+    }
+
+    if (!$(Test-Path $DownloadDirectory)) {
+        Write-Error "The path $DownloadDirectory was not found! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    if (![bool]$($($env:PSModulePath -split ";") -match [regex]::Escape("$HOME\Documents\WindowsPowerShell\Modules"))) {
+        $env:PSModulePath = "$HOME\Documents\WindowsPowerShell\Modules;$env:PSModulePath"
+    }
+    if (!$(Test-Path "$HOME\Documents\WindowsPowerShell\Modules")) {
+        $null = New-Item -ItemType Directory "$HOME\Documents\WindowsPowerShell\Modules" -Force
+    }
+
+    if ($PreRelease) {
+        $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$ModuleName'"
+    }
+    else {
+        $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$ModuleName' and IsLatestVersion"
+    }
+    $ModuleInfo = Invoke-RestMethod $searchUrl
+    if (!$ModuleInfo -or $ModuleInfo.Count -eq 0) {
+        Write-Error "Unable to find Module Named $ModuleName! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    if ($PreRelease) {
+        if ($ModuleInfo.Count -gt 1) {
+            $ModuleInfo = $($ModuleInfo | Sort-Object -Property Updated)[-1]
+        }
+    }
+    
+    $OutFilePath = Join-Path $DownloadDirectory $($ModuleInfo.title.'#text' + $ModuleInfo.properties.version + '.zip')
+    if (Test-Path $OutFilePath) {Remove-Item $OutFilePath -Force}
+
     try {
-        $DomainControllerInfo = GetDomainController -ErrorAction Stop
-        $LDAPInfo = TestLDAP -ADServerHostNameOrIP $DomainControllerInfo.PrimaryDomainController -ErrorAction Stop
-        if (!$DomainControllerInfo) {throw "Problem with GetDomainController function! Halting!"}
-        if (!$LDAPInfo) {throw "Problem with TestLDAP function! Halting!"}
+        #Invoke-WebRequest $ModuleInfo.Content.src -OutFile $OutFilePath
+        # Download via System.Net.WebClient is a lot faster than Invoke-WebRequest...
+        $WebClient = [System.Net.WebClient]::new()
+        $WebClient.Downloadfile($ModuleInfo.Content.src, $OutFilePath)
     }
     catch {
         Write-Error $_
         $global:FunctionResult = "1"
         return
     }
+    
+    if (Test-Path "$DownloadDirectory\$ModuleName") {Remove-Item "$DownloadDirectory\$ModuleName" -Recurse -Force}
+    Expand-Archive $OutFilePath -DestinationPath "$DownloadDirectory\$ModuleName"
 
-    if (!$LDAPInfo.PortsThatWork) {
-        Write-Error "Unable to access LDAP on $($DomainControllerInfo.PrimaryDomainController)! Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
+    if ($DownloadDirectory -ne "$HOME\Documents\WindowsPowerShell\Modules") {
+        if (Test-Path "$HOME\Documents\WindowsPowerShell\Modules\$ModuleName") {
+            Remove-Item "$HOME\Documents\WindowsPowerShell\Modules\$ModuleName" -Recurse -Force
+        }
+        Copy-Item -Path "$DownloadDirectory\$ModuleName" -Recurse -Destination "$HOME\Documents\WindowsPowerShell\Modules"
 
-    if ($LDAPInfo.PortsThatWork -contains "389") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":389"
-    }
-    elseif ($LDAPInfo.PortsThatWork -contains "3268") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":3268"
-    }
-    elseif ($LDAPInfo.PortsThatWork -contains "636") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":636"
-    }
-    elseif ($LDAPInfo.PortsThatWork -contains "3269") {
-        $LDAPUri = $LDAPInfo.LDAPBaseUri + ":3269"
+        Remove-Item "$DownloadDirectory\$ModuleName" -Recurse -Force
     }
 
-    $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
-    $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
-    $LDAPSearcher.Filter = "(&(objectCategory=User))"
-    $LDAPSearcher.SizeLimit = 0
-    $LDAPSearcher.PageSize = 250
-    $UserObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
-
-    $UserObjectsInLDAP
+    Remove-Item $OutFilePath -Force
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUX+OB3D4jNnQ/GNB7yvqvdqA9
-# Pqqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdyTcv1JpsCJnQ7fEZM9lncUV
+# qsSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -107,11 +137,11 @@ function GetUserObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJzY0TSWkuu18F1a
-# 04RrZmr3AXyLMA0GCSqGSIb3DQEBAQUABIIBAL2pMoOhpxnOl/5jQqRxukRp+fhN
-# q7MUKSOZ5gLgcn9j0uzQhqvxUP4Fhm8AWxk0FLd78klAux3oi0zaibxSQkOudbpn
-# rD7rR7RgIqeXnVDv5BFePIBPedR9/X1mpVZ5NIGPvQbaJr96KOyof7q76fJzgVH9
-# z0SU07IibFNE/9eRqCV1DqiSxgW9emkwYDOGblFpWL+3M0ktbKbO6uD/KsCXx1kH
-# X3Go6JI7w2XZnjbWrdCQKtNi3P5huWLi2p+JyFGfL/Zu/VMCHQQRIWbBHLw6WdoO
-# B8BT2mfIdeh+cxUIb2RxMWHpmWzxzqE8BZyi95W3U0QpjZp8MiyLj1DQug8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGzAOxKCCq3IN0JE
+# gyTD6vSikcagMA0GCSqGSIb3DQEBAQUABIIBAA6pH2FvfV3K1pouydyVihMGmSlQ
+# 27l/F1cUWpjxfv5zOASUw89uGa6AbNM7kTw7kbGVc1ehLxTBvqegZDF563qojspW
+# thK427nN+GEs7PcXBIe1Z+/8p+lh5qBITN42gYzvecvMnTRJxvtoVRR6pE8IXQv/
+# dbhiA3DvStf3sGURR/t90v10HQVeiMVINwkEyXYGEv2hpaDDU5O1DE+RZUdNAcYX
+# kkpGnscj4YoQ0fYZC9cI+LmtrhtdhXIytfNYUgpStcEvBggSB5MYp9ksk8JaZd55
+# WDdYC+c/NFZ6W5YnOzKVlS4F8Pjz2755AWWWbDxT2BwW19dJu1fOPTCYMRg=
 # SIG # End signature block

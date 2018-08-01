@@ -1,4 +1,4 @@
-function GetUserObjectsInLDAP {
+function GetComputerObjectsInLDAP {
     [CmdletBinding()]
     Param()
 
@@ -36,21 +36,35 @@ function GetUserObjectsInLDAP {
         $LDAPUri = $LDAPInfo.LDAPBaseUri + ":3269"
     }
 
+    <#
     $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
     $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
-    $LDAPSearcher.Filter = "(&(objectCategory=User))"
+    $LDAPSearcher.Filter = "(&(objectCategory=Group))"
     $LDAPSearcher.SizeLimit = 0
     $LDAPSearcher.PageSize = 250
-    $UserObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
+    $GroupObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
+    #>
 
-    $UserObjectsInLDAP
+    $LDAPSearchRoot = [System.DirectoryServices.DirectoryEntry]::new($LDAPUri)
+    $LDAPSearcher = [System.DirectoryServices.DirectorySearcher]::new($LDAPSearchRoot)
+    $LDAPSearcher.Filter = "(objectClass=computer)"
+    $LDAPSearcher.SizeLimit = 0
+    $LDAPSearcher.PageSize = 250
+    $ComputerObjectsInLDAP = $LDAPSearcher.FindAll() | foreach {$_.GetDirectoryEntry()}
+    <#
+    $null = $LDAPSearcher.PropertiesToLoad.Add("name")
+    [System.Collections.ArrayList]$ServerList = $($LDAPSearcher.FindAll().Properties.GetEnumerator()).name
+    $null = $ServerList.Insert(0,"Please Select a Server")
+    #>
+
+    $ComputerObjectsInLDAP
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUX+OB3D4jNnQ/GNB7yvqvdqA9
-# Pqqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKTp3cWeYwMA35rHO91CCUkR2
+# ebOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -107,11 +121,11 @@ function GetUserObjectsInLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJzY0TSWkuu18F1a
-# 04RrZmr3AXyLMA0GCSqGSIb3DQEBAQUABIIBAL2pMoOhpxnOl/5jQqRxukRp+fhN
-# q7MUKSOZ5gLgcn9j0uzQhqvxUP4Fhm8AWxk0FLd78klAux3oi0zaibxSQkOudbpn
-# rD7rR7RgIqeXnVDv5BFePIBPedR9/X1mpVZ5NIGPvQbaJr96KOyof7q76fJzgVH9
-# z0SU07IibFNE/9eRqCV1DqiSxgW9emkwYDOGblFpWL+3M0ktbKbO6uD/KsCXx1kH
-# X3Go6JI7w2XZnjbWrdCQKtNi3P5huWLi2p+JyFGfL/Zu/VMCHQQRIWbBHLw6WdoO
-# B8BT2mfIdeh+cxUIb2RxMWHpmWzxzqE8BZyi95W3U0QpjZp8MiyLj1DQug8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFBqp6Z2cKOR+8nV7
+# zMRZQdIRfkdjMA0GCSqGSIb3DQEBAQUABIIBAAyuviaiNOguwqZUEkjsxU5A/M7W
+# dOQ6v9urZ9zO1sh0CxA4LROYftyaMVI47mAWXpjahYvD1o9MAF2YjpsjfcY4fOPS
+# 7okSn3oMI3d6sn7yhhhiyXDOTiMamdiSA8BuMAN6Bco4J0Buy/xtLYSQxZL5TQ0i
+# L+DbJ+adjvYNdNd3einn0p39jEMjj0kqOqyyHASe14oXRZgFgZQcK5FOjHgYpJg7
+# 901WWdVGGg5smu2DJXEWPigiNGx+I+TtZvcfiHTJNt8OL3KUvKgQn2QxBbBEQvPS
+# 9wCoiSX29HNCxVX+u6aOen6bqpKSKFvCCP/2qI+nl1yHf3G9yM1aLO54nUA=
 # SIG # End signature block

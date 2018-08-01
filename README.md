@@ -1,4 +1,4 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/github/pldmgg/=master&svg=true)](https://ci.appveyor.com/project/pldmgg/winssh/branch/master)
+[![Build status](https://ci.appveyor.com/api/projects/status/github/pldmgg/winssh?branch=master&svg=true)](https://ci.appveyor.com/project/pldmgg/winssh/branch/master)
 
 
 # WinSSH
