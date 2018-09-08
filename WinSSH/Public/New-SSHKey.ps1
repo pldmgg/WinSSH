@@ -72,7 +72,6 @@
         PS C:\Users\zeroadmin> $SplatParams = @{
             NewSSHKeyName           = "ToRHServ01"
             NewSSHKeyPurpose        = "ForSSHToRHServ01"
-            AllowAwaitModuleInstall = $True
             AddToSSHAgent           = $True
         }
         PS C:\Users\zeroadmin> New-SSHKey @SplatParams
@@ -297,11 +296,9 @@ function New-SSHKey {
 
     if (!$PubKey -or !$PrivKey) {
         Write-Error "The New SSH Key Pair was NOT created! Check the output of the ssh-keygen.exe command below! Halting!"
-        Write-Host ""
-        Write-Host "##### BEGIN ssh-keygen Console Output From PSAwaitSession #####" -ForegroundColor Yellow
-        Write-Host $SSHKeyGenConsoleOutput
-        Write-Host "##### END ssh-keygen Console Output From PSAwaitSession #####" -ForegroundColor Yellow
-        Write-Host ""
+        Write-Output "##### BEGIN ssh-keygen Console Output From PSAwaitSession #####"
+        Write-Output $SSHKeyGenConsoleOutput
+        Write-Output "##### END ssh-keygen Console Output From PSAwaitSession #####"
         $global:FunctionResult = "1"
         return
     }
@@ -428,8 +425,8 @@ function New-SSHKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4Ap9zk/YhsWkZd2XcGFG3tp3
-# L+Kgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQu0sdG0EadqelAEV3VhIp308
+# Vkygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -486,11 +483,11 @@ function New-SSHKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDT0CAxrcGbA87I2
-# z6c+l77WkfFbMA0GCSqGSIb3DQEBAQUABIIBAH35vI1r0wYRnndhOV91ErRPuD9n
-# tmXX4HVzaJd8o598O2SNT/ZVTs9PnLqkB1anktqorq8/sa1d9vL49QkKpnBalznW
-# AiYCDGgxN8mgE2oVy9EgpKQF5g1PQxRs84CWjkWluHZ74CaVbp3Na2MsKArFzOaG
-# KslTCFuBRrwiI6uqwLlj0HYSVKLW3BPDa7ExYps9jxRRLcnwhAW3c4t7bPUq51ue
-# 3FzYEuqvVw7fEYJqb1VqEJ3PxstVBVXppgLh6z4+xry4ddIn4gD7JlOEmuKe0y9h
-# Q0IOVvP1M/FZB8irEmX74+hIrFqePSoHtX5urtmygkQa4qS2tKCL6xi5uLE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDSmvLBatNyyF7tb
+# VdkCFphjUNq7MA0GCSqGSIb3DQEBAQUABIIBAAItF76GXWMcdm1YUunKW8b7PCjv
+# 1LNl+RoW8m6b182iv3bBZHY3oLZgFVD6pYWJczvO30NBVcrHSpEBHF6Qna+Uyswk
+# 48qANSfap+YFaQTYSDKhZ5MkD24PZo2zt1/VLanDvCooBcOM2BjaRyVCUxzhVAmY
+# zl7JQ72kPFGs38aId6mRp/QxoNFj1X0jjWe4tOHHdKHAAK0qfcAsKCrezv0s8VG8
+# NFEOF9i8obgjrTG6i21vUNqtHjRyb6inKJOtVhwb+GUdepS3ACoQrWjTkt8F2GUg
+# FEKqY7KJnnRxWZ3xJUrp5CeqkL8H4w+0NO7v9X0hk4LvqNgoc6Hpx65QAl0=
 # SIG # End signature block

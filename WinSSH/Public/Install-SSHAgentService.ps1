@@ -380,8 +380,17 @@ function Install-SSHAgentService {
         #>
     }
 
-    Write-Host -ForegroundColor Green "The ssh-agent service was successfully installed! Starting the service..."
     Start-Service ssh-agent -Passthru
+    Start-Sleep -Seconds 5
+
+    if ($(Get-Service ssh-agent).Status -ne "Running") {
+        Write-Error "The ssh-agent service did not start succesfully! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    else {
+        Write-Host "The ssh-agent service was successfully installed and started!" -ForegroundColor Green
+    }
 
     if (Test-Path $tempfile) {
         Remove-Item $tempfile -Force -ErrorAction SilentlyContinue
@@ -391,8 +400,8 @@ function Install-SSHAgentService {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUGb54fWLTnjoxk8vCN/g4JlC
-# rRugggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUxw5x6I2vCArn7hzmJkjDYlWC
+# emGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -449,11 +458,11 @@ function Install-SSHAgentService {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIgC8xWZXWZB3Tng
-# YEZ3oO+fqYmXMA0GCSqGSIb3DQEBAQUABIIBAAKUXyOhRC4lc6pEH6WyecbF/K9C
-# Ht97h6hU/Arv58M6a9lwnyWLI459e+jLlPWYF1Ju0kZdbqfPT1heyT+n01bhoMdk
-# sm/RH+DSgQktPTX6f1STNENaKeuzl0MlwmhMV2qseydOeYlXuvm+0xxGTBmHwO50
-# cxR6vplaK/lJmArYH+orMPYaPHM8SaAkC2rrtZ/BuEvskWhzMQrcfS3KU4wjTUSB
-# K6N3uvXlO+nF99D70iEHNYA4Xb3NNcQuxdoM7w00me0xyc32VhtE+2dSD90cdz6g
-# UpIcpriEQ3DcMTBPWf7Gid8dMFyr9RKt06jbLtaloAbWvV33JOdxJmnJvgY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFLyUgR50tzqRGVTr
+# eUGLea+0INqeMA0GCSqGSIb3DQEBAQUABIIBAEDQubohEzrbOB8R8KDgPcQ6zixh
+# 93510TawUuIY6k+TmailSnPiHiNyb9JncHCNZuEhVRUiSEFeUbKSDMmiAj1k7muc
+# F7hs2w5MNnWgNWX2v+5jK2nZYo9zOnWo46nYKfjIPZBv2KCrN+27d7RdZ5a6U7Wb
+# 3rNlr6KphAKJZeRI60x4lKkt4aULPalcgHjA9PGawfszjbWetXpvpfJMRMZXvsdn
+# xdQhRmqTr2ZNSaUNO0OGuIlmZHN+2z7RzVw0Kixngy2VRW0bVAEyXVg2LKGkP5mk
+# UCCyGfrXPHz5ZHgrZZ+NzNKhVOHKlD8lycBKRn54XK0XyjizniXSottBnq0=
 # SIG # End signature block

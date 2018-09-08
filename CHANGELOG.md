@@ -1,5 +1,10 @@
 # Change log
 
+## 0.9.0 (September 8, 2018)
+
+- Fixed how the installation of pwsh is handled if not already present as determined by Set-DefaultShell
+- Added Extract-SSHPrivateKeyFromRegistry function (for keys loaded in ssh-agent that are no longer on filesystem)
+
 ## 0.8.9 (August 1, 2018)
 
 - Updated WinCompat Functions

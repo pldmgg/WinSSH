@@ -211,6 +211,208 @@ function Check-Cert {
 }
 
 
+# Python Code from: https://github.com/ropnop/windows_sshagent_extract
+function Extract-SSHPrivateKeyFromRegistry {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$False)]
+        [switch]$KeepSSHAgent
+    )
+
+    $OpenSSHRegistryPath = "HKCU:\Software\OpenSSH\Agent\Keys\"
+
+    $RegistryKeys = Get-ChildItem $OpenSSHRegistryPath | Get-ItemProperty
+
+    if ($RegistryKeys.Length -eq 0) {
+        Write-Error "No ssh-agent keys in registry"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    $tempDirectory = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName())
+    $null = [IO.Directory]::CreateDirectory($tempDirectory)
+
+    Add-Type -AssemblyName System.Security
+    [System.Collections.ArrayList]$keys = @()
+    $RegistryKeys | foreach {
+        $key = @{}
+        $comment = [System.Text.Encoding]::ASCII.GetString($_.comment)
+        $encdata = $_.'(default)'
+        $decdata = [Security.Cryptography.ProtectedData]::Unprotect($encdata, $null, 'CurrentUser')
+        $b64key = [System.Convert]::ToBase64String($decdata)
+        $key[$comment] = $b64key
+        $null = $keys.Add($key)
+    }
+
+    ConvertTo-Json -InputObject $keys | Out-File -FilePath "$tempDirectory/extracted_keyblobs.json" -Encoding ascii
+
+    $InstallPython3Result = Install-Program -ProgramName python3 -CommandName python -UseChocolateyCmdLine
+    if (!$(Get-Command python -ErrorAction SilentlyContinue)) {
+        Write-Error "Unable to find python.exe! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    if (!$(Get-Command pip -ErrorAction SilentlyContinue)) {
+        Write-Error "Unable to find pip.exe! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    pip install pyasn1 pip *> $null
+    
+    Set-Content -Path "$tempDirectory\extractPrivateKeys.py" -Value @"
+#!/usr/bin/env python
+
+# Script to extract OpenSSH private RSA keys from base64 data
+# From: https://github.com/ropnop/windows_sshagent_extract
+
+import sys
+import base64
+import json
+try:
+    from pyasn1.type import univ
+    from pyasn1.codec.der import encoder
+except ImportError:
+    print("You must install pyasn1")
+    sys.exit(0)
+
+
+def extractRSAKey(data):
+    keybytes = base64.b64decode(data)
+    offset = keybytes.find(b"ssh-rsa")
+    if not offset:
+        print("[!] No valid RSA key found")
+        return None
+    keybytes = keybytes[offset:]
+
+    # This code is re-implemented code originally written by soleblaze in sshkey-grab
+    start = 10
+    size = getInt(keybytes[start:(start+2)])
+    # size = unpack_bigint(keybytes[start:(start+2)])
+    start += 2
+    n = getInt(keybytes[start:(start+size)])
+    start = start + size + 2
+    size = getInt(keybytes[start:(start+2)])
+    start += 2
+    e = getInt(keybytes[start:(start+size)])
+    start = start + size + 2
+    size = getInt(keybytes[start:(start+2)])
+    start += 2
+    d = getInt(keybytes[start:(start+size)])
+    start = start + size + 2
+    size = getInt(keybytes[start:(start+2)])
+    start += 2
+    c = getInt(keybytes[start:(start+size)])
+    start = start + size + 2
+    size = getInt(keybytes[start:(start+2)])
+    start += 2
+    p = getInt(keybytes[start:(start+size)])
+    start = start + size + 2
+    size = getInt(keybytes[start:(start+2)])
+    start += 2
+    q = getInt(keybytes[start:(start+size)])
+
+    e1 = d % (p - 1)
+    e2 = d % (q - 1)
+
+    keybytes = keybytes[start+size:]
+
+    seq = (
+        univ.Integer(0),
+        univ.Integer(n),
+        univ.Integer(e),
+        univ.Integer(d),
+        univ.Integer(p),
+        univ.Integer(q),
+        univ.Integer(e1),
+        univ.Integer(e2),
+        univ.Integer(c),
+    )
+
+    struct = univ.Sequence()
+
+    for i in range(len(seq)):
+        struct.setComponentByPosition(i, seq[i])
+    
+    raw = encoder.encode(struct)
+    data = base64.b64encode(raw).decode('utf-8')
+
+    width = 64
+    chopped = [data[i:i + width] for i in range(0, len(data), width)]
+    top = "-----BEGIN RSA PRIVATE KEY-----\n"
+    content = "\n".join(chopped)
+    bottom = "\n-----END RSA PRIVATE KEY-----"
+    return top+content+bottom
+
+def getInt(buf):
+    return int.from_bytes(buf, byteorder='big')
+
+
+def run(filename):
+    with open(filename, 'r') as fp:
+        keysdata = json.loads(fp.read())
+    
+    for jkey in keysdata:
+        for keycomment, data in jkey.items():
+            privatekey = extractRSAKey(data)
+            print("[+] Key Comment: {}".format(keycomment))
+            print(privatekey)
+            print()
+    
+    sys.exit(0)
+
+if __name__ == '__main__':
+    if len(sys.argv) != 2:
+        print("Usage: {} extracted_keyblobs.json".format(sys.argv[0]))
+        sys.exit(0)
+    filename = sys.argv[1]
+    run(filename)
+    
+"@
+
+    Push-Location $tempDirectory
+
+    $SSHAgentPrivateKeys = python .\extractPrivateKeys.py .\extracted_keyblobs.json
+
+    [System.Collections.ArrayList]$UpdatedSSHAgentPrivKeyInfoArray = @()
+    $SSHAgentPrivateKeysArrayList = [System.Collections.ArrayList]$SSHAgentPrivateKeys
+    $NumberOfPrivateKeys = $($SSHAgentPrivateKeys | Where-Object {$_ -eq "-----END RSA PRIVATE KEY-----"}).Count
+    for ($i=0; $i -lt $NumberOfPrivateKeys; $i++) {
+        $SSHAgentPrivateKeysArrayListClone = $($SSHAgentPrivateKeysArrayList.Clone() -join "`n").Trim() -split "`n"
+        New-Variable -Name "KeyInfo$i" -Value $(New-Object System.Collections.ArrayList) -Force
+
+        :privkeylines foreach ($Line in $SSHAgentPrivateKeysArrayListClone) {
+            if (![System.String]::IsNullOrWhiteSpace($Line)) {
+                $null = $(Get-Variable -Name "KeyInfo$i" -ValueOnly).Add($Line)
+                $SSHAgentPrivateKeysArrayList.Remove($Line)
+            }
+            else {
+                break privkeylines
+            }
+        }
+
+        $null = $UpdatedSSHAgentPrivKeyInfoArray.Add($(Get-Variable -Name "KeyInfo$i" -ValueOnly))
+    }
+
+    [System.Collections.ArrayList]$FinalSSHPrivKeyObjs = @()
+    foreach ($PrivKeyInfoStringArray in $UpdatedSSHAgentPrivKeyInfoArray) {
+        $OriginalPrivateKeyFilePath = $PrivKeyInfoStringArray[0] -replace "\[\+\] Key Comment: ",""
+        $PrivateKeyContent = $PrivKeyInfoStringArray[1..$($PrivKeyInfoStringArray.Count-1)]
+        $PSObj = [pscustomobject]@{
+            OriginalPrivateKeyFilePath      = $OriginalPrivateKeyFilePath
+            PrivateKeyContent               = $PrivateKeyContent
+        }
+
+        $null = $FinalSSHPrivKeyObjs.Add($PSObj)
+    }
+
+    Pop-Location
+
+    Remove-Item $tempDirectory -Recurse -Force
+
+    $FinalSSHPrivKeyObjs
+}
+
+
 <#
     .SYNOPSIS
         This function Sets and/or fixes NTFS filesystem permissions recursively on the directories
@@ -2435,8 +2637,17 @@ function Install-SSHAgentService {
         #>
     }
 
-    Write-Host -ForegroundColor Green "The ssh-agent service was successfully installed! Starting the service..."
     Start-Service ssh-agent -Passthru
+    Start-Sleep -Seconds 5
+
+    if ($(Get-Service ssh-agent).Status -ne "Running") {
+        Write-Error "The ssh-agent service did not start succesfully! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    else {
+        Write-Host "The ssh-agent service was successfully installed and started!" -ForegroundColor Green
+    }
 
     if (Test-Path $tempfile) {
         Remove-Item $tempfile -Force -ErrorAction SilentlyContinue
@@ -3109,12 +3320,15 @@ function New-SSHDServer {
         # so restart sshd service
         Restart-Service sshd
         Start-Sleep -Seconds 5
+    }
 
-        if ($(Get-Service sshd).Status -ne "Running") {
-            Write-Error "The sshd service did not start succesfully (within 5 seconds)! Please check your sshd_config configuration. Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
+    if ($(Get-Service sshd).Status -ne "Running") {
+        Write-Error "The sshd service did not start succesfully (within 5 seconds)! Please check your sshd_config configuration. Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    else {
+        Write-Host "The sshd service was successfully installed and started!" -ForegroundColor Green
     }
 
     [pscustomobject]@{
@@ -3200,7 +3414,6 @@ function New-SSHDServer {
         PS C:\Users\zeroadmin> $SplatParams = @{
             NewSSHKeyName           = "ToRHServ01"
             NewSSHKeyPurpose        = "ForSSHToRHServ01"
-            AllowAwaitModuleInstall = $True
             AddToSSHAgent           = $True
         }
         PS C:\Users\zeroadmin> New-SSHKey @SplatParams
@@ -3425,11 +3638,9 @@ function New-SSHKey {
 
     if (!$PubKey -or !$PrivKey) {
         Write-Error "The New SSH Key Pair was NOT created! Check the output of the ssh-keygen.exe command below! Halting!"
-        Write-Host ""
-        Write-Host "##### BEGIN ssh-keygen Console Output From PSAwaitSession #####" -ForegroundColor Yellow
-        Write-Host $SSHKeyGenConsoleOutput
-        Write-Host "##### END ssh-keygen Console Output From PSAwaitSession #####" -ForegroundColor Yellow
-        Write-Host ""
+        Write-Output "##### BEGIN ssh-keygen Console Output From PSAwaitSession #####"
+        Write-Output $SSHKeyGenConsoleOutput
+        Write-Output "##### END ssh-keygen Console Output From PSAwaitSession #####"
         $global:FunctionResult = "1"
         return
     }
@@ -3610,19 +3821,21 @@ function Set-DefaultShell {
     if ($DefaultShell -eq "pwsh") {
         # Search for pwsh.exe where we expect it to be
         [array]$PotentialPwshExes = @(Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe")
-        if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue) -or
-        $PSVersionTable.PSEdition -ne "Core" -or !$PotentialPwshExes
-        ) {
+        if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
             try {
                 $InstallPwshSplatParams = @{
                     ProgramName                 = "powershell-core"
                     CommandName                 = "pwsh.exe"
                     ExpectedInstallLocation     = "C:\Program Files\PowerShell"
+                    ErrorAction                 = "SilentlyContinue"
+                    ErrorVariable               = "InstallPwshErrors"
                 }
                 $InstallPwshResult = Install-Program @InstallPwshSplatParams
+
+                if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {throw}
             }
             catch {
-                Write-Error $_
+                Write-Error $($InstallPwshErrors | Out-String)
                 $global:FunctionResult = "1"
                 return
             }
@@ -3638,6 +3851,7 @@ function Set-DefaultShell {
         $LatestLocallyAvailablePwsh = [array]$($PotentialPwshExes.VersionInfo | Sort-Object -Property ProductVersion)[-1].FileName
         $LatestPwshParentDir = [System.IO.Path]::GetDirectoryName($LatestLocallyAvailablePwsh)
         $PowerShellCorePathWithForwardSlashes = $LatestLocallyAvailablePwsh -replace "\\","/"
+        $PowerShellCorePathWithForwardSlashes = $PowerShellCorePathWithForwardSlashes -replace [regex]::Escape("C:/Program Files"),'%PROGRAMFILES%'
 
         # Update $env:Path to incloude pwsh
         if ($($env:Path -split ";") -notcontains $LatestPwshParentDir) {
@@ -3664,19 +3878,19 @@ function Set-DefaultShell {
         $InsertAfterThisLine = $sshdContent -match "sftp"
         $InsertOnThisLine = $sshdContent.IndexOf($InsertAfterThisLine)+1
         if ($DefaultShell -eq "pwsh") {
-            $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
         }
         else {
-            $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile")
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile")
         }
     }
     elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$WindowsPowerShellPathWithForwardSlashes") -and $DefaultShell -eq "powershell") {
         $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
-        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem    powershell    $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile"
     }
     elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$PowerShellCorePathWithForwardSlashes") -and $DefaultShell -eq "pwsh") {
         $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
-        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile"
     }
 
     Set-Content -Value $sshdContent -Path $sshdConfigPath
@@ -3978,8 +4192,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEndNHnDJUT+YorL75iyiLK1s
-# 8ZCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXQaFP2zxN7bPaGFN8uLWaMlJ
+# uC+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -4036,11 +4250,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFko6AX5tPtXkBcB
-# SJiQ97tOnClCMA0GCSqGSIb3DQEBAQUABIIBAHAuwsWM6FOikmk/H8FDjmgmF/c4
-# x3P9wZU4gp0lA0czOxM6r7re5n6JMqjYeXsyybMNPYUjoX3Dppv3M6dyrDRuvmqF
-# R5VW6Iw/2xM5EZSGWb8yPIvaQs+1HAqlUzz+aTeBpJoLk+8NS3wE1O3uZ92R03hG
-# tWZkzTZz2XNnUwsK6MfnGBPFbhbSksTrNue0X9cjhA8E9g7kivbhVnTrU/Pc6qFq
-# gSr/V0+XMq5F2i4HNjaYxB4KKKSTDKAyLxlS1LkxD0gbUKlvHO+V5N/EZlkAnSuJ
-# 1Bl8uerT8W2t7RpfJPhsOsnZaGDFzAKAe9ICITY3dnnCStxWU9g/HIo/sgk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCm92Jnnlx7mXuL8
+# uOLaS+IlBR6ZMA0GCSqGSIb3DQEBAQUABIIBAEq86vf5V7QtTzZrViBiQPLhxKo7
+# YDhNizNE2UXH1Bn6xdCBlmh1Mmi+zeYp58zvyj8d8yrF24o/D22ZBRD3gdkekQ85
+# qGYk/2XK0OaTq/qzLKahkAE7KzzEvDdi/e31Cf5wsefy75RD3rjhb6F77FuBQaTP
+# Q6xGDLmzuJMNgLdbnFr5TZgvipQgFsFS8oirU5pqt5u9vOuCITtrb+5g0AqrcDgz
+# RormDSsIHSV77f5csoLJf25ixk5tlNMYblguXXfHqHGdlIXqegkDXOXe5bYjNXNt
+# u1/dBokPxschKuvUWc+S65tVcNQmAhMiBvIHWq493YQpAg14oX+BOVdY2go=
 # SIG # End signature block

@@ -54,19 +54,21 @@ function Set-DefaultShell {
     if ($DefaultShell -eq "pwsh") {
         # Search for pwsh.exe where we expect it to be
         [array]$PotentialPwshExes = @(Get-ChildItem "$env:ProgramFiles\Powershell" -Recurse -File -Filter "*pwsh.exe")
-        if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue) -or
-        $PSVersionTable.PSEdition -ne "Core" -or !$PotentialPwshExes
-        ) {
+        if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {
             try {
                 $InstallPwshSplatParams = @{
                     ProgramName                 = "powershell-core"
                     CommandName                 = "pwsh.exe"
                     ExpectedInstallLocation     = "C:\Program Files\PowerShell"
+                    ErrorAction                 = "SilentlyContinue"
+                    ErrorVariable               = "InstallPwshErrors"
                 }
                 $InstallPwshResult = Install-Program @InstallPwshSplatParams
+
+                if (![bool]$(Get-Command pwsh -ErrorAction SilentlyContinue)) {throw}
             }
             catch {
-                Write-Error $_
+                Write-Error $($InstallPwshErrors | Out-String)
                 $global:FunctionResult = "1"
                 return
             }
@@ -82,6 +84,7 @@ function Set-DefaultShell {
         $LatestLocallyAvailablePwsh = [array]$($PotentialPwshExes.VersionInfo | Sort-Object -Property ProductVersion)[-1].FileName
         $LatestPwshParentDir = [System.IO.Path]::GetDirectoryName($LatestLocallyAvailablePwsh)
         $PowerShellCorePathWithForwardSlashes = $LatestLocallyAvailablePwsh -replace "\\","/"
+        $PowerShellCorePathWithForwardSlashes = $PowerShellCorePathWithForwardSlashes -replace [regex]::Escape("C:/Program Files"),'%PROGRAMFILES%'
 
         # Update $env:Path to incloude pwsh
         if ($($env:Path -split ";") -notcontains $LatestPwshParentDir) {
@@ -108,19 +111,19 @@ function Set-DefaultShell {
         $InsertAfterThisLine = $sshdContent -match "sftp"
         $InsertOnThisLine = $sshdContent.IndexOf($InsertAfterThisLine)+1
         if ($DefaultShell -eq "pwsh") {
-            $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
         }
         else {
-            $sshdContent.Insert($InsertOnThisLine, "Subsystem    powershell    $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile")
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile")
         }
     }
     elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$WindowsPowerShellPathWithForwardSlashes") -and $DefaultShell -eq "powershell") {
         $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
-        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem    powershell    $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile"
     }
     elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$PowerShellCorePathWithForwardSlashes") -and $DefaultShell -eq "pwsh") {
         $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
-        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem    powershell    $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile"
     }
 
     Set-Content -Value $sshdContent -Path $sshdConfigPath
@@ -179,8 +182,8 @@ function Set-DefaultShell {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUqHL8BaB6vYOEiEPNMuZkQzCs
-# Om6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWl1T++OTk3sc5kSdGXeGcibm
+# TRmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -237,11 +240,11 @@ function Set-DefaultShell {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCgogrjyZk/rvZds
-# O14SCouocleJMA0GCSqGSIb3DQEBAQUABIIBAMBBuKtR/9ne4PQZ5OpwZ6rjvYe7
-# jpXMCjOwy7luMEPV3rWzXgl7ExfZ7yHM4UYYynaRvDzRFYPKxdUZuwKY/m0a+DUn
-# rwIVX7uWHyliFFsuubkR1DH9p2TwY9xBEuK+Q+jpEvleNxFefJJW0o8ls6GGqyW2
-# 5PH7sU5Bqe5WuIQunn75J9ZeFSRbCCZXZ8D4YzlshgpRydEQ0PJRJmG3pOCqyC+A
-# yUat5SceFuubJkZl+uGz6du9Csufvqevaql8milxIS5Y/HZ3es0fSWAPiP5t8aV6
-# Rnnc0mrv9ln0j0Zj7BrKfdyjl0ouc4Gki+z/lLfXDFA4Lu6nyYR3M0XKWQM=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIs8BJHNk2qbKb03
+# InL1NEcPkXmFMA0GCSqGSIb3DQEBAQUABIIBABUy/sHDgg4u/hI4njHd1ctKM2cy
+# 9muQZJHVFLyqNrCYYXiDMkR0rIL0dtb7ZQlCA3qa62dibtrIcS12gnxjGZ/sGS9m
+# A3eLUraSRcMnKGVBewEeobhVAIPu3xoMD8Qbpo8rjM/VbTXsVKLgig/VlBq+J1VN
+# M5NQr+CfiCEFUO4FzpjQ3gdNz5Lbv2K6Ahr23Wn8mQN7O3/ivGcl/diARn8vjQl9
+# CtHE9x8YB6F4T/KAdiwl7MLGOwndmJXU3qYE4svp+xu7gvxUA1LMFqccqc7FpazH
+# gWq/kXK0vvLwf4L8wxvJ7uRXCX4g+aJBPs7QTvN5XXfSJWVGUzLnpMAZjHk=
 # SIG # End signature block

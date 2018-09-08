@@ -441,12 +441,15 @@ function New-SSHDServer {
         # so restart sshd service
         Restart-Service sshd
         Start-Sleep -Seconds 5
+    }
 
-        if ($(Get-Service sshd).Status -ne "Running") {
-            Write-Error "The sshd service did not start succesfully (within 5 seconds)! Please check your sshd_config configuration. Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
+    if ($(Get-Service sshd).Status -ne "Running") {
+        Write-Error "The sshd service did not start succesfully (within 5 seconds)! Please check your sshd_config configuration. Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    else {
+        Write-Host "The sshd service was successfully installed and started!" -ForegroundColor Green
     }
 
     [pscustomobject]@{
@@ -460,8 +463,8 @@ function New-SSHDServer {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKJB5jJms5I+Hzr0SaWs/rBUy
-# Nn2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUM4WR7J/JDv8b8SXz9NJT0ero
+# TrGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -518,11 +521,11 @@ function New-SSHDServer {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFPauHe+ZUubx/6LW
-# K5WppIze0GTnMA0GCSqGSIb3DQEBAQUABIIBALsWhk6p42WVIrRKBGD1TIEhBeab
-# f03E9puL4dFKeaWCw9KvTi1ZY5L0a3FgCy0xtBxnrP1q3r2aBOA2ZYL7w6iJuNgL
-# cg0hO4rXSpJZfI/IJRnvuc8OBeJnfP6LHrUrWUE/nOV1ZW61HM6fioUJtKg5L6aP
-# /ya3vs5U6Twq6A+0iY2mQC8tL0TR0v6gbvoICnPZK26IRYhfXkE1OXMik4RaSbYy
-# OD7oagjr/IZaCJajbrpgF4DRR22G4935I47xeRcA/JgqgDUDGauXmwAw2RF7D+3p
-# AfQ403eK8Xi6cj0mRBYQhkQC7OCAs8feXF6ZBRKexvHsboy8+itg/UlXBhU=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFMzYGv9ZHWh1e1pe
+# ptPq6js/n2LcMA0GCSqGSIb3DQEBAQUABIIBAFUCM75YyXpvXkIYtexlQhVOYSrS
+# 2vQsxE2Is0sF/J84cyBzXq/riS3VUAw1EaoFxzF7jjCEOcFK+EHNxSBRDApzwV0C
+# vLAdtd/GS/Xc5H8lxyjzuo/iAnpvKfUINVVxJJEfZbFzd+uVuzDFP/F+kLn8/iEj
+# KGFO4e7lilrVPBy73ctP3a5UAhrQylFhNS/2+pW1ZSnVgOWzdsHaUWzto+id+0ja
+# yLQ5pArtHKuyjImlb6krRgN6kah3YSDb7PIxysElASuZMzQa+3te8fIiWlWsXv+7
+# gnZpN8k2ylCblo7e7n9wjnMTNpEB8tRVWTmiPhCg196Sck6pLAam016qpPs=
 # SIG # End signature block
