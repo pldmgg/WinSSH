@@ -19,6 +19,17 @@
         If set to "pwsh", when a Remote User connects to the local host via ssh, the will enter a
         PowerShell Core 6 shell.
 
+    .PARAMETER SubsystemSymlinksDirectory
+        This parameter is OPTIONAL.
+
+        This parameter takes a string that represents the path to a directory that will contain symlinked directories
+        to the directories containing powershell.exe and/or pwsh.exe
+
+    .PARAMETER UseForceCommand
+        This parameter is OPTIONAL.
+
+        This parameter is a switch. If used, the 'ForceCommand' option will be added to sshd_config.
+
     .EXAMPLE
         # Open an elevated PowerShell Session, import the module, and -
 
@@ -30,7 +41,13 @@ function Set-DefaultShell {
     Param(
         [Parameter(Mandatory=$True)]
         [ValidateSet("powershell","pwsh")]
-        [string]$DefaultShell
+        [string]$DefaultShell,
+
+        [Parameter(Mandatory=$False)]
+        [string]$SubsystemSymlinksDirectory = "C:\sshSymlinks",
+
+        [Parameter(Mandatory=$False)]
+        [switch]$UseForceCommand
     )
 
     if (Test-Path "$env:ProgramData\ssh\sshd_config") {
@@ -45,9 +62,28 @@ function Set-DefaultShell {
         return
     }
 
+    # Setup the Subsystem Symlinks directory
+    if ($SubsystemSymlinksDirectory -match "[\s]") {
+        Write-Error "The -SubsystemSymlinksDirectory path must not contain any spaces! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    if (Test-Path $SubsystemSymlinksDirectory) {
+        Remove-Item $SubsystemSymlinksDirectory -Recurse -Force
+    }
+    $null = New-Item -ItemType Directory -Path $SubsystemSymlinksDirectory -Force
+    $PowerShellSymlinkRoot = "$SubsystemSymlinksDirectory\powershellRoot"
+    $PwshSymlinkRoot = "$SubsystemSymlinksDirectory\pwshRoot"
+    #$null = New-Item -ItemType Directory -Path $PowerShellSymlinkRoot -Force
+    #$null = New-Item -ItemType Directory -Path $PwshSymlinkRoot -Force
+
+
     if ($DefaultShell -eq "powershell") {
         $WindowsPowerShellPath = $(Get-Command powershell).Source
-        $WindowsPowerShellPathWithForwardSlashes = $WindowsPowerShellPath -replace "\\","/"
+        #$WindowsPowerShellPathWithForwardSlashes = $WindowsPowerShellPath -replace "\\","/"
+
+        # Create the powershell.exe parent directory symlink
+        $null = New-Item -ItemType SymbolicLink -Path $PowerShellSymlinkRoot -Target $($(Get-Command powershell).Source | Split-Path -Parent)
 
         $ForceCommandOptionLine = "ForceCommand powershell.exe -NoProfile"
     }
@@ -83,10 +119,13 @@ function Set-DefaultShell {
 
         $LatestLocallyAvailablePwsh = [array]$($PotentialPwshExes.VersionInfo | Sort-Object -Property ProductVersion)[-1].FileName
         $LatestPwshParentDir = [System.IO.Path]::GetDirectoryName($LatestLocallyAvailablePwsh)
-        $PowerShellCorePathWithForwardSlashes = $LatestLocallyAvailablePwsh -replace "\\","/"
-        $PowerShellCorePathWithForwardSlashes = $PowerShellCorePathWithForwardSlashes -replace [regex]::Escape("C:/Program Files"),'%PROGRAMFILES%'
+        #$PowerShellCorePathWithForwardSlashes = $LatestLocallyAvailablePwsh -replace "\\","/"
+        #$PowerShellCorePathWithForwardSlashes = $PowerShellCorePathWithForwardSlashes -replace [regex]::Escape("C:/Program Files"),'%PROGRAMFILES%'
 
-        # Update $env:Path to incloude pwsh
+        # Create the pwsh.exe parent directory symlink
+        $null = New-Item -ItemType SymbolicLink -Path $PwshSymlinkRoot -Target $LatestPwshParentDir
+
+        # Update $env:Path to include pwsh
         if ($($env:Path -split ";") -notcontains $LatestPwshParentDir) {
             # TODO: Clean out older pwsh $env:Path entries if they exist...
             $env:Path = "$LatestPwshParentDir;$env:Path"
@@ -97,33 +136,48 @@ function Set-DefaultShell {
         $CurrentSystemPathArray = $CurrentSystemPath -split ";"
         if ($CurrentSystemPathArray -notcontains $LatestPwshParentDir) {
             $UpdatedSystemPath = "$LatestPwshParentDir;$CurrentSystemPath"
+            Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" -Name PATH -Value $UpdatedSystemPath
         }
-        Set-ItemProperty -Path "Registry::HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Session Manager\Environment" -Name PATH -Value $UpdatedSystemPath
-        
 
         $ForceCommandOptionLine = "ForceCommand pwsh.exe -NoProfile"
     }
 
+    if (!$UseForceCommand) {
+        # Set DefaultShell in Registry
+        $OpenSSHRegistryPath = "HKLM:\SOFTWARE\OpenSSH"
+        if ($(Get-Item -Path $OpenSSHRegistryPath).Property -contains "DefaultShell") {
+            Remove-ItemProperty -Path $OpenSSHRegistryPath -Name DefaultShell -Force
+        }
+        if ($DefaultShell -eq "pwsh") {
+            New-ItemProperty -Path $OpenSSHRegistryPath -Name DefaultShell -Value "$PwshSymlinkRoot\pwsh.exe" -PropertyType String -Force
+        }
+        else {
+            New-ItemProperty -Path $OpenSSHRegistryPath -Name DefaultShell -Value "$PowerShellSymlinkRoot\powershell.exe" -PropertyType String -Force
+        }
+    }
+
     # Subsystem instructions: https://github.com/PowerShell/PowerShell/tree/master/demos/SSHRemoting#setup-on-windows-machine
     [System.Collections.ArrayList]$sshdContent = Get-Content $sshdConfigPath
+    $PowerShellSymlinkRootRegex = [regex]::Escape($PowerShellSymlinkRoot)
+    $PwshSymlinkRootRegex = [regex]::Escape($PwshSymlinkRoot)
     
     if (![bool]$($sshdContent -match "Subsystem[\s]+powershell")) {
         $InsertAfterThisLine = $sshdContent -match "sftp"
         $InsertOnThisLine = $sshdContent.IndexOf($InsertAfterThisLine)+1
         if ($DefaultShell -eq "pwsh") {
-            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile")
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $PwshSymlinkRoot\pwsh.exe -sshs -NoLogo -NoProfile")
         }
         else {
-            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile")
+            $sshdContent.Insert($InsertOnThisLine, "Subsystem powershell $PowerShellSymlinkRoot\powershell.exe -sshs -NoLogo -NoProfile")
         }
     }
-    elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$WindowsPowerShellPathWithForwardSlashes") -and $DefaultShell -eq "powershell") {
+    elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$PowerShellSymlinkRootRegex") -and $DefaultShell -eq "powershell") {
         $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
-        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $WindowsPowerShellPathWithForwardSlashes -sshs -NoLogo -NoProfile"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $PowerShellSymlinkRoot\powershell.exe -sshs -NoLogo -NoProfile"
     }
-    elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$PowerShellCorePathWithForwardSlashes") -and $DefaultShell -eq "pwsh") {
+    elseif (![bool]$($sshdContent -match "Subsystem[\s]+powershell[\s]+$PwshSymlinkRootRegex") -and $DefaultShell -eq "pwsh") {
         $LineToReplace = $sshdContent -match "Subsystem[\s]+powershell"
-        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $PowerShellCorePathWithForwardSlashes -sshs -NoLogo -NoProfile"
+        $sshdContent = $sshdContent -replace [regex]::Escape($LineToReplace),"Subsystem powershell $PwshSymlinkRoot\pwsh.exe -sshs -NoLogo -NoProfile"
     }
 
     Set-Content -Value $sshdContent -Path $sshdConfigPath
@@ -135,32 +189,73 @@ function Set-DefaultShell {
     $ExistingMatchUserOption = $sshdContent -match "Match User" | Where-Object {$_ -notmatch "#"}
     
     if (!$ExistingForceCommandOption) {
-        # If sshd_config already has the 'Match User' option available, don't touch it, else add it with ForceCommand
-        try {
-            if (!$ExistingMatchUserOption) {
-                Add-Content -Value "Match User *`n$ForceCommandOptionLine" -Path $sshdConfigPath
-            }
-            else {
-                Add-Content -Value "$ForceCommandOptionLine" -Path $sshdConfigPath
-            }
+        if ($UseForceCommand) {
+            # If sshd_config already has the 'Match User' option available, don't touch it, else add it with ForceCommand
+            try {
+                if (!$ExistingMatchUserOption) {
+                    Add-Content -Value "Match User *`n$ForceCommandOptionLine" -Path $sshdConfigPath
+                }
+                else {
+                    Add-Content -Value "$ForceCommandOptionLine" -Path $sshdConfigPath
+                }
 
-            Restart-Service sshd -ErrorAction Stop
-            Write-Host "Successfully changed sshd default shell to '$DefaultShell'" -ForegroundColor Green
+                try {
+                    Restart-Service sshd -ErrorAction Stop
+                    Write-Host "Successfully changed sshd default shell to '$DefaultShell'" -ForegroundColor Green
+                }
+                catch {
+                    Write-Error $_
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
         }
-        catch {
-            Write-Error $_
-            $global:FunctionResult = "1"
-            return
+        elseif (!$ExistingMatchUserOption) {
+            Add-Content -Value "Match User *" -Path $sshdConfigPath
+
+            try {
+                Restart-Service sshd -ErrorAction Stop
+                Write-Host "Successfully changed sshd default shell to '$DefaultShell'" -ForegroundColor Green
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
         }
     }
     else {
-        if ($ExistingForceCommandOption -ne $ForceCommandOptionLine) {
-            if (!$ExistingMatchUserOption) {
-                $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"Match User *`n$ForceCommandOptionLine"
+        if ($UseForceCommand) {
+            if ($ExistingForceCommandOption -ne $ForceCommandOptionLine) {
+                if (!$ExistingMatchUserOption) {
+                    $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"Match User *`n$ForceCommandOptionLine"
+                }
+                else {
+                    $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"$ForceCommandOptionLine"
+                }
+
+                try {
+                    Set-Content -Value $UpdatedSSHDConfig -Path $sshdConfigPath
+                    Restart-Service sshd -ErrorAction Stop
+                    Write-Host "Successfully changed sshd default shell to '$DefaultShell'" -ForegroundColor Green
+                }
+                catch {
+                    Write-Error $_
+                    $global:FunctionResult = "1"
+                    return
+                }
             }
             else {
-                $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"$ForceCommandOptionLine"
+                Write-Warning "The specified 'ForceCommand' option is already active in the the sshd_config file. No changes made."
             }
+        }
+        elseif (!$ExistingMatchUserOption) {
+            $UpdatedSSHDConfig = $sshdContent -replace [regex]::Escape($ExistingForceCommandOption),"Match User *"
 
             try {
                 Set-Content -Value $UpdatedSSHDConfig -Path $sshdConfigPath
@@ -173,17 +268,14 @@ function Set-DefaultShell {
                 return
             }
         }
-        else {
-            Write-Warning "The specified 'ForceCommand' option is already active in the the sshd_config file. No changes made."
-        }
     }
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWl1T++OTk3sc5kSdGXeGcibm
-# TRmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSg6MKVGar3932rJTAcd8x9Ri
+# FvCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -240,11 +332,11 @@ function Set-DefaultShell {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIs8BJHNk2qbKb03
-# InL1NEcPkXmFMA0GCSqGSIb3DQEBAQUABIIBABUy/sHDgg4u/hI4njHd1ctKM2cy
-# 9muQZJHVFLyqNrCYYXiDMkR0rIL0dtb7ZQlCA3qa62dibtrIcS12gnxjGZ/sGS9m
-# A3eLUraSRcMnKGVBewEeobhVAIPu3xoMD8Qbpo8rjM/VbTXsVKLgig/VlBq+J1VN
-# M5NQr+CfiCEFUO4FzpjQ3gdNz5Lbv2K6Ahr23Wn8mQN7O3/ivGcl/diARn8vjQl9
-# CtHE9x8YB6F4T/KAdiwl7MLGOwndmJXU3qYE4svp+xu7gvxUA1LMFqccqc7FpazH
-# gWq/kXK0vvLwf4L8wxvJ7uRXCX4g+aJBPs7QTvN5XXfSJWVGUzLnpMAZjHk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCXmRRYH4Q9IVuCi
+# 8XGSRjko7BD9MA0GCSqGSIb3DQEBAQUABIIBADUdpa814ovC19lEVW7cyooKmGoP
+# t+Db4i7vQjZ2wMGlu0zz1KuPDlW2NWLEANiAxJ7drbvlMI9nP2N+XFzYVQMl1E2o
+# t9udN8jrlbrRp+Eo1Ja7EllSEPnr6d53xmyd0Fpbt6Q14ayWUwDaMn6NvFp642JP
+# ZZcK7sqww7b/56SpKZ2YeeN/zd74LO5ntj5cDLxBs0nULZ05EySs5Sio7peV5AmH
+# uzDokK1XP6oAYQhS022GxQUUjXCUlwep80o82ZRLEHPurO6WIcWiDh6ylOTtBD4B
+# 00dd88eVAbbEMR5jVxCNSrT0W43WX+kphQ0m6InemSuC6TRVcYIo2fwESvE=
 # SIG # End signature block

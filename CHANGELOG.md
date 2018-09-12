@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.1 (September 12, 2018)
+
+- Significant updates to Set-DefaultShell function
+
 ## 0.9.0 (September 8, 2018)
 
 - Fixed how the installation of pwsh is handled if not already present as determined by Set-DefaultShell
