@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.2 (September 15, 2018)
+
+- Minor updates
+
 ## 0.9.1 (September 12, 2018)
 
 - Significant updates to Set-DefaultShell function
