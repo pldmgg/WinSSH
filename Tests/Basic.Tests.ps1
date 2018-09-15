@@ -77,6 +77,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 
         $Commands -contains 'Add-PublicKeyToRemoteHost' | Should Be $True
         $Commands -contains 'Check-Cert' | Should Be $True
+        $Commands -contains 'Extract-SSHPrivateKeyFromRegistry' | Should Be $True
         $Commands -contains 'Fix-SSHPermissions' | Should Be $True
         $Commands -contains 'Generate-AuthorizedPrincipalsFile' | Should Be $True
         $Commands -contains 'Generate-SSHUserDirFileInfo' | Should Be $True
@@ -120,8 +121,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUy7T1ayVvGyoNrcPWR32eVyvc
-# XYGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjg5IRBI23Rx5TyQpKSZDXYlm
+# bjqgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -178,11 +179,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFA6Tms8yoF7HeQmL
-# B40LDkapxI+fMA0GCSqGSIb3DQEBAQUABIIBAC4BoIqKnvKhCHCjrL8gb5G8tTLb
-# g5wtBtZCKtuAoELUgW6y0B54id/5qBMt3gvx29LwIMp7hDXWpJJQZg5DBIpUceIh
-# TueqLZgFpT3WDFp4f2J4KkDlIrIgB77Ru+u45tIy12NYsyh+mbQSOlh+ri5SryR8
-# tUT1gJB2Yo0IasoP7dOaS1v00PjXlqbG25Gf7e1mGfvWQM/zaVblaxKiel6YuSg/
-# V2mQIyJquBwMUBKD8rQPQJuMi47Q+BfhVKYH+PuS+2+MNmIme/PzSU+lvWoyVFQO
-# n3BEu3VupztvJDlSVfMhYdWKlE8dpzOHH8o9oBt6OgdwFyQ1/VKGf9RDoIg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG11vFtziOZ7k2/6
+# g3Fdycy0yc2xMA0GCSqGSIb3DQEBAQUABIIBAKRCkvJYoa6RRFZpAYBE1Oi6Eclv
+# znfvW9NPjHadpb57PPRRIyu3cJ1zTSbsOrSPjQptU9X2sEqVw14/NtRAiT26AXXK
+# sjfZJpeu7DAZXULaJZQK7j/Ss4mgTxuirECnM/J1+125bBXE/ozp5Hj5JwIC/a8s
+# kwWrlwv1vLrncQcZZkqdYTf/UIk8a2TYR0dAZVVjb9raJEhaoHtwx8oXtlvaqS+w
+# LqustX/TWTn8KQt/7VYqufXkD+LxNgL3GNFAJz/DvkjVFuL08u/82SinFmcCBn9f
+# rylfPyeenNJFCU2pC6qXA1OA4tyYIFs/xx7Dt+twc9YJOeS+L24eOJnBM6I=
 # SIG # End signature block

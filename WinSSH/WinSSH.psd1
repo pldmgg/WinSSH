@@ -71,7 +71,7 @@ PowerShellVersion = '5.1'
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = 'Add-PublicKeyToRemoteHost',
                 'Check-Cert','Configure-VaultServerForLDAPAuth',
-                'Configure-VaultServerForSSHManagement','Fix-SSHPermissions',
+                'Configure-VaultServerForSSHManagement','Extract-SSHPrivateKeyFromRegistry','Fix-SSHPermissions',
                 'Generate-AuthorizedPrincipalsFile','Generate-SSHUserDirFileInfo',
                 'Get-LDAPCert','Get-PublicKeyAuthInstructions','Get-SSHClientAuthSanity',
                 'Get-SSHFileInfo','Get-VaultAccessorLookup','Get-VaultLogin',

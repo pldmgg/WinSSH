@@ -307,7 +307,7 @@ function Get-SSHClientAuthSanity {
                     }
                     if ($PositionOfLoadedPrivateKey -ge 4) {
                         $SSHClientProblemDescription = "The Private Key is not on the filesystem in same directory " +
-                        "as the Public Key (i.e. $KeyFileParentDirectory). The Private Key IS loaded in the ssh-agent, "
+                        "as the Public Key (i.e. $KeyFileParentDirectory). The Private Key IS loaded in the ssh-agent, " +
                         "however, it is not in the top 5 on the list, so the sshd server on the Remote Host will most " +
                         "likely reject authentication because of too many attempts!"
                         $PubKeyAuthShouldWork = $False
@@ -849,8 +849,8 @@ function Get-SSHClientAuthSanity {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUX19TxDJ7xksegV+H1QcraB8Z
-# t9Kgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUBrPEu8HXxts8UG6TCTcnsyEM
+# cs6gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -907,11 +907,11 @@ function Get-SSHClientAuthSanity {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCnGqJ6bRiBU9Nqa
-# mGy2Qq729woBMA0GCSqGSIb3DQEBAQUABIIBAB7IVhNSKvk2dLO7gNWkIZWJ/F5M
-# ljKNN2hbpvGZqLcAhWYgmfNoReUlz7N4rzB8T9KxMMTfF3ORRbwCRPtp3iKmGtuB
-# 0GU3BDD1TfamK88JiflIfq3N2rkh8P+Ch6IQIIme4bllM8i2O7bB5lg6cxMvM861
-# ZesvmY+/lo3EspMSExWOBbpGN1gitaD/dK8SwcqgDqWHCwAZJP0TEIo6cef0BYV3
-# Tw2TdT/9R1D46ei8dt5AkQCT6ayt2KIv+Lz/Qizs4L8K8A7tjs275XmH84wgI/yR
-# oQU7OiWL7WOTajz06APg6Pc9vtwCIVPs/hXLFaG5ZtHK6kb4NklYIs0yw3Q=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFIMQhs7wF6RW27PV
+# PtBIGPzcIx/fMA0GCSqGSIb3DQEBAQUABIIBAExhf+VN100I885ZTcDAKpg3LjY+
+# BBOWNM/+k6V1bN2c2fI9Up6t9q+JjJG2/nKPhPADT44TgKqi55YvNZKjwxsVbZSL
+# NIYySdRH9PVFPu63OMND1rXzFDggb5/uJJ/yvhFlQR1HIin+nio42HVzw7GbFdl2
+# LvBJSLJqyBDHdLhSziEP+CRNuNEolglYJGtGZfZiqyU7Hp/QCNJ5o4Pg9grye42c
+# ZqILBC3DklVimCUDTkLdyiVkhXbRh0NfjRjKktufHMPOplAWOf6JHcURJnd6Sx37
+# SkrqUwUHm60NNbzPOGY6hyWFCkCZTZy+xIjul89zpat0G/7tTW4/7QrcMXM=
 # SIG # End signature block
