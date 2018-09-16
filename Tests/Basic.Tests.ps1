@@ -77,7 +77,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 
         $Commands -contains 'Add-PublicKeyToRemoteHost' | Should Be $True
         $Commands -contains 'Check-Cert' | Should Be $True
-        $Commands -contains 'Extract-SSHPrivateKeyFromRegistry' | Should Be $True
+        $Commands -contains 'Extract-SSHPrivateKeysFromRegistry' | Should Be $True
         $Commands -contains 'Fix-SSHPermissions' | Should Be $True
         $Commands -contains 'Generate-AuthorizedPrincipalsFile' | Should Be $True
         $Commands -contains 'Generate-SSHUserDirFileInfo' | Should Be $True

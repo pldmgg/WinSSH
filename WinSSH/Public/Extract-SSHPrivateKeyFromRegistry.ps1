@@ -1,10 +1,23 @@
-# Python Code from: https://github.com/ropnop/windows_sshagent_extract
-function Extract-SSHPrivateKeyFromRegistry {
+<#
+    .SYNOPSIS
+        Microsoft's port of OpenSSH (OpenSSH-Win64) ultimately adds RSA Private Keys to the Registry when they are added to the
+        ssh-agent service. This function extracts those RSA Private Keys from the Registry. It can only be used under the same
+        User Profile that added the key(s) to the ssh-agent in the first place.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+        Python Code from: https://github.com/ropnop/windows_sshagent_extract
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Extract-SSHPrivateKeyFromRegistry
+#>
+function Extract-SSHPrivateKeysFromRegistry {
     [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$False)]
-        [switch]$KeepSSHAgent
-    )
+    Param ()
 
     $OpenSSHRegistryPath = "HKCU:\Software\OpenSSH\Agent\Keys\"
 
