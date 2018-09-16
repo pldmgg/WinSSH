@@ -211,13 +211,26 @@ function Check-Cert {
 }
 
 
-# Python Code from: https://github.com/ropnop/windows_sshagent_extract
-function Extract-SSHPrivateKeyFromRegistry {
+<#
+    .SYNOPSIS
+        Microsoft's port of OpenSSH (OpenSSH-Win64) ultimately adds RSA Private Keys to the Registry when they are added to the
+        ssh-agent service. This function extracts those RSA Private Keys from the Registry. It can only be used under the same
+        User Profile that added the key(s) to the ssh-agent in the first place.
+
+    .DESCRIPTION
+        See .SYNOPSIS
+
+    .NOTES
+        Python Code from: https://github.com/ropnop/windows_sshagent_extract
+
+    .EXAMPLE
+        # Open an elevated PowerShell Session, import the module, and -
+
+        PS C:\Users\zeroadmin> Extract-SSHPrivateKeyFromRegistry
+#>
+function Extract-SSHPrivateKeysFromRegistry {
     [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$False)]
-        [switch]$KeepSSHAgent
-    )
+    Param ()
 
     $OpenSSHRegistryPath = "HKCU:\Software\OpenSSH\Agent\Keys\"
 
@@ -4286,8 +4299,8 @@ function Validate-SSHPrivateKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU6o+zqcU5kOsY4h6jwVLGZcID
-# kVmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUC3VCOhU8gc4DnfkIWqNFHvWe
+# kRWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -4344,11 +4357,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDlawpfiP0zRB+Er
-# W4+qNn4UWbTzMA0GCSqGSIb3DQEBAQUABIIBAG+sFhbtZdqs2TaZiV/n7Ak0fDb2
-# gGqq08Tk6Xt3/oW83vd+aTtc+p+KRwSQUvszofpPC0gRXej5bZT8r2ZPiL3FvmBG
-# GCyE51fOKLMliymPOUjteyiLJI1g1p+6fq7dQloLIUoWCj/Ndi+1x/JA1idDBc+/
-# 0aZbp9oNc58uMDEhRdTFrPJGiCh9J2hvuJgpuCf2LJtH9YAqBgadhW1E+qVZ2q99
-# hhX97AzlrL3ZYn64tSBsqxcVfKAWN3SUBpXA9OfKNAiZ/dHUrKTURvOPw87YoDBN
-# 5fsSrBABrvg7+ypaf8inj+R+wMXGFVR3RRYdk27Q0GjdAEFZfl1C10c54jg=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEmiPhYC4atRPfcd
+# WJSrsYp1dcqRMA0GCSqGSIb3DQEBAQUABIIBAJffVwsCNy4elIjQD85UurV7B/UB
+# GqhRWLMaYSTYEOLLXW5ishMcHAkoQDt3LI/6jMsyGInjIc51Se/v9ju10b9X7LwC
+# Y+6qdwEqR9G29DGapzDH2U2MU9ujiF0Zk+sR+DjeO3K59BkRqCcXYQk2qnlBSj9R
+# S8EHjw9+4sH0I8Y+dPGTzvmD4TGN0O1VHecbM7p2cIgQ7i/bProzaK6pJetierGE
+# KOUa/R6GOlMPRILHEIEfDnzk4kklqxMP7aDSL+2Atj7srxD0lbCCjxcQae7EHsPI
+# COAV3rFpmTQKwOPoLQnh8HGgGxnkpLig8OvFDgusavfKkv6qcK0Dwy8El5s=
 # SIG # End signature block

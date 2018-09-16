@@ -21,7 +21,7 @@
     ${Function:UnzipFile}.Ast.Extent.Text
     ${Function:Add-PublicKeyToRemoteHost}.Ast.Extent.Text
     ${Function:Check-Cert}.Ast.Extent.Text
-    ${Function:Extract-SSHPrivateKeyFromRegistry}.Ast.Extent.Text
+    ${Function:Extract-SSHPrivateKeysFromRegistry}.Ast.Extent.Text
     ${Function:Fix-SSHPermissions}.Ast.Extent.Text
     ${Function:Generate-AuthorizedPrincipalsFile}.Ast.Extent.Text
     ${Function:Generate-SSHUserDirFileInfo}.Ast.Extent.Text
@@ -40,8 +40,8 @@
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUv3u2OaCy4bCSE6r1W3/ruzSg
-# bzWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpgIKo4YjY+/kktQKIiGCJDnI
+# hwOgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -98,11 +98,11 @@
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFL4XbLCJYcHgrs4p
-# D9GPHPFb2SgtMA0GCSqGSIb3DQEBAQUABIIBADyF5YoAhlo/ec+Zht4hiEPEaSQ5
-# 7Szk188koi+r/LUd8NfQbExmfGfLwRJH3Yr2MEgItOI7mOtDdMbDh380KEhgA9BO
-# 65rBl8Klr0abG/nXnx31NSccooG0ugO1GT2Yj9Dht9wZUlgqMuWkPmrlFx4NrdFt
-# ZmyNsEesJ85ba56dwm+YPDJzgQlXPqjCxL1a3tR384ZTkIyF1bYVpnYI4GGqmdVQ
-# k/gYOvrRE37gpdDn+QGYC5zMtfPGgTvZu5VYVtnXJMTd5WCtj4NKROjB7fDGC2rE
-# i4WDEvXoGk+fw3Y5GmsNPinKbPUMzDlVWKPnSKEYD94ueGpPfTGc02USBh8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKDYOaturuWsdJfe
+# RVIWhj55UBHsMA0GCSqGSIb3DQEBAQUABIIBACXOM4txclA714WjSmIPJ5V/Dlft
+# ho5ehhAh1nJRtKkuyJMmOphnBc6YH1Xw7KGZ6OqLwjSiWs9IvCEwYEDNxUTe+mtf
+# KXIS7kP8IyryUYznjH0ylHYyS4bmwj3Im6gMVt47LQWyYPLqgeRflfMpSoQgV0lE
+# yA+3I2B913SGx8DZ75a8JsG/gIe6LJg2zLHEhKYjQyrDg6PdszyzP4fXeFhPIdpT
+# 2oXPM9pAuepEmv8IegcAz5dTcNKEKdoo++2OC2MWOr1X1UKZ8bdqsASp7TN3hmEZ
+# iULHJqWk9Ur1EtsACHO/sdaqWbUznk641HmLPXex/sPbsve/be1uymLgpm4=
 # SIG # End signature block
