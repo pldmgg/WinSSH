@@ -70,6 +70,20 @@ function Set-DefaultShell {
     }
     if (Test-Path $SubsystemSymlinksDirectory) {
         Remove-Item $SubsystemSymlinksDirectory -Recurse -Force
+        try {
+            Remove-Item $SubsystemSymlinksDirectory -Recurse -Force
+        }
+        catch {
+            try {
+                Get-ChildItem -Path $SubsystemSymlinksDirectory -Recurse | foreach {$_.Delete()}
+                Remove-Item $SubsystemSymlinksDirectory -Recurse -Force
+            }
+            catch {
+                Write-Error $_
+                $global:FunctionResult = "1"
+                return
+            }
+        }
     }
     $null = New-Item -ItemType Directory -Path $SubsystemSymlinksDirectory -Force
     $PowerShellSymlinkRoot = "$SubsystemSymlinksDirectory\powershellRoot"
@@ -274,8 +288,8 @@ function Set-DefaultShell {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSg6MKVGar3932rJTAcd8x9Ri
-# FvCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXK3gnv/rawQ3YIR5o7ARDert
+# b06gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -332,11 +346,11 @@ function Set-DefaultShell {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFCXmRRYH4Q9IVuCi
-# 8XGSRjko7BD9MA0GCSqGSIb3DQEBAQUABIIBADUdpa814ovC19lEVW7cyooKmGoP
-# t+Db4i7vQjZ2wMGlu0zz1KuPDlW2NWLEANiAxJ7drbvlMI9nP2N+XFzYVQMl1E2o
-# t9udN8jrlbrRp+Eo1Ja7EllSEPnr6d53xmyd0Fpbt6Q14ayWUwDaMn6NvFp642JP
-# ZZcK7sqww7b/56SpKZ2YeeN/zd74LO5ntj5cDLxBs0nULZ05EySs5Sio7peV5AmH
-# uzDokK1XP6oAYQhS022GxQUUjXCUlwep80o82ZRLEHPurO6WIcWiDh6ylOTtBD4B
-# 00dd88eVAbbEMR5jVxCNSrT0W43WX+kphQ0m6InemSuC6TRVcYIo2fwESvE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFH72mPjq1s9PxiIC
+# B26MTYK6QOnuMA0GCSqGSIb3DQEBAQUABIIBAC5EkFK51rsaxTj8GiaCQQRJ+Hx7
+# J21JYgezXd8Z7hUlktXXYMQYUErhQN1RI5djJrWCGUhV9+C6RP04OPaTMTvML5LZ
+# 5DJTLcMZoBkairah1qf/nhNf3blP8BVpdY/rlCdNH7yKHEl9aalvBfQYqRBQV8P5
+# 9ZAh0HplCbRacp7JcAT2f9CMcr56kRvsJb78P+gjpls0iGehAn11QpnOLbLMPPc6
+# AzdabhxtWNRKiRN+VC557QZML7qJkDsPAyNAy7jQpjpupOaBYPIs7Pge+D91hTlS
+# vumVcEwt73haCiUrHztaJE07DbEWCSh1hroO7nLrG/qJigl3ofGl5K/DaCI=
 # SIG # End signature block
