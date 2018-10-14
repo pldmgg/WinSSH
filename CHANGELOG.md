@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.4 (October 14, 2018)
+
+- Fixed workaround for deleting existing symlinks via Remove-Item. See: https://github.com/powershell/powershell/issues/621
+
 ## 0.9.3 (September 30, 2018)
 
 - Added workaround for deleting existing symlinks via Remove-Item. See: https://github.com/powershell/powershell/issues/621
