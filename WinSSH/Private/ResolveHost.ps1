@@ -26,6 +26,26 @@ function ResolveHost {
         }
         catch {
             Write-Verbose "Unable to resolve $HostNameOrIP when treated as a Host Name (as opposed to IP Address)!"
+
+            if ($HostNameOrIP -match "\.") {
+                try {
+                    $HostNamePrep = $($HostNameOrIP -split "\.")[0]
+                    Write-Verbose "Trying to resolve $HostNameOrIP using only HostName: $HostNamePrep!"
+
+                    [System.Collections.ArrayList]$RemoteHostArrayOfIPAddresses = @()
+                    $ResolutionInfo = [System.Net.Dns]::GetHostEntry($HostNamePrep)
+                    $ResolutionInfo.AddressList | Where-Object {
+                        $_.AddressFamily -eq $IPv4AddressFamily
+                    } | foreach {
+                        if ($RemoteHostArrayOfIPAddresses -notcontains $_.IPAddressToString) {
+                            $null = $RemoteHostArrayOfIPAddresses.Add($_.IPAddressToString)
+                        }
+                    }
+                }
+                catch {
+                    Write-Verbose "Unable to resolve $HostNamePrep!"
+                }
+            }
         }
     }
     if (TestIsValidIPAddress -IPAddress $HostNameOrIP) {
@@ -90,15 +110,14 @@ function ResolveHost {
         [System.Collections.ArrayList]$SuccessfullyPingedIPs = @()
         # Test to see if we can reach the IP Addresses
         foreach ($ip in $RemoteHostArrayOfIPAddresses) {
-            if ([bool]$(Test-Connection $ip -Count 1 -ErrorAction SilentlyContinue)) {
+            try {
+                $null = [System.Net.NetworkInformation.Ping]::new().Send($ip,1000)
                 $null = $SuccessfullyPingedIPs.Add($ip)
             }
-        }
-
-        if ($SuccessfullyPingedIPs.Count -eq 0) {
-            Write-Error "Unable to resolve $HostNameOrIP! Halting!"
-            $global:FunctionResult = "1"
-            return
+            catch {
+                Write-Verbose "Unable to ping $ip..."
+                continue
+            }
         }
     }
 
@@ -118,10 +137,20 @@ function ResolveHost {
         $Domain = $DomainPrep
     }
 
+    $IPAddressList = [System.Collections.ArrayList]@($(if ($SuccessfullyPingedIPs) {$SuccessfullyPingedIPs} else {$RemoteHostArrayOfIPAddresses}))
+    $HName = if ($HostNameList) {$HostNameList[0].ToLowerInvariant()} else {$null}
+
+    if ($SuccessfullyPingedIPs.Count -eq 0 -and !$FQDN -and !$HostName -and !$Domain) {
+        Write-Error "Unable to resolve $HostNameOrIP! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     [pscustomobject]@{
-        IPAddressList   = [System.Collections.ArrayList]@($(if ($SuccessfullyPingedIPs) {$SuccessfullyPingedIPs} else {$RemoteHostArrayOfIPAddresses}))
+        IPAddressList   = $IPAddressList
+        PingSuccess     = $($SuccessfullyPingedIPs.Count -gt 0)
         FQDN            = $FQDN
-        HostName        = if ($HostNameList) {$HostNameList[0].ToLowerInvariant()} else {$null}
+        HostName        = $HName
         Domain          = $Domain
     }
 
@@ -132,8 +161,8 @@ function ResolveHost {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUc6OSN+Fn7QUQGQCFRQBGBUek
-# e+qgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUI8H3C7hqz3yPShdzNk/ugueV
+# GnGgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -190,11 +219,11 @@ function ResolveHost {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJEQmPtVX/Y1CHJd
-# B6pm1hrA3eGAMA0GCSqGSIb3DQEBAQUABIIBAHXoZakBx4trCCSvItaBukmh/6/l
-# cVNeIkpC6bqdtsOJEYQw/hqatOx9Vvy/3fOsXjqP4bFTssMQJcx1GBIBm/FAS2Ue
-# 1UvyQ2Nsb9MspKpoteaRu3JNPtQrvblLbP/tc5hLRdA+2V5wPdIKMxR+mkqfjc9D
-# 1EAWmdcsEe8G3Vh5/eOVgOywHsKshGRDDgMij/hPh3OKe8FLPQQCR8ZwB3d7+zz6
-# 6UvqYRVOW0mwfzQnEU03waHco1Z4eqivEiWjVuFayVKRvR8WexGxicmUTCggmhVm
-# fBKo2GO4ayItuaDpBTNXKVA+e7xFjeSSkQ+AfDD5YsVabCWBxcjSHHZOiI8=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFGQHIWWvRMZI3LNg
+# XGjldMGHfHaiMA0GCSqGSIb3DQEBAQUABIIBAMFmcwhm3I2HeAZ67DyENpNffuR+
+# 1HQDDnYDm8uJw17Uw7BuNqwBmTqkEo4/xNuwL1Gtwb1rKDK1bvmXebTTCrPnIrO/
+# NW1knqnns4EiXIcxwzFlcamPSFuUDJRebmGzLmTXyw7n7gmDQWLdwOuZMbxfRc/H
+# 8Cz+Z8tkz7XifQR2GEcCx33tbq2eXcziceVofrSzdFF/g5dar8eczengLps4p2A+
+# MIzPaKq7BVImv+teP2uPB3fx7x0bcdmfJISD5qymG8T9GhvH1iZ1IQO8rbao5U3+
+# Ky26G8sDm/J43VZ1z9vf8TZCnOMHZleBezDhjnjM+qk77qMmeDdYVhYcK0w=
 # SIG # End signature block

@@ -47,6 +47,80 @@ if ($AdminUserCreds) {
     }
 }
 
+if (!$(Get-Module -ListAvailable PSDepend)) {
+    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
+}
+try {
+    Import-Module PSDepend
+    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
+
+    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
+    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
+    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
+    # This is more a problem with PowerShellGet than PSDeploy.
+    <#
+    Remove-Module PSDeploy
+    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
+    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
+    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
+    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
+    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
+    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
+    #>
+    Import-Module PSDeploy
+}
+catch {
+    Write-Error $_
+    $global:FunctionResult = "1"
+    return
+}
+
+Set-BuildEnvironment -Force -Path $PSScriptRoot -ErrorAction SilentlyContinue
+
+# Now the following Environment Variables with similar values should be available to use...
+<#
+    $env:BHBuildSystem = "Unknown"
+    $env:BHProjectPath = "U:\powershell\ProjectRepos\Sudo"
+    $env:BHBranchName = "master"
+    $env:BHCommitMessage = "!deploy"
+    $env:BHBuildNumber = 0
+    $env:BHProjectName = "Sudo"
+    $env:BHPSModuleManifest = "U:\powershell\ProjectRepos\Sudo\Sudo\Sudo.psd1"
+    $env:BHModulePath = "U:\powershell\ProjectRepos\Sudo\Sudo"
+    $env:BHBuildOutput = "U:\powershell\ProjectRepos\Sudo\BuildOutput"
+
+    Write-Host "`$env:BHBuildSystem is $env:BHBuildSystem"
+    Write-Host "`$env:BHProjectPath is $env:BHProjectPath"
+    Write-Host "`$env:BHBranchName is $env:BHBranchName"
+    Write-Host "`$env:BHCommitMessage is $env:BHCommitMessage"
+    Write-Host "`$env:BHBuildNumber is $env:BHBuildNumber"
+    Write-Host "`$env:BHProjectName is $env:BHProjectName"
+    Write-Host "`$env:BHPSModuleManifest is $env:BHPSModuleManifest"
+    Write-Host "`$env:BHModulePath is $env:BHModulePath"
+    Write-Host "`$env:BHBuildOutput is $env:BHBuildOutput"
+#>
+
+# Make sure everything is valid PowerShell before continuing...
+$FilesToAnalyze = Get-ChildItem $PSScriptRoot -Recurse -File | Where-Object {
+    $_.Extension -match '\.ps1|\.psm1|\.psd1'
+}
+[System.Collections.ArrayList]$InvalidPowerShell = @()
+foreach ($FileItem in $FilesToAnalyze) {
+    $contents = Get-Content -Path $FileItem.FullName -ErrorAction Stop
+    $errors = $null
+    $null = [System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
+    if ($errors.Count -gt 0 -and $FileItem.Name -ne "$env:BHProjectName.psm1") {
+        $null = $InvalidPowerShell.Add($FileItem)
+    }
+}
+if ($InvalidPowerShell.Count -gt 0) {
+    Write-Error "The following files are not valid PowerShell:`n$($InvalidPowerShell.FullName -join "`n")`nHalting!"
+    $global:FunctionResult = "1"
+    return
+}
+
+#region >> Sign Everything
+
 if ($CertFileForSignature -and !$Cert) {
     if (!$(Test-Path $CertFileForSignature)) {
         Write-Error "Unable to find the Certificate specified to be used for Code Signing! Halting!"
@@ -126,10 +200,12 @@ if ($Cert) {
     [System.Collections.ArrayList]$FilesFailedToSign = @()
     foreach ($FilePath in $HelperFilestoSign.FullName) {
         try {
+            Write-Host "Signing $FilePath..."
             $SetAuthenticodeResult = Set-AuthenticodeSignature -FilePath $FilePath -cert $Cert
             if (!$SetAuthenticodeResult -or $SetAuthenticodeResult.Status -ne "Valid") {throw}
         }
         catch {
+            Write-Warning "Signing $FilePath failed!"
             $null = $FilesFailedToSign.Add($FilePath)
         }
     }
@@ -139,68 +215,6 @@ if ($Cert) {
         $global:FunctionResult = "1"
         return
     }
-}
-
-if (!$(Get-Module -ListAvailable PSDepend)) {
-    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
-}
-try {
-    Import-Module PSDepend
-    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
-
-    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
-    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
-    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
-    # This is more a problem with PowerShellGet than PSDeploy.
-    <#
-    Remove-Module PSDeploy
-    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
-    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
-    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
-    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
-    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
-    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
-    #>
-    Import-Module PSDeploy
-}
-catch {
-    Write-Error $_
-    $global:FunctionResult = "1"
-    return
-}
-
-Set-BuildEnvironment -Force -Path $PSScriptRoot -ErrorAction SilentlyContinue
-
-# Now the following Environment Variables with similar values should be available to use...
-<#
-    $env:BHBuildSystem = "Unknown"
-    $env:BHProjectPath = "U:\powershell\ProjectRepos\Sudo"
-    $env:BHBranchName = "master"
-    $env:BHCommitMessage = "!deploy"
-    $env:BHBuildNumber = 0
-    $env:BHProjectName = "Sudo"
-    $env:BHPSModuleManifest = "U:\powershell\ProjectRepos\Sudo\Sudo\Sudo.psd1"
-    $env:BHModulePath = "U:\powershell\ProjectRepos\Sudo\Sudo"
-    $env:BHBuildOutput = "U:\powershell\ProjectRepos\Sudo\BuildOutput"
-#>
-
-# Make sure everything is valid PowerShell before continuing...
-$FilesToAnalyze = Get-ChildItem $PSScriptRoot -Recurse -File | Where-Object {
-    $_.Extension -match '\.ps1|\.psm1|\.psd1'
-}
-[System.Collections.ArrayList]$InvalidPowerShell = @()
-foreach ($FileItem in $FilesToAnalyze) {
-    $contents = Get-Content -Path $FileItem.FullName -ErrorAction Stop
-    $errors = $null
-    $null = [System.Management.Automation.PSParser]::Tokenize($contents, [ref]$errors)
-    if ($errors.Count -gt 0 -and $FileItem.Name -ne "$env:BHProjectName.psm1") {
-        $null = $InvalidPowerShell.Add($FileItem)
-    }
-}
-if ($InvalidPowerShell.Count -gt 0) {
-    Write-Error "The following files are not valid PowerShell:`n$($InvalidPowerShell.FullName -join "`n")`nHalting!"
-    $global:FunctionResult = "1"
-    return
 }
 
 if ($Cert) {
@@ -215,19 +229,26 @@ if ($Cert) {
         $_.Name -notmatch "^build\.requirements\.psd1" -and
         $_.Name -notmatch "^build\.ps1$" -and
         $_.Name -notmatch $($HelperFilesToSignNameRegex -join '|') -and
-        $_.Name -notmatch $RemoveSignatureFilePathRegex
+        $_.Name -notmatch $RemoveSignatureFilePathRegex -and
+        $_.FullName -notmatch "\\Pages\\Dynamic|\\Pages\\Static"
     }
     #$null = $FilesToSign.Add($(Get-Item $env:BHModulePath\Install-PSDepend.ps1))
 
     Remove-Signature -FilePath $FilesToSign.FullName
 
+    ##### BEGIN Tasks Unique to this Module's Build #####
+
+    ##### END Tasks Unique to this Module's Build #####
+
     [System.Collections.ArrayList]$FilesFailedToSign = @()
     foreach ($FilePath in $FilesToSign.FullName) {
         try {
+            Write-Host "Signing $FilePath..."
             $SetAuthenticodeResult = Set-AuthenticodeSignature -FilePath $FilePath -cert $Cert
             if (!$SetAuthenticodeResult -or $SetAuthenticodeResult.Status -eq "HasMisMatch") {throw}
         }
         catch {
+            Write-Warning "Signing $FilePath failed!"
             $null = $FilesFailedToSign.Add($FilePath)
         }
     }
@@ -237,6 +258,34 @@ if ($Cert) {
         $global:FunctionResult = "1"
         return
     }
+}
+
+#endregion >> Sign Everything
+
+if (!$(Get-Module -ListAvailable PSDepend)) {
+    & $(Resolve-Path "$PSScriptRoot\*Help*\Install-PSDepend.ps1").Path
+}
+try {
+    Import-Module PSDepend
+    $null = Invoke-PSDepend -Path "$PSScriptRoot\build.requirements.psd1" -Install -Import -Force
+
+    # Hack to fix AppVeyor Error When attempting to Publish to PSGallery
+    # The specific error this fixes is a problem with the Publish-Module cmdlet from PowerShellGet. PSDeploy
+    # calls Publish-Module without the -Force parameter which results in this error: https://github.com/PowerShell/PowerShellGet/issues/79
+    # This is more a problem with PowerShellGet than PSDeploy.
+    Remove-Module PSDeploy -ErrorAction SilentlyContinue
+    $PSDeployScriptToEdit = Get-Childitem -Path $(Get-Module -ListAvailable PSDeploy).ModuleBase -File -Recurse -Filter "PSGalleryModule.ps1"
+    [System.Collections.ArrayList][array]$PSDeployScriptContent = Get-Content $PSDeployScriptToEdit.FullName
+    $LineOfInterest = $($PSDeployScriptContent | Select-String -Pattern ".*?Verbose[\s]+= \`$VerbosePreference").Matches.Value
+    $IndexOfLineOfInterest = $PSDeployScriptContent.IndexOf($LineOfInterest)
+    $PSDeployScriptContent.Insert($($IndexOfLineOfInterest+1),"            Force      = `$True")
+    Set-Content -Path $PSDeployScriptToEdit.FullName -Value $PSDeployScriptContent
+    Import-Module PSDeploy
+}
+catch {
+    Write-Error $_
+    $global:FunctionResult = "1"
+    return
 }
 
 if ([bool]$(Get-Module -Name $env:BHProjectName -ErrorAction SilentlyContinue)) {
@@ -251,6 +300,10 @@ Remove-Module ProgramManagement -Force -ErrorAction SilentlyContinue
 
 ##### END Tasks Unique to this Module's Build #####
 
+##### END Prepare For Build #####
+
+##### BEGIN PSAKE Build #####
+
 $psakeFile = "$env:BHProjectPath\psake.ps1"
 if (!$(Test-Path $psakeFile)) {
     Write-Error "Unable to find the path $psakeFile! Halting!"
@@ -262,10 +315,6 @@ if ($PSBoundParameters.ContainsKey('help')) {
     Get-PSakeScriptTasks -buildFile $psakeFile | Format-Table -Property Name, Description, Alias, DependsOn
     return
 }
-
-##### END Prepare For Build #####
-
-##### BEGIN PSAKE Build #####
 
 # Add any test resources that you want to push to psake.ps1 and/or *.Tests.ps1 files
 $TestResources = @{}
@@ -285,6 +334,151 @@ else {
     Invoke-Psake $psakeFile -taskList $Task -nologo -ErrorAction Stop
 }
 
+# If we're NOT in AppVeyor, we want to sign everything again
+if ($env:BHBuildSystem -ne 'AppVeyor') {
+    #region >> Sign Everything
+
+    if ($CertFileForSignature -and !$Cert) {
+        if (!$(Test-Path $CertFileForSignature)) {
+            Write-Error "Unable to find the Certificate specified to be used for Code Signing! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        try {
+            $Cert = Get-PfxCertificate $CertFileForSignature -ErrorAction Stop
+            if (!$Cert) {throw "There was a prblem with the Get-PfcCertificate cmdlet! Halting!"}
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    if ($Cert) {
+        # Make sure the Cert is good for Code Signing
+        if ($Cert.EnhancedKeyUsageList.ObjectId -notcontains "1.3.6.1.5.5.7.3.3") {
+            $CNOfCert = $($($Cert.Subject -split ",")[0] -replace "CN=","").Trim()
+            Write-Error "The provided Certificate $CNOfCert says that it should be sued for $($Cert.EnhancedKeyUsageList.FriendlyName -join ','), NOT 'Code Signing'! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Make sure our ProtoHelpers are signed before we do anything else, otherwise we won't be able to use them
+        $HelperFilestoSign = Get-ChildItem $(Resolve-Path "$PSScriptRoot\*Help*\").Path -Recurse -File | Where-Object {
+            $_.Extension -match '\.ps1|\.psm1|\.psd1|\.ps1xml' -and $_.Name -ne "Remove-Signature.ps1"
+        }
+
+        # Before we loop through and sign the Helper functions, we need to sign Remove-Signature.ps1
+        $RemoveSignatureFilePath = $(Resolve-Path "$PSScriptRoot\*Help*\Remove-Signature.ps1").Path
+        if (!$(Test-Path $RemoveSignatureFilePath)) {
+            Write-Error "Unable to find the path $RemoveSignatureFilePath! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Because Set-Authenticode sometimes eats a trailing line when it is used, make sure Remove-Signature.ps1 doesn't break
+        $SingatureLineRegex = '^# SIG # Begin signature block|^<!-- SIG # Begin signature block -->'
+        $RemoveSignatureContent = Get-Content $RemoveSignatureFilePath
+        [System.Collections.ArrayList]$UpdatedRemoveSignatureContent = @()
+        foreach ($line in $RemoveSignatureContent) {
+            if ($line -match $SingatureLineRegex) {
+                $null = $UpdatedRemoveSignatureContent.Add("`n")
+                break
+            }
+            else {
+                $null = $UpdatedRemoveSignatureContent.Add($line)
+            }
+        }
+        Set-Content -Path $RemoveSignatureFilePath -Value $UpdatedRemoveSignatureContent
+
+        try {
+            $SetAuthenticodeResult = Set-AuthenticodeSignature -FilePath $RemoveSignatureFilePath -Cert $Cert
+            if (!$SetAuthenticodeResult -or $SetAuthenticodeResult.Status -ne "Valid") {throw "There was a problem using the Set-AuthenticodeSignature cmdlet to sign the Remove-Signature.ps1 function! Halting!"}
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Dot Source the Remove-Signature function
+        . $RemoveSignatureFilePath
+        if (![bool]$(Get-Item Function:\Remove-Signature)) {
+            Write-Error "Problem dot sourcing the Remove-Signature function! Halting!"
+            $global:FunctionResult = "1"
+            return
+        }
+
+        # Loop through the Help Scripts/Functions and sign them so that we can use them immediately if necessary
+        Remove-Signature -FilePath $HelperFilestoSign.FullName
+
+        [System.Collections.ArrayList]$FilesFailedToSign = @()
+        foreach ($FilePath in $HelperFilestoSign.FullName) {
+            try {
+                Write-Host "Signing $FilePath..."
+                $SetAuthenticodeResult = Set-AuthenticodeSignature -FilePath $FilePath -cert $Cert
+                if (!$SetAuthenticodeResult -or $SetAuthenticodeResult.Status -ne "Valid") {throw}
+            }
+            catch {
+                Write-Warning "Signing $FilePath failed!"
+                $null = $FilesFailedToSign.Add($FilePath)
+            }
+        }
+
+        if ($FilesFailedToSign.Count -gt 0) {
+            Write-Error "Halting because we failed to digitally sign the following files:`n$($FilesFailedToSign -join "`n")"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    if ($Cert) {
+        # NOTE: We don't want to include the Module's .psm1 or .psd1 yet because the psake.ps1 Compile Task hasn't finalized them yet...
+        # NOTE: We don't want to sign build.ps1, Remove-Signature.ps1, or Helper functions because we just did that above...
+        $HelperFilesToSignNameRegex = $HelperFilestoSign.Name | foreach {[regex]::Escape($_)}
+        $RemoveSignatureFilePathRegex = [regex]::Escape($RemoveSignatureFilePath)
+        [System.Collections.ArrayList][array]$FilesToSign = Get-ChildItem $env:BHProjectPath -Recurse -File | Where-Object {
+            $_.Extension -match '\.ps1|\.psm1|\.psd1|\.ps1xml' -and
+            $_.Name -notmatch "^module\.requirements\.psd1" -and
+            $_.Name -notmatch "^build\.requirements\.psd1" -and
+            $_.Name -notmatch "^build\.ps1$" -and
+            $_.Name -notmatch $($HelperFilesToSignNameRegex -join '|') -and
+            $_.Name -notmatch $RemoveSignatureFilePathRegex -and
+            $_.FullName -notmatch "\\Pages\\Dynamic|\\Pages\\Static"
+        }
+        #$null = $FilesToSign.Add($(Get-Item $env:BHModulePath\Install-PSDepend.ps1))
+
+        Remove-Signature -FilePath $FilesToSign.FullName
+
+        ##### BEGIN Tasks Unique to this Module's Build #####
+
+        ##### END Tasks Unique to this Module's Build #####
+
+        [System.Collections.ArrayList]$FilesFailedToSign = @()
+        foreach ($FilePath in $FilesToSign.FullName) {
+            try {
+                Write-Host "Signing $FilePath..."
+                $SetAuthenticodeResult = Set-AuthenticodeSignature -FilePath $FilePath -cert $Cert
+                if (!$SetAuthenticodeResult -or $SetAuthenticodeResult.Status -eq "HasMisMatch") {throw}
+            }
+            catch {
+                Write-Warning "Signing $FilePath failed!"
+                $null = $FilesFailedToSign.Add($FilePath)
+            }
+        }
+
+        if ($FilesFailedToSign.Count -gt 0) {
+            Write-Error "Halting because we failed to digitally sign the following files:`n$($FilesFailedToSign -join "`n")"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    #endregion >> Sign Everything
+}
+
 exit ( [int]( -not $psake.build_success ) )
 
 ##### END PSAKE Build #####
@@ -292,8 +486,8 @@ exit ( [int]( -not $psake.build_success ) )
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjqQ4kcRJckdiF36D40hhTybY
-# Thegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUrQ6hyhbDGcaUSwkjgj1qfHln
+# JxSgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -350,11 +544,11 @@ exit ( [int]( -not $psake.build_success ) )
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFE2awPH+8de3HFmN
-# pYfxfpCi9ikMMA0GCSqGSIb3DQEBAQUABIIBAITmxa1WLpfj2yVFco1MDnIgejZ4
-# ytFbYIKEDgWoi9plDlgJGPqRuvk/T5HUSvrOA4yBl0be7wxTHK6USf4eJVmWbk6r
-# BuEnx5JZAlar/tb2ass3TSeePSQ93jup3Ibk8DIOQFPFm3JESS0luTmZwjSmysi7
-# mxeFpRtA2O70Y10E8stb1unDL3NcP+rH10oi4oCSaW88SXux9Ds0b2lvNfHeJJyW
-# AwmsvDc7Q5lJD05yD5EZa6YYyf7wg8FIPYY5ew6qmbqw2F64GZf0Km7u8EgPuUfK
-# R5z5dKqc7gHNWWgELxc3v5UXpNvOVV2SQS2O+lpoOaK6W6dfIti1OnPpcrA=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFAPSzk8jXwahpMPb
+# qV+rr+wf+0XIMA0GCSqGSIb3DQEBAQUABIIBALmoINuUUSWkNW/78pD5rEh6s0Vb
+# DxQDkeiZG1s5BatitWrdQOR8gsnK/Knd+eV2HNhsBqKhp8ifsUQ9UzN9lIzSJ50o
+# 2ym3OPQbYp192U33hcHEvugdGtLfYDRX2VnNXxs4wGz3HMT9AnTPCiRA5oqLlS39
+# bo4l+ziektS8VOVXDgXCjvbuM4przmRYvxzC74ITHgMz5reDOp4WUumFcblZHeWw
+# mT8z1p332ejpcEjlaTQkLh+mqHsid3oL1/+I2w9u1s80BjkUAnB9gTwr0o+jz37u
+# cYb4/vsOa5Q5HA80DmTejtx7cl4zptAHtq7aJieEGALggTGEmvS70Eq61I8=
 # SIG # End signature block

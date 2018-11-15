@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.5 (November 14, 2018)
+
+- Fix Authenticode Signature Attempt 1
+
 ## 0.9.4 (October 14, 2018)
 
 - Fixed workaround for deleting existing symlinks via Remove-Item. See: https://github.com/powershell/powershell/issues/621

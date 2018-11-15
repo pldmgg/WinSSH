@@ -2,7 +2,7 @@ function InvokeModuleDependencies {
     [CmdletBinding()]
     Param (
         [Parameter(Mandatory=$False)]
-        [string[]]$RequiredModules,
+        [pscustomobject[]]$RequiredModules,
 
         [Parameter(Mandatory=$False)]
         [switch]$InstallModulesNotAvailableLocally
@@ -44,7 +44,7 @@ function InvokeModuleDependencies {
             $InvPSCompatSplatParams.Add("InstallModulesNotAvailableLocally",$True)
         }
         if ($PSBoundParameters['RequiredModules']) {
-            $InvPSCompatSplatParams.Add("RequiredModules",$RequiredModules)
+            $InvPSCompatSplatParams.Add("RequiredModules",$RequiredModules.Name)
         }
 
         $Output = InvokePSCompatibility @InvPSCompatSplatParams
@@ -53,21 +53,22 @@ function InvokeModuleDependencies {
         [System.Collections.ArrayList]$SuccessfulModuleImports = @()
         [System.Collections.ArrayList]$FailedModuleImports = @()
 
-        foreach ($ModuleName in $RequiredModules) {
+        foreach ($ModuleObj in $RequiredModules) {
             $ModuleInfo = [pscustomobject]@{
                 ModulePSCompatibility   = "WinPS"
-                ModuleName              = $ModuleName
+                ModuleName              = $ModuleObj.Name
+                Version                 = $ModuleObj.Version
             }
 
-            if (![bool]$(Get-Module -ListAvailable $ModuleName) -and $InstallModulesNotAvailableLocally) {
-                $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$ModuleName' and IsLatestVersion"
+            if (![bool]$(Get-Module -ListAvailable $ModuleObj.Name) -and $InstallModulesNotAvailableLocally) {
+                $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$($ModuleObj.Name)' and IsLatestVersion"
                 $PSGalleryCheck = Invoke-RestMethod $searchUrl
-                if (!$PSGalleryCheck -or $PSGalleryCheck.Count -eq 0) {
-                    $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$ModuleName'"
+                if (!$PSGalleryCheck -or $PSGalleryCheck.Count -eq 0 -or $ModuleObj.Version -eq "PreRelease") {
+                    $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$($ModuleObj.Name)'"
                     $PSGalleryCheck = Invoke-RestMethod $searchUrl
 
                     if (!$PSGalleryCheck -or $PSGalleryCheck.Count -eq 0) {
-                        Write-Warning "Unable to find Module '$ModuleName' in the PSGallery! Skipping..."
+                        Write-Warning "Unable to find Module '$($ModuleObj.Name)' in the PSGallery! Skipping..."
                         continue
                     }
 
@@ -76,10 +77,27 @@ function InvokeModuleDependencies {
 
                 try {
                     if ($PreRelease) {
-                        ManualPSGalleryModuleInstall -ModuleName $ModuleName -DownloadDirectory "$HOME\Downloads" -PreRelease -ErrorAction Stop -WarningAction SilentlyContinue
+                        try {
+                            Install-Module $ModuleObj.Name -AllowPrerelease -AllowClobber -Force -ErrorAction Stop -WarningAction SilentlyContinue
+                        }
+                        catch {
+                            ManualPSGalleryModuleInstall -ModuleName $ModuleObj.Name -DownloadDirectory "$HOME\Downloads" -PreRelease -ErrorAction Stop -WarningAction SilentlyContinue
+                        }
                     }
                     else {
-                        Install-Module $ModuleName -AllowClobber -Force -ErrorAction Stop -WarningAction SilentlyContinue
+                        Install-Module $ModuleObj.Name -AllowClobber -Force -ErrorAction Stop -WarningAction SilentlyContinue
+                    }
+
+                    if ($PSVersionTable.Platform -eq "Unix" -or $PSVersionTable.OS -match "Darwin") {
+                        # Make sure the Module Manifest file name and the Module Folder name are exactly the same case
+                        $env:PSModulePath -split ':' | foreach {
+                            Get-ChildItem -Path $_ -Directory | Where-Object {$_ -match $ModuleObj.Name}
+                        } | foreach {
+                            $ManifestFileName = $(Get-ChildItem -Path $_ -Recurse -File | Where-Object {$_.Name -match "$($ModuleObj.Name)\.psd1"}).BaseName
+                            if (![bool]$($_.Name -cmatch $ManifestFileName)) {
+                                Rename-Item $_ $ManifestFileName
+                            }
+                        }
                     }
                 }
                 catch {
@@ -89,23 +107,23 @@ function InvokeModuleDependencies {
                 }
             }
 
-            if (![bool]$(Get-Module -ListAvailable $ModuleName)) {
-                $ErrMsg = "The Module '$ModuleName' is not available on the localhost! Did you " +
+            if (![bool]$(Get-Module -ListAvailable $ModuleObj.Name)) {
+                $ErrMsg = "The Module '$($ModuleObj.Name)' is not available on the localhost! Did you " +
                 "use the -InstallModulesNotAvailableLocally switch? Halting!"
                 Write-Error $ErrMsg
                 continue
             }
 
-            $ManifestFileItem = Get-Item $(Get-Module -ListAvailable $ModuleName).Path
+            $ManifestFileItem = Get-Item $(Get-Module -ListAvailable $ModuleObj.Name).Path
             $ModuleInfo | Add-Member -Type NoteProperty -Name ManifestFileItem -Value $ManifestFileItem
 
             # Import the Module
             try {
-                Import-Module $ModuleName -Scope Global -ErrorAction Stop
+                Import-Module $ModuleObj.Name -Scope Global -ErrorAction Stop -WarningAction SilentlyContinue
                 $null = $SuccessfulModuleImports.Add($ModuleInfo)
             }
             catch {
-                Write-Warning "Problem importing the $ModuleName Module!"
+                Write-Warning "Problem importing the $($ModuleObj.Name) Module!"
                 $null = $FailedModuleImports.Add($ModuleInfo)
             }
         }
@@ -125,8 +143,8 @@ function InvokeModuleDependencies {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIuI5NgclVoPYJ+IBBAMJ6NCJ
-# FrKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUpwm1NI/ITmNimCHonSNMAMeQ
+# z52gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -183,11 +201,11 @@ function InvokeModuleDependencies {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHQYj9dUlTJF8DaI
-# IpjX5ukNYurvMA0GCSqGSIb3DQEBAQUABIIBAHwp7RxCg3BJNoCr9H7WLLxY6eUR
-# iSwOSM8tEo/grJROW9zd8OlDY9/fetg4bDUD8D95v/ydfJNB4z+R+i3042YxeNit
-# utJnOxucbW9t4LzD3DsMleh2sZ8L2bqW2E0FYQqDfeQywFYvLi5qXk6dHuzvJB5F
-# uaJRbORkRUicBuga9pt4j4IOGNgl8nV4WOU2flUVzACDUhYgsaP/x+BUl9+UYPvO
-# ZH0tJrjZ6ZwlXywPnMvqDZVRfqEfuVWjxFI6QqblWBrPoEHC9Gc2f0JxTfON9/lb
-# I44Y2p52m/Nn23pAfWbpCNsYovGL/zJsn8B6ivImTvqN9o3DsdHJ0imzRvo=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFM/Z3kL+D4ic76HU
+# 8+wiwICwdi37MA0GCSqGSIb3DQEBAQUABIIBAFOLEHP+dbcZoffB5kSdPFTqbSHn
+# WF2xjO18qWw06KTplV2ICN0peSrGIwRM0sC1cH7pKnASaNZsQLkj6yP/VP+USBIr
+# wQPTlEQ/zMCtguqzrHFv7vGMUOj9dLKmdWFVXZq17TYwAMKAXfnfq7uJYe/3roAP
+# sD/d5cHi/Zy8k7mrl1h7+mLXSVazCZTXhF1UopL/4psW+ynIpGB+k2VF9Yi8d2lR
+# 1t/D4h05MDwB6xQ6mOyrfefXKz9M8Bx8d1IFdqCd+p91M31MRO7zFvZKXpJVm4tC
+# IRFp4cj3ZpNK7W3GymzMb2dgNmMhAD5tDBMQbf8C1+2CxNVi6/TZ6E4IKmE=
 # SIG # End signature block

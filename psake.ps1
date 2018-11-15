@@ -82,21 +82,83 @@ foreach ($import in $Private) {
 }
 
 [System.Collections.Arraylist]$ModulesToInstallAndImport = @()
-if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
-    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
-    $ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
+if (Test-Path "$PSScriptRoot/module.requirements.psd1") {
+    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot/module.requirements.psd1"
+    #$ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
+    $($ModuleManifestData.GetEnumerator()) | foreach {
+        if ($_.Key -ne "PSDependOptions") {
+            $PSObj = [pscustomobject]@{
+                Name    = $_.Key
+                Version = $_.Value.Version
+            }
+            $null = $ModulesToinstallAndImport.Add($PSObj)
+        }
+    }
 }
 
-if ($ModulesToInstallAndImport.Count -gt 0) {
-    # NOTE: If you're not sure if the Required Module is Locally Available or Externally Available,
-    # add it the the -RequiredModules string array just to be certain
-    $InvModDepSplatParams = @{
-        RequiredModules                     = $ModulesToInstallAndImport
-        InstallModulesNotAvailableLocally   = $True
-        ErrorAction                         = "SilentlyContinue"
-        WarningAction                       = "SilentlyContinue"
+if ($PSVersionTable.Platform -eq "Unix" -or $PSVersionTable.OS -match "Darwin") {
+    $env:SudoPwdPrompt = $True
+
+    if ($ModulesToInstallAndImport.Count -gt 0) {
+        foreach ($ModuleItem in $ModulesToInstallAndImport) {
+            if ($ModuleItem.Name -match "WinSSH|NTFSSecurity|WindowsCompatibility") {
+                continue
+            }
+
+            if (!$(Get-Module -ListAvailable $ModuleItem.Name -ErrorAction SilentlyContinue)) {
+                try {
+                    Install-Module $ModuleItem.Name -AllowClobber -ErrorAction Stop
+                }
+                catch {
+                    try {
+                        Install-Module $ModuleItem.Name -AllowClobber -AllowPrerelease -ErrorAction Stop
+                    }
+                    catch {
+                        Write-Error $_
+                        Write-Error "Unable to import all Module dependencies! Please unload $ThisModule via 'Remove-Module $ThisModule'! Halting!"
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                }
+            }
+            
+            # Make sure the Module Manifest file name and the Module Folder name are exactly the same case
+            $env:PSModulePath -split ':' | foreach {
+                Get-ChildItem -Path $_ -Directory | Where-Object {$_ -match $ModuleItem.Name}
+            } | foreach {
+                $ManifestFileName = $(Get-ChildItem -Path $_ -Recurse -File | Where-Object {$_.Name -match "$($ModuleItem.Name)\.psd1"}).BaseName
+                if (![bool]$($_.Name -cmatch $ManifestFileName)) {
+                    Rename-Item $_ $ManifestFileName
+                }
+            }
+
+            if (!$(Get-Module $ModuleItem.Name -ErrorAction SilentlyContinue)) {
+                try {
+                    Import-Module $ModuleItem.Name -ErrorAction Stop -WarningAction SilentlyContinue
+                }
+                catch {
+                    Write-Error $_
+                    Write-Error "Unable to import all Module dependencies! Please unload $ThisModule via 'Remove-Module $ThisModule'! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+        }
     }
-    $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
+}
+
+if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+    if ($ModulesToInstallAndImport.Count -gt 0) {
+        # NOTE: If you're not sure if the Required Module is Locally Available or Externally Available,
+        # add it the the -RequiredModules string array just to be certain
+        $InvModDepSplatParams = @{
+            RequiredModules                     = $ModulesToInstallAndImport
+            InstallModulesNotAvailableLocally   = $True
+            ErrorAction                         = "SilentlyContinue"
+            WarningAction                       = "SilentlyContinue"
+        }
+        $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
+    }
 }
 
 # Public Functions
@@ -105,7 +167,10 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
     Set-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $BoilerPlateFunctionSourcing
 
     ###### BEGIN Unique Additions to this Module ######
+    # NONE
     ###### END Unique Additions to this Module ######
+
+    Set-Content -Path "$env:BHModulePath\$env:BHProjectName.psm1" -Value $BoilerPlateFunctionSourcing
 
     [System.Collections.ArrayList]$FunctionTextToAdd = @()
     foreach ($ScriptFileItem in $PublicScriptFiles) {
@@ -118,6 +183,42 @@ if ($ModulesToInstallAndImport.Count -gt 0) {
     $null = $FunctionTextToAdd.Add("`n")
 
     Add-Content -Value $FunctionTextToAdd -Path "$env:BHModulePath\$env:BHProjectName.psm1"
+
+    # Add the Import-Module WinCompat
+    $ImportWinCompat = @'
+
+if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "Core") {
+    if (![bool]$(Get-Module -ListAvailable WindowsCompatibility)) {
+        try {
+            Install-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if (![bool]$(Get-Module WindowsCompatibility)) {
+        try {
+            Import-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            Write-Warning "The $ThisModule Module was NOT loaded successfully! Please run:`n    Remove-Module $ThisModule"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+}
+
+'@
+
+    Add-Content -Value $ImportWinCompat -Path "$env:BHModulePath\$env:BHProjectName.psm1"
+
+    # Finally, add array the variables contained in VariableLibrary.ps1 if it exists in case we want to use this Module Remotely
+    if (Test-Path "$env:BHModulePath\VariableLibrary.ps1") {
+        Get-Content "$env:BHModulePath\VariableLibrary.ps1" | Add-Content "$env:BHModulePath\$env:BHProjectName.psm1"
+    }
 
     if ($Cert) {
         # At this point the .psm1 is finalized, so let's sign it
@@ -155,6 +256,43 @@ Task Test -Depends Compile  {
 
     # Gather test results. Store them in a variable and file
     $TestResults = Invoke-Pester @PesterSplatParams
+
+    # Make sure Authenticode Signature has been removed
+    $RemoveSignatureFilePath = $(Resolve-Path "$PSScriptRoot\*Help*\Remove-Signature.ps1").Path
+    $RemoveSignatureFilePathRegex = [regex]::Escape($RemoveSignatureFilePath)
+    . $RemoveSignatureFilePath
+    if (![bool]$(Get-Item Function:\Remove-Signature)) {
+        Write-Error "Problem dot sourcing the Remove-Signature function! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+    [System.Collections.ArrayList][array]$HelperFilestoSign = Get-ChildItem $(Resolve-Path "$PSScriptRoot\*Help*\").Path -Recurse -File | Where-Object {
+        $_.Extension -match '\.ps1|\.psm1|\.psd1|\.ps1xml' -and $_.Name -ne "Remove-Signature.ps1"
+    }
+    foreach ($FileItem in $HelperFilestoSign) {
+        if ($(Get-AuthenticodeSignature -FilePath $FileItem.FullName) -ne "NotSigned") {
+            Write-Host "Removing signature from $($FileItem.FullName)..."
+            Remove-Signature -FilePath $FileItem.FullName
+        }
+    }
+
+    $HelperFilesToSignNameRegex = $HelperFilestoSign.Name | foreach {[regex]::Escape($_)}
+
+    [System.Collections.ArrayList][array]$FilesToSign = Get-ChildItem $env:BHProjectPath -Recurse -File | Where-Object {
+        $_.Extension -match '\.ps1|\.psm1|\.psd1|\.ps1xml' -and
+        $_.Name -notmatch "^build\.ps1$" -and
+        $_.Name -notmatch $($HelperFilesToSignNameRegex -join '|') -and
+        $_.Name -notmatch $RemoveSignatureFilePathRegex -and
+        $_.FullName -notmatch "\\Pages\\Dynamic|\\Pages\\Static" -and
+        $_.Name -notmatch "psake\.ps1" -and
+        $_.Name -notmatch "Tests\.ps1"
+    }
+    foreach ($FileItem in $FilestoSign) {
+        if ($(Get-AuthenticodeSignature -FilePath $FileItem.FullName) -ne "NotSigned") {
+            Write-Host "Removing signature from $($FileItem.FullName)..."
+            Remove-Signature -FilePath $FileItem.FullName
+        }
+    }
 
     # In Appveyor?  Upload our tests! #Abstract this into a function?
     if ($env:BHBuildSystem -eq 'AppVeyor') {
@@ -209,8 +347,8 @@ Task Deploy -Depends Build {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcq8qxTX4HdIvK4CiiX7eS4yS
-# LwKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUO+mKntREc9dX+ahx8hMTLr4W
+# KUWgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -267,11 +405,11 @@ Task Deploy -Depends Build {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFJWvRhunaS+a7BN0
-# HQqgS4dPnTrDMA0GCSqGSIb3DQEBAQUABIIBAGBvdTDa5MTfijeXYbVGL5BTflKc
-# sG5xMkPZ9sm8M/TnN/8a7SkOfsnU+W5vP1Y/UsmmdXF6feVKhgErOdr/+pHenul2
-# QPoy0U3+akZtL3YREvBFxuL6a1pc223z0a3HEl/9hJoxmEo6R6+rZYzppk9v5xSH
-# JIcEi1JQUHtJcH+z03nAqRnfQK6+OWct1jPAPxQJ1GOOceTRduzprMC9wfK5hYcD
-# 5aIEn1Ar8Tf2U3KrthDiZy8JhNP93A7t4T30Gf9JBvXIyf/zIO42EtlqYc1cd/A6
-# VgT5bJPeNJc6mTeaL0SDW8Y0nEgIzffTp5fdauhIfBuwy4U/zkiehXmIXzw=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFACcAnOH7Fjdub9c
+# l7m6b06AccVGMA0GCSqGSIb3DQEBAQUABIIBAAerWQtRThw/38/3Cy6SaeqLvwtG
+# DVxY0VTpVvGYL/4iROceh5DwAu0bqszWLCxxvx3eTjBLOizO5d4EpcP71zrCd6cE
+# weIxm6wnq8dWGv3GnALaZJitEUz8cV+UceNFeR3Gl4R78klYUYLLpXweile9fJJy
+# Jd6xpmgPBMscc4bKFpikJhSGZHJb35E7A95dN0HkdjqGRO9VKOUw21o8twBRYjtR
+# HFKZPo2iza8DeZz129s8FAJxIsLrCKVDRGF2R9b5CxcWoK76DccmVBa/BQaDPtLY
+# YhwzToQo+YxbsfmtdmTlbnPq3DuXXQeo/0lbBj8uRefI9M8ZDy3pQ9zcvbU=
 # SIG # End signature block

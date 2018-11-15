@@ -1,39 +1,88 @@
-Function TestLDAP {
+function TestLDAP {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$True)]
         [string]$ADServerHostNameOrIP
     )
 
-    # Make sure you CAN resolve $ADServerHostNameOrIP AND that we can get FQDN
-    try {
-        $ADServerNetworkInfo = [System.Net.Dns]::GetHostEntry($ADServerHostNameOrIP)
-        if ($ADServerNetworkInfo.HostName -notmatch "\.") {
-            $IP = $ADServerNetworkInfo.AddressList[0].IPAddressToString
-            $ADServerNetworkInfo = [System.Net.Dns]::GetHostEntry($IP)
-            if ($ADServerNetworkInfo.HostName -notmatch "\.") {
-                throw "Can't resolve $ADServerHostNameOrIP FQDN! Halting!"
+    #region >> Prep
+
+    if ($PSVersionTable.Platform -eq "Unix") {
+        # If we're on Linux, we need the Novell .Net Core library
+        try {
+            $CurrentlyLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
+            if (![bool]$($CurrentlyLoadedAssemblies -match [regex]::Escape("Novell.Directory.Ldap.NETStandard"))) {
+                $NovellDownloadDir = "$HOME/Novell.Directory.Ldap.NETStandard"
+                if (Test-Path $NovellDownloadDir) {
+                    $AssemblyToLoadPath = Get-NativePath @(
+                        $HOME
+                        "Novell.Directory.Ldap.NETStandard"
+                        "Novell.Directory.Ldap.NETStandard"
+                        "lib"
+                        "netstandard1.3"
+                        "Novell.Directory.Ldap.NETStandard.dll"
+                    )
+
+                    if (!$(Test-Path $AssemblyToLoadPath)) {
+                        $null = Remove-Item -Path $NovellDownloadDir -Recurse -Force
+                        $NovellPackageInfo = DownloadNuGetPackage -AssemblyName "Novell.Directory.Ldap.NETStandard" -NuGetPkgDownloadDirectory $NovellDownloadDir -Silent
+                        $AssemblyToLoadPath = $NovellPackageInfo.AssemblyToLoad
+                    }
+                }
+                else {
+                    $NovellPackageInfo = DownloadNuGetPackage -AssemblyName "Novell.Directory.Ldap.NETStandard" -NuGetPkgDownloadDirectory $NovellDownloadDir -Silent
+                    $AssemblyToLoadPath = $NovellPackageInfo.AssemblyToLoad
+                }
+
+                if (![bool]$($CurrentlyLoadedAssemblies -match [regex]::Escape("Novell.Directory.Ldap.NETStandard"))) {
+                    $null = Add-Type -Path $AssemblyToLoadPath
+                }
             }
         }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+
+    try {
+        $ADServerNetworkInfo = ResolveHost -HostNameOrIP $ADServerHostNameOrIP -ErrorAction Stop
     }
     catch {
-        Write-Error $_
+        Write-Error "Unable to resolve $ADServerHostNameOrIP! Halting!"
         $global:FunctionResult = "1"
         return
     }
 
-    $ADServerFQDN = $ADServerNetworkInfo.HostName
+    if (!$ADServerNetworkInfo.FQDN) {
+        Write-Error "Unable to determine FQDN of $ADServerHostNameOrIP! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
+    #endregion >> Prep
+
+    #region >> Main
+
+    $ADServerFQDN = $ADServerNetworkInfo.FQDN
 
     $LDAPPrep = "LDAP://" + $ADServerFQDN
 
     # Try Global Catalog First - It's faster and you can execute from a different domain and
     # potentially still get results
     try {
-        $LDAP = $LDAPPrep + ":3269"
-        # This does NOT throw an error because it doen't actually try to reach out to make the connection yet
-        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
-        # This WILL throw an error
-        $Connection.Close()
+        $Port = "3269"
+        $LDAP = $LDAPPrep + ":$Port"
+        if ($PSVersionTable.Platform -eq "Unix") {
+            $Connection = [Novell.Directory.Ldap.LdapConnection]::new()
+            $Connection.Connect($ADServerFQDN,$Port)
+            $Connection.Dispose()
+        }
+        else {
+            $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
+            $Connection.Close()
+        }
         $GlobalCatalogConfiguredForSSL = $True
     } 
     catch {
@@ -49,9 +98,17 @@ Function TestLDAP {
     }
 
     try {
-        $LDAP = $LDAPPrep + ":3268"
-        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
-        $Connection.Close()
+        $Port = "3268"
+        $LDAP = $LDAPPrep + ":$Port"
+        if ($PSVersionTable.Platform -eq "Unix") {
+            $Connection = [Novell.Directory.Ldap.LdapConnection]::new()
+            $Connection.Connect($ADServerFQDN,$Port)
+            $Connection.Dispose()
+        }
+        else {
+            $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
+            $Connection.Close()
+        }
         $GlobalCatalogConfigured = $True
     } 
     catch {
@@ -68,11 +125,17 @@ Function TestLDAP {
   
     # Try the normal ports
     try {
-        $LDAP = $LDAPPrep + ":636"
-        # This does NOT throw an error because it doen't actually try to reach out to make the connection yet
-        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
-        # This WILL throw an error
-        $Connection.Close()
+        $Port = "636"
+        $LDAP = $LDAPPrep + ":$Port"
+        if ($PSVersionTable.Platform -eq "Unix") {
+            $Connection = [Novell.Directory.Ldap.LdapConnection]::new()
+            $Connection.Connect($ADServerFQDN,$Port)
+            $Connection.Dispose()
+        }
+        else {
+            $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
+            $Connection.Close()
+        }
         $ConfiguredForSSL = $True
     } 
     catch {
@@ -88,9 +151,17 @@ Function TestLDAP {
     }
 
     try {
-        $LDAP = $LDAPPrep + ":389"
-        $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
-        $Connection.Close()
+        $Port = "389"
+        $LDAP = $LDAPPrep + ":$Port"
+        if ($PSVersionTable.Platform -eq "Unix") {
+            $Connection = [Novell.Directory.Ldap.LdapConnection]::new()
+            $Connection.Connect($ADServerFQDN,$Port)
+            $Connection.Dispose()
+        }
+        else {
+            $Connection = [System.DirectoryServices.DirectoryEntry]($LDAP)
+            $Connection.Close()
+        }
         $Configured = $True
     }
     catch {
@@ -126,13 +197,15 @@ Function TestLDAP {
         ConfiguredForSSL636                 = if ($ConfiguredForSSL) {$True} else {$False}
         PortsThatWork                       = $PortsThatWork
     }
+
+    #endregion >> Main
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUV45yOhs4pOAXDuSw/H/v3nCC
-# 8Qygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/hdzO0khIeXH2+KYU64daUfu
+# QzKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -189,11 +262,11 @@ Function TestLDAP {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHvK90Zq6x/rM63S
-# prN3xGNbip86MA0GCSqGSIb3DQEBAQUABIIBAB+naAh/5X9rWU/ovxU+X+f+GTLK
-# ZxrYHif3E5GEwIg6jQE+fM1JKNjf1s8byTZYIfDvP0OVGxF2Dxpq3Wy2UK5QR+Oc
-# EPiM5iojfRdN3N5v23o+x6TiKm8Ryq4fgpr7sE56EJUscT4XrTsCArZxfPufykaY
-# g1V4oRcWBPyQ7ctkGacuKYRvZsLVTxKRlKfHXe9Sn17YDV23pzqYmPsu2SvcACje
-# lFlna5SvcTh2TbidVlI40qAfG7TmdkGGz8SNgNSHiqRLgLWls8+2Dp4H+U76Q94S
-# /iIWFQP2iq3DgmfRivo5pAyILwozT0O1xZHiRVKNpM0+NaSpgBNMKd+VRRo=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNyymxrOkHktK1Pp
+# sm5ChlGGXmRaMA0GCSqGSIb3DQEBAQUABIIBAJ+899RLuR54HSjphPciBpbONbeH
+# i3q9U29YwWoWaoMSKfk+mh36pq2iF7cIQi477lLJaFsq0pq0wqHVYD+Wj1Dh0PJq
+# sHf7uCGhJwYPTPnMw6wp/um3AWeeiFG6IBA5lztf1Dyxtz5T/B/zxo8/KRvm3y60
+# Sl9xC2EXD00LtVLuP6cx4QRcU5t4cZZWvgFn6t439dgMXA5+oPqQbjpeTBX8ensF
+# xfaOSIPQx6AmNZyOSqRmwcbTxkIn1IVWWYeRSTsgX2UGTGk5efU/WOTUcwZWZVhs
+# kGhUPkTutaD3i996lMdyw9dkPwvLBKfSbWsUMghtoVvOMrOX5PX3iUlrdsw=
 # SIG # End signature block

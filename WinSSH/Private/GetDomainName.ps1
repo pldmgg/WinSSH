@@ -1,86 +1,86 @@
-function ManualPSGalleryModuleInstall {
+function GetDomainName {
     [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$True)]
-        [string]$ModuleName,
+    Param()
 
-        [Parameter(Mandatory=$False)]
-        [switch]$PreRelease,
+    if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+        $Domain = $(Get-CimInstance Win32_ComputerSystem).Domain
+    }
+    if ($PSVersionTable.Platform -eq "Unix") {
+        $Domain = domainname
+        if (!$Domain -or $Domain -eq "(none)") {
+            $ThisHostNamePrep = hostname
+            if ($ThisHostNamePrep -match "\.") {
+                $HostNameArray = $ThisHostNamePrep -split "\."
+                $ThisHostName = $HostNameArray[0]
+                $Domain = $HostNameArray[1..$HostNameArray.Count] -join '.'
+            }
+        }
+            
+        if (!$Domain) {
+            $EtcHostsContent = Get-Content "/etc/hosts"
+            $EtcHostsContentsArray = $(foreach ($HostLine in $EtcHostsContent) {
+                $HostLine -split "[\s]" | foreach {$_.Trim()}
+            }) | Where-Object {![System.String]::IsNullOrWhiteSpace($_)}
+            $PotentialStringsWithDomainName = $EtcHostsContentsArray | Where-Object {
+                $_ -notmatch "localhost" -and
+                $_ -notmatch "localdomain" -and
+                $_ -match "\." -and
+                $_ -match "[a-zA-Z]"
+            } | Sort-Object | Get-Unique
 
-        [Parameter(Mandatory=$False)]
-        [string]$DownloadDirectory
-    )
+            if ($PotentialStringsWithDomainName.Count -eq 0) {
+                Write-Error "Unable to determine domain for $(hostname)! Please use the -DomainName parameter and try again. Halting!"
+                $global:FunctionResult = "1"
+                return
+            }
+            
+            [System.Collections.ArrayList]$PotentialDomainsPrep = @()
+            foreach ($Line in $PotentialStringsWithDomainName) {
+                if ($Line -match "^\.") {
+                    $null = $PotentialDomainsPrep.Add($Line.Substring(1,$($Line.Length-1)))
+                }
+                else {
+                    $null = $PotentialDomainsPrep.Add($Line)
+                }
+            }
+            [System.Collections.ArrayList]$PotentialDomains = @()
+            foreach ($PotentialDomain in $PotentialDomainsPrep) {
+                $RegexDomainPattern = "^([a-zA-Z0-9][a-zA-Z0-9-_]*\.)*[a-zA-Z0-9]*[a-zA-Z0-9-_]*[[a-zA-Z0-9]+$"
+                if ($PotentialDomain -match $RegexDomainPattern) {
+                    $FinalPotentialDomain = $PotentialDomain -replace $ThisHostName,""
+                    if ($FinalPotentialDomain -match "^\.") {
+                        $null = $PotentialDomains.Add($FinalPotentialDomain.Substring(1,$($FinalPotentialDomain.Length-1)))
+                    }
+                    else {
+                        $null = $PotentialDomains.Add($FinalPotentialDomain)
+                    }
+                }
+            }
 
-    if (!$DownloadDirectory) {
-        $DownloadDirectory = $(Get-Location).Path
+            if ($PotentialDomains.Count -eq 1) {
+                $Domain = $PotentialDomains
+            }
+            else {
+                $Domain = $PotentialDomains[0]
+            }
+        }
     }
 
-    if (!$(Test-Path $DownloadDirectory)) {
-        Write-Error "The path $DownloadDirectory was not found! Halting!"
-        $global:FunctionResult = "1"
-        return
-    }
-
-    if (![bool]$($($env:PSModulePath -split ";") -match [regex]::Escape("$HOME\Documents\WindowsPowerShell\Modules"))) {
-        $env:PSModulePath = "$HOME\Documents\WindowsPowerShell\Modules;$env:PSModulePath"
-    }
-    if (!$(Test-Path "$HOME\Documents\WindowsPowerShell\Modules")) {
-        $null = New-Item -ItemType Directory "$HOME\Documents\WindowsPowerShell\Modules" -Force
-    }
-
-    if ($PreRelease) {
-        $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$ModuleName'"
+    if ($Domain) {
+        $Domain
     }
     else {
-        $searchUrl = "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq '$ModuleName' and IsLatestVersion"
-    }
-    $ModuleInfo = Invoke-RestMethod $searchUrl
-    if (!$ModuleInfo -or $ModuleInfo.Count -eq 0) {
-        Write-Error "Unable to find Module Named $ModuleName! Halting!"
+        Write-Error "Unable to determine Domain Name! Halting!"
         $global:FunctionResult = "1"
         return
     }
-    if ($PreRelease) {
-        if ($ModuleInfo.Count -gt 1) {
-            $ModuleInfo = $($ModuleInfo | Sort-Object -Property Updated | Where-Object {$_.properties.isPrerelease.'#text' -eq 'true'})[-1]
-        }
-    }
-    
-    $OutFilePath = Join-Path $DownloadDirectory $($ModuleInfo.title.'#text' + $ModuleInfo.properties.version + '.zip')
-    if (Test-Path $OutFilePath) {Remove-Item $OutFilePath -Force}
-
-    try {
-        #Invoke-WebRequest $ModuleInfo.Content.src -OutFile $OutFilePath
-        # Download via System.Net.WebClient is a lot faster than Invoke-WebRequest...
-        $WebClient = [System.Net.WebClient]::new()
-        $WebClient.Downloadfile($ModuleInfo.Content.src, $OutFilePath)
-    }
-    catch {
-        Write-Error $_
-        $global:FunctionResult = "1"
-        return
-    }
-    
-    if (Test-Path "$DownloadDirectory\$ModuleName") {Remove-Item "$DownloadDirectory\$ModuleName" -Recurse -Force}
-    Expand-Archive $OutFilePath -DestinationPath "$DownloadDirectory\$ModuleName"
-
-    if ($DownloadDirectory -ne "$HOME\Documents\WindowsPowerShell\Modules") {
-        if (Test-Path "$HOME\Documents\WindowsPowerShell\Modules\$ModuleName") {
-            Remove-Item "$HOME\Documents\WindowsPowerShell\Modules\$ModuleName" -Recurse -Force
-        }
-        Copy-Item -Path "$DownloadDirectory\$ModuleName" -Recurse -Destination "$HOME\Documents\WindowsPowerShell\Modules"
-
-        Remove-Item "$DownloadDirectory\$ModuleName" -Recurse -Force
-    }
-
-    Remove-Item $OutFilePath -Force
 }
 
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKehst4FRbIpIf5iTmu6+Y6IV
-# maigggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUeqfJM3K8A6InvC/wFroQypby
+# GAegggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -137,11 +137,11 @@ function ManualPSGalleryModuleInstall {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFG2P7uvTxEH17rkh
-# 2UG+pv1iX+6bMA0GCSqGSIb3DQEBAQUABIIBAH6Hm5HLF6QPiFfWK06x8u13CjTo
-# L40m7p1UTfu7MxK+pBNxKxa8C3Bn7UpXqS860RVUIFtTjUUDlXeqkjshFZ0EnKzW
-# LQsuq2lUyXqJq9xm/6TX4zg4ybd60LIhmuRkVTY2FoRKz4bc0NAop6wunjAHyh18
-# ZgHdqU9kiqoaqWhFa1VSK8KP/1a6BEIa3jTuTJYlsHtvg2Rfu2+w4w1wHM2JOV3z
-# 7v1gFHmzZHGkFTzrJoSXH78jhB6Ib5jiTvLGf2T7pfrwp3/MdebcvL1Nj0r1x683
-# c/ID7/4sIp6as84dsgljKrXGST8fZq1orFsBm3GgmZctmyZnLou4LOmJewo=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFB3ruEh/mYMtUExt
+# iRiNS8K/Li5mMA0GCSqGSIb3DQEBAQUABIIBAEXkeZLiESIA9aItTOhYqhiJ+vQL
+# 4uZ1VgfhEocxcsZ6G0XSOovUA2ETNTl2JsQB9ZyswlqxoduYU2Q6N4H4QrjxMyNs
+# /5mQKvTbzH8NyeiTzzRP/AVqnAuJb9aNpv3KtcON0UrRN6P2ULrNDvNtlbDvDp+U
+# EvdB5DD7zhxnWSOP7weXa9lH/IYGYlG/u9sudyBOLfx4Ui5QRB6SG6YaszObgHLZ
+# qu6HfNVV+qTVt4vLlRRpUj8uWtGt/CsVYROMV4X5aWw9/jjtKOBmsrkMpYm0qF6D
+# jtJvIQOJhiedJKc2AZTodF3G8xWEIH+UkwgdL2darTCfmEWYQsU1Z5c10gM=
 # SIG # End signature block

@@ -16,21 +16,83 @@ foreach ($import in $Private) {
 }
 
 [System.Collections.Arraylist]$ModulesToInstallAndImport = @()
-if (Test-Path "$PSScriptRoot\module.requirements.psd1") {
-    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot\module.requirements.psd1"
-    $ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
+if (Test-Path "$PSScriptRoot/module.requirements.psd1") {
+    $ModuleManifestData = Import-PowerShellDataFile "$PSScriptRoot/module.requirements.psd1"
+    #$ModuleManifestData.Keys | Where-Object {$_ -ne "PSDependOptions"} | foreach {$null = $ModulesToinstallAndImport.Add($_)}
+    $($ModuleManifestData.GetEnumerator()) | foreach {
+        if ($_.Key -ne "PSDependOptions") {
+            $PSObj = [pscustomobject]@{
+                Name    = $_.Key
+                Version = $_.Value.Version
+            }
+            $null = $ModulesToinstallAndImport.Add($PSObj)
+        }
+    }
 }
 
-if ($ModulesToInstallAndImport.Count -gt 0) {
-    # NOTE: If you're not sure if the Required Module is Locally Available or Externally Available,
-    # add it the the -RequiredModules string array just to be certain
-    $InvModDepSplatParams = @{
-        RequiredModules                     = $ModulesToInstallAndImport
-        InstallModulesNotAvailableLocally   = $True
-        ErrorAction                         = "SilentlyContinue"
-        WarningAction                       = "SilentlyContinue"
+if ($PSVersionTable.Platform -eq "Unix" -or $PSVersionTable.OS -match "Darwin") {
+    $env:SudoPwdPrompt = $True
+
+    if ($ModulesToInstallAndImport.Count -gt 0) {
+        foreach ($ModuleItem in $ModulesToInstallAndImport) {
+            if ($ModuleItem.Name -match "WinSSH|NTFSSecurity|WindowsCompatibility") {
+                continue
+            }
+
+            if (!$(Get-Module -ListAvailable $ModuleItem.Name -ErrorAction SilentlyContinue)) {
+                try {
+                    Install-Module $ModuleItem.Name -AllowClobber -ErrorAction Stop
+                }
+                catch {
+                    try {
+                        Install-Module $ModuleItem.Name -AllowClobber -AllowPrerelease -ErrorAction Stop
+                    }
+                    catch {
+                        Write-Error $_
+                        Write-Error "Unable to import all Module dependencies! Please unload $ThisModule via 'Remove-Module $ThisModule'! Halting!"
+                        $global:FunctionResult = "1"
+                        return
+                    }
+                }
+            }
+            
+            # Make sure the Module Manifest file name and the Module Folder name are exactly the same case
+            $env:PSModulePath -split ':' | foreach {
+                Get-ChildItem -Path $_ -Directory | Where-Object {$_ -match $ModuleItem.Name}
+            } | foreach {
+                $ManifestFileName = $(Get-ChildItem -Path $_ -Recurse -File | Where-Object {$_.Name -match "$($ModuleItem.Name)\.psd1"}).BaseName
+                if (![bool]$($_.Name -cmatch $ManifestFileName)) {
+                    Rename-Item $_ $ManifestFileName
+                }
+            }
+
+            if (!$(Get-Module $ModuleItem.Name -ErrorAction SilentlyContinue)) {
+                try {
+                    Import-Module $ModuleItem.Name -ErrorAction Stop -WarningAction SilentlyContinue
+                }
+                catch {
+                    Write-Error $_
+                    Write-Error "Unable to import all Module dependencies! Please unload $ThisModule via 'Remove-Module $ThisModule'! Halting!"
+                    $global:FunctionResult = "1"
+                    return
+                }
+            }
+        }
     }
-    $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
+}
+
+if (!$PSVersionTable.Platform -or $PSVersionTable.Platform -eq "Win32NT") {
+    if ($ModulesToInstallAndImport.Count -gt 0) {
+        # NOTE: If you're not sure if the Required Module is Locally Available or Externally Available,
+        # add it the the -RequiredModules string array just to be certain
+        $InvModDepSplatParams = @{
+            RequiredModules                     = $ModulesToInstallAndImport
+            InstallModulesNotAvailableLocally   = $True
+            ErrorAction                         = "SilentlyContinue"
+            WarningAction                       = "SilentlyContinue"
+        }
+        $ModuleDependenciesMap = InvokeModuleDependencies @InvModDepSplatParams
+    }
 }
 
 # Public Functions
@@ -3469,7 +3531,6 @@ function New-SSHKey {
     ##### BEGIN Variable/Parameter Transforms and PreRun Prep #####
 
     if (!$(GetElevation)) {
-        Write-Verbose "You must run PowerShell as Administrator before using this function! Halting!"
         Write-Error "You must run PowerShell as Administrator before using this function! Halting!"
         $global:FunctionResult = "1"
         return
@@ -4309,11 +4370,74 @@ function Validate-SSHPrivateKey {
 
 
 
+if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "Core") {
+    if (![bool]$(Get-Module -ListAvailable WindowsCompatibility)) {
+        try {
+            Install-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+    if (![bool]$(Get-Module WindowsCompatibility)) {
+        try {
+            Import-Module WindowsCompatibility -ErrorAction Stop
+        }
+        catch {
+            Write-Error $_
+            Write-Warning "The $ThisModule Module was NOT loaded successfully! Please run:`n    Remove-Module $ThisModule"
+            $global:FunctionResult = "1"
+            return
+        }
+    }
+}
+
+[System.Collections.ArrayList]$script:FunctionsForSBUse = @(
+    ${Function:AddWinRMTrustLocalHost}.Ast.Extent.Text
+    ${Function:ConfigureGlobalKnownHosts}.Ast.Extent.Text
+    ${Function:GetComputerObjectsInLDAP}.Ast.Extent.Text
+    ${Function:GetCurrentUser}.Ast.Extent.Text
+    ${Function:GetDomainController}.Ast.Extent.Text
+    ${Function:GetElevation}.Ast.Extent.Text
+    ${Function:GetGroupObjectsInLDAP}.Ast.Extent.Text
+    ${Function:GetModuleDependencies}.Ast.Extent.Text
+    ${Function:GetNativePath}.Ast.Extent.Text
+    ${Function:GetUserObjectsInLDAP}.Ast.Extent.Text
+    ${Function:InvokeModuleDependencies}.Ast.Extent.Text
+    ${Function:InvokePSCompatibility}.Ast.Extent.Text
+    ${Function:ManualPSGalleryModuleInstall}.Ast.Extent.Text
+    ${Function:NewUniqueString}.Ast.Extent.Text
+    ${Function:PauseForWarning}.Ast.Extent.Text
+    ${Function:ResolveHost}.Ast.Extent.Text
+    ${Function:TestIsValidIPAddress}.Ast.Extent.Text
+    ${Function:TestLDAP}.Ast.Extent.Text
+    ${Function:TestPort}.Ast.Extent.Text
+    ${Function:UnzipFile}.Ast.Extent.Text
+    ${Function:Add-PublicKeyToRemoteHost}.Ast.Extent.Text
+    ${Function:Check-Cert}.Ast.Extent.Text
+    ${Function:Extract-SSHPrivateKeysFromRegistry}.Ast.Extent.Text
+    ${Function:Fix-SSHPermissions}.Ast.Extent.Text
+    ${Function:Generate-AuthorizedPrincipalsFile}.Ast.Extent.Text
+    ${Function:Generate-SSHUserDirFileInfo}.Ast.Extent.Text
+    ${Function:Get-PublicKeyAuthInstructions}.Ast.Extent.Text
+    ${Function:Get-SSHClientAuthSanity}.Ast.Extent.Text
+    ${Function:Get-SSHFileInfo}.Ast.Extent.Text
+    ${Function:Install-SSHAgentService}.Ast.Extent.Text
+    ${Function:Install-WinSSH}.Ast.Extent.Text
+    ${Function:New-SSHDServer}.Ast.Extent.Text
+    ${Function:New-SSHKey}.Ast.Extent.Text
+    ${Function:Set-DefaultShell}.Ast.Extent.Text
+    ${Function:Uninstall-WinSSH}.Ast.Extent.Text
+    ${Function:Validate-SSHPrivateKey}.Ast.Extent.Text
+)
+
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSBRYWlsfy4TENdKxXu2Lp6Ak
-# /H2gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGtMXmepop4VzZkmN22a2Yuyg
+# dtmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -4370,11 +4494,11 @@ function Validate-SSHPrivateKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFFVDxSy+kvIijSL2
-# bhAqheNTm+/aMA0GCSqGSIb3DQEBAQUABIIBAHtriuotiQfdxiO6pzRWEpEsUSes
-# TsyKWj0Sz4ECRrVfYpGJ/80VFFiQw20095yC8fwnro6cO/8v7PV8fqA1ngm9BN9A
-# gkHjeASir3ILe+Sv4uM+R+1NY5jMOHwX9zHrfgNPzGVYN2Rk9lPDZwVWUs+w7KQa
-# lfvt4Y9bQLI+L+5rSLGvXU5A57PX3RQ11OiupaahsqTRfkARbQ/ZE7dls8OK73Ga
-# lZLDBwIm9fDOuhq731v98xiGnhkIHcvA/b/qZHFju680dJa9oOZ52jMErvAJGTnn
-# EuyNkJ5T+g77+xHouJJ9ELLbJ9UBRUE47/KLay5V2azMOsa0gtl84p9Pf4Q=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEJWof2s17p0A91o
+# asdP2ESw/pOVMA0GCSqGSIb3DQEBAQUABIIBAD6h9KL+cnxs+nppu1oWumIMXd4R
+# QQepNFzo0OG+SR2mfhcSXYgKuB0oHkM6N+Si0yuYEK/LqWBa2q7q2B2kL+JHRh5Y
+# 83P3SJlfF9hKSq070OZOhVQkPfwGqUR2cxfCT9UI4x+hzw3DKuFvAZsSRRNZbj0z
+# RUhUKksMplb0cFCNwdhITgcF7hsKoE57eWkqMOp0tvO3h7AAXTV7B3TPP8qFGEFz
+# nhpy4NR6T8AxxY2S55H3GBXTc/NmfIkJDCpCUxebYwIc8DfH1zCLQoACC2jqEAKx
+# lyCVyJzjEBfKlPiMZiIOgn8f48W9ZdSQ0hQzfua/T/ScRY0id5UHMlTKGEk=
 # SIG # End signature block

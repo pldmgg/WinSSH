@@ -59,6 +59,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         $Commands -contains 'GetComputerObjectsInLDAP' | Should Be $False
         $Commands -contains 'GetCurrentUser' | Should Be $False
         $Commands -contains 'GetDomainController' | Should Be $False
+        $Commands -contains 'GetDomainName' | Should Be $False
         $Commands -contains 'GetElevation' | Should Be $False
         $Commands -contains 'GetGroupObjectsInLDAP' | Should Be $False
         $Commands -contains 'GetModuleDependencies' | Should Be $False
@@ -100,6 +101,7 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
         [bool]$Module.Invoke({Get-Item function:GetComputerObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetCurrentUser}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetDomainController}) | Should Be $True
+        [bool]$Module.Invoke({Get-Item function:GetDomainName}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetElevation}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetGroupObjectsInLDAP}) | Should Be $True
         [bool]$Module.Invoke({Get-Item function:GetModuleDependencies}) | Should Be $True
@@ -121,8 +123,8 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPIjI+8lxT+weLfr6c/glKDn6
-# p2ygggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUF5I7Jpq+/6oMaeQMnIbWjUdL
+# KtCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -179,11 +181,11 @@ Describe -Name "General Project Validation: $env:BHProjectName" -Tag 'Validation
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFP2yW3nm2/tCraZW
-# GB3nl0ZeJKzJMA0GCSqGSIb3DQEBAQUABIIBAAZK9t+aIFpcESyskvJ0eehRyYq2
-# fDEhPW01pQpgHkseIxTy2Mbxx3l2EV75EBnnMbvorPiyGxTUf3LeLZ7idrHQrZpR
-# 8EGEaPYES2ELmk0cQqkIvqdalBKaUa0OU5TcBC+9MGFNxN6nXrwUPx17dCBlYba9
-# +W/LnHygpQlZOuWdkfX8jIf/IC+RHNWHbMDfBej6+BOXohw1c5ywGldyVCi+onFz
-# qM39ybYrYs48/nsAByt7ix6UQTyTGcAZSTJJKG30WIlXsuDfEpuEV0MQyeXTeIeO
-# SSvG1XNQZyyCd8ypjorJ4zU5BO1hJ07/szKZwz7M9CzMogomeuguj8ZAgIE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDwfQNkOVOfD+MB0
+# 63RptCuerr4MMA0GCSqGSIb3DQEBAQUABIIBAFyzpyTTFCkr4hwyCrsqSTGRCUJe
+# vQQjZU0RrFJAXWJiRgsNfQ6oLikFDkh6jYZjreJm4nNwPWRhB71H7y+0/D47N/nM
+# zz/fjkrweL2CaVTbIcJiCN9v6PGiIFRQEDMqSgvrRGTovTIY9hNintSzzudp5Avp
+# RGJC0RxwOsMxvxlY3CFiskKXs4Rqj9e26RlUQDmzGUmZxuFpQ/VMBqT61JoQdQWp
+# Ccyf/vKKK7aVVSbyBfcCZelrIQeYSY4xt0AIGotzc/2cqiinqMV8DhNHEwhUAx55
+# Z14xUR+y3VYuYSKSHq0CLZ5NqqzkG8NwD5XLw1XNzpXdzYAQOsHUJ5oYCA8=
 # SIG # End signature block
