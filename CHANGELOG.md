@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.6 (June 24, 2019)
+
+- Add-PublicKeyToRemoteHost function now prompts for ssh password if necessary instead of silently failing.
+
 ## 0.9.5 (November 14, 2018)
 
 - Fix Authenticode Signature Attempt 1

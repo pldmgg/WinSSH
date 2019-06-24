@@ -101,10 +101,12 @@ function Add-PublicKeyToRemoteHost {
     }
 
     if (!$DomainPrefix) {
-        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        #ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        ssh -o "StrictHostKeyChecking=no" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
     }
     else {
-        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        #ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        ssh -o "StrictHostKeyChecking=no" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
     }
 
     ##### END Main Body #####
@@ -113,8 +115,8 @@ function Add-PublicKeyToRemoteHost {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU1ogtMLjH20clcwoARU85y9v+
-# 6h+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5+fGOpEU1f7RUVfUiXu+PgLA
+# c9+gggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -171,11 +173,11 @@ function Add-PublicKeyToRemoteHost {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFKcU+DY7J67eIGEq
-# Kg2GzrGU5ihHMA0GCSqGSIb3DQEBAQUABIIBAAoY79l7LC3E8v8PTyT/AJcV310e
-# 7yd1HqWtNn0JOnJcoPu4CSaL1kkpxyGz+pAx2yrc4eAcuSamudnPTAeNWL8MO3rS
-# 51W/Eq65aYvaQZjejbibbMnP3jAcjJbRECv1vDw2uT0kEwP/lWStNreFkTGcYkJH
-# gSelAChGSIS4Iokyo+RI19SfGka+1ecviJY//8tF30pzh3X5OoyzEVIhMWie2oBr
-# iIet1TcNj4sbxxYx0AlNW0Z/4Z1ffQeNuQvS+8X+t2ozwsRoyT3QoderY/GEJCar
-# dgybgptB/avOFH7mEO+y8XWjPAvqOqc7rpFY0ZFzbS/yqlVVfjq/Ozsv+bE=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNbkqgqOA7VEjowO
+# mUPQ8X9jc1p1MA0GCSqGSIb3DQEBAQUABIIBAAEyO+9c14pQauvhkP5YlNiEyNO6
+# 8jfsK6iI1DS5nva1UX/0q5+5Ow5NancsgS4rrqINzj0Ru6YFCLzHssINeKXkXbCB
+# Dtb5ghpc4lpU7dnHrkseYZoaLYE3JsMlucXxxWNT/2jwvXSMuglDQ+RhIFIxhBwc
+# /33s9XRrj85GrooAWivhGY+e/X/KpWx5deTdHRs04XIsqymIdOlxyGJRybevAmex
+# Aka9EQAWYhGlJFEd47ta1IhswtMernke35C1E61dRJMb4lcGj9cYUn6gI7GtUNIp
+# IxIjqyn2C9vzn3utQz1o6yJLp1KD+gRup81owJpTlS8FwnVcZxDmOWxsJ88=
 # SIG # End signature block

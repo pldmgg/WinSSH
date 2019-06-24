@@ -201,10 +201,12 @@ function Add-PublicKeyToRemoteHost {
     }
 
     if (!$DomainPrefix) {
-        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        #ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        ssh -o "StrictHostKeyChecking=no" -t $RemoteHostUserName@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
     }
     else {
-        ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        #ssh -o "StrictHostKeyChecking=no" -o "BatchMode=yes" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
+        ssh -o "StrictHostKeyChecking=no" -t $RemoteHostUserName@$DomainPrefix@$RemoteHostLocation "echo '$PubKeyContent' >> ~/.ssh/authorized_keys"
     }
 
     ##### END Main Body #####
@@ -4436,8 +4438,8 @@ if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "C
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGtMXmepop4VzZkmN22a2Yuyg
-# dtmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjMGZvJ1Tgaqq5fmCLvIyiPVx
+# O7egggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -4494,11 +4496,11 @@ if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "C
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFEJWof2s17p0A91o
-# asdP2ESw/pOVMA0GCSqGSIb3DQEBAQUABIIBAD6h9KL+cnxs+nppu1oWumIMXd4R
-# QQepNFzo0OG+SR2mfhcSXYgKuB0oHkM6N+Si0yuYEK/LqWBa2q7q2B2kL+JHRh5Y
-# 83P3SJlfF9hKSq070OZOhVQkPfwGqUR2cxfCT9UI4x+hzw3DKuFvAZsSRRNZbj0z
-# RUhUKksMplb0cFCNwdhITgcF7hsKoE57eWkqMOp0tvO3h7AAXTV7B3TPP8qFGEFz
-# nhpy4NR6T8AxxY2S55H3GBXTc/NmfIkJDCpCUxebYwIc8DfH1zCLQoACC2jqEAKx
-# lyCVyJzjEBfKlPiMZiIOgn8f48W9ZdSQ0hQzfua/T/ScRY0id5UHMlTKGEk=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNq2AkqXhg03UCJ1
+# 17igPhuNSizCMA0GCSqGSIb3DQEBAQUABIIBAIXIRBbk2CJXJnQzpGB+ntT0AHN1
+# 8NBqq1u5m2N0WIaDZpdGRb+JPGhuJMqP7BMLoGusH/BP2k1fjVNNhNoXqk3pujP3
+# OupISHeF/JFroaHkU5SPWtaTJoVn+FmOyNcQiy3VDAipZ9K2UvKVzjHa2TPK8JB7
+# 27G2x7f72vgW1vha1zvvJ9J82pe0aY+zDI74HISMhdnle3Qtu1oGMxsevlHQlimI
+# f84f2t3EbtDM1vLjLbMmX9AE/ybDAe1ErBRfslKAWmps6Pre7I21NGNpYCn9J6G4
+# V0uIoHIPcKh8vSbQsy8yxLul+tAP1r1UpQVUPT6CTT4wc6oYHP5Mb8Pu7SQ=
 # SIG # End signature block
