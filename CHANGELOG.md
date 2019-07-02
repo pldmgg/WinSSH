@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.8 (July 2, 2019)
+
+- Fixed New-SSHKey function issue with existing ssh key file of the same name
+
 ## 0.9.7 (July 2, 2019)
 
 - Removed New-SSHKey function's reliance on Lee Holmes' Await Module

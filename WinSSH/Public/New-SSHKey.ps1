@@ -159,15 +159,21 @@ function New-SSHKey {
 
     $SSHKeyOutFile = "$HOME\.ssh\$NewSSHKeyName"
 
+    if (Test-Path $SSHKeyOutFile) {
+        Write-Error "$SSHKeyOutFile already exists! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     if ($NewSSHKeyPurpose) {
         $NewSSHKeyPurpose = $NewSSHKeyPurpose -replace "[\s]",""
 
         $SSHKeyGenArgumentsString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"$NewSSHKeyPwd`" -C `"$NewSSHKeyPurpose`""
-        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N '`"`"' -C `"$NewSSHKeyPurpose`""
+        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"`" -C `"$NewSSHKeyPurpose`""
     }
     else {
         $SSHKeyGenArgumentsString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"$NewSSHKeyPwd`""
-        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N '`"`"'"
+        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"`""
     }
     
     ##### END Variable/Parameter Transforms and PreRun Prep #####
@@ -194,6 +200,12 @@ function New-SSHKey {
     $Process = New-Object System.Diagnostics.Process
     $Process.StartInfo = $ProcessInfo
     $Process.Start() | Out-Null
+    # Below $FinishedInAlottedTime returns boolean true/false
+    $FinishedInAlottedTime = $Process.WaitForExit(5000)
+    if (!$FinishedInAlottedTime) {
+        $Process.Kill()
+        $ProcessKilled = $True
+    }
     $stdout = $Process.StandardOutput.ReadToEnd()
     $stderr = $Process.StandardError.ReadToEnd()
     $AllOutput = $stdout + $stderr
@@ -340,8 +352,8 @@ function New-SSHKey {
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdrdrH5ZWmhoB0eP5REbSa+WT
-# b1Wgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUm1Jx+alTSZABAT4DcHaBXkuk
+# uhmgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -398,11 +410,11 @@ function New-SSHKey {
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFOpuaql3xQTvKTZF
-# H5GpUhn/es03MA0GCSqGSIb3DQEBAQUABIIBAJkAHBsQb2nVgQ17+YZufCX+DmTr
-# qUfMFkPqplI7xG4hsxILAU1mbEOl0oiPoUFd4KzA1UKst1WraeCd8PoucKetRdiA
-# nH8k0crrOhgbXCvcDxXhHldsajRgO/IG2pJa4OiHS4/auQGnR2MmxrHk3WBqf4EQ
-# uuStBUo0txb8vs9PbqNWCa0rSg2dHEYnOL3gyRE0RdLNz+En8Jmqplx7tabarCLN
-# WzOOi0nhTPPzAKf0EY0BlB5wvEuYha35foviQZsuBSQBPkY3YNHJ8q3YngqmIO08
-# PDRqUYi5xFdtvVkE5Uv+eocJ6Q0nayII8j09yhyx5dbqEGCeu95ThrHfm6k=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFN1NQPkBbZ/Hx6tl
+# 9sp8naK6MIOZMA0GCSqGSIb3DQEBAQUABIIBAFPAI2lZT8cit2KIdUxEjHVhf4oS
+# rMX5JuLSMODg4v7dbZdqdJFcOdjB6d5rI02Wesw18ubEyBFT4+NbpPOpbp3VcxxH
+# b+z0O+ehUdtq7a9S1mg4uihd+pjQXofQx3MyMRX433639i7N7E0Ifa7WasZ41yfo
+# qVVECJS0GpdqlnEfh5UJXShLLTmwcm8dm1UdZgNgL/ZSCE+IbpFQFIUSJc5zd0Tv
+# ku6o5hbMNgWH1TStoN+873P7ygbszRSyPZolvJ04GE8QbE7s7Ux3+0+JTtlwvovl
+# cEzhBvTIku1xIY3G0BOpRg4PbBbsEFsnHHEUC487bB1Zn7u3Xskdg+dQq0s=
 # SIG # End signature block

@@ -3580,15 +3580,21 @@ function New-SSHKey {
 
     $SSHKeyOutFile = "$HOME\.ssh\$NewSSHKeyName"
 
+    if (Test-Path $SSHKeyOutFile) {
+        Write-Error "$SSHKeyOutFile already exists! Halting!"
+        $global:FunctionResult = "1"
+        return
+    }
+
     if ($NewSSHKeyPurpose) {
         $NewSSHKeyPurpose = $NewSSHKeyPurpose -replace "[\s]",""
 
         $SSHKeyGenArgumentsString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"$NewSSHKeyPwd`" -C `"$NewSSHKeyPurpose`""
-        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N '`"`"' -C `"$NewSSHKeyPurpose`""
+        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"`" -C `"$NewSSHKeyPurpose`""
     }
     else {
         $SSHKeyGenArgumentsString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"$NewSSHKeyPwd`""
-        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N '`"`"'"
+        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"`""
     }
     
     ##### END Variable/Parameter Transforms and PreRun Prep #####
@@ -3615,6 +3621,12 @@ function New-SSHKey {
     $Process = New-Object System.Diagnostics.Process
     $Process.StartInfo = $ProcessInfo
     $Process.Start() | Out-Null
+    # Below $FinishedInAlottedTime returns boolean true/false
+    $FinishedInAlottedTime = $Process.WaitForExit(5000)
+    if (!$FinishedInAlottedTime) {
+        $Process.Kill()
+        $ProcessKilled = $True
+    }
     $stdout = $Process.StandardOutput.ReadToEnd()
     $stderr = $Process.StandardError.ReadToEnd()
     $AllOutput = $stdout + $stderr
@@ -4354,8 +4366,8 @@ if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "C
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGtVCCeYSX0k4N6rkmiSxXzYD
-# 4XKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtihgRmS/A6nRO1BR4Rytkc5R
+# wmCgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -4412,11 +4424,11 @@ if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "C
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHk25PThhDMPrYZX
-# u2l9IwdEEIm3MA0GCSqGSIb3DQEBAQUABIIBAIoO157EvV42Psq2qAeE3tvLlJsS
-# t2ZorvgrNsPcsT0odwf9VfBcuUYJvXykWBhP3+KYpRzhs3xzZE4AytJCSXhARUJz
-# MP/ULRal1g/J/w1VxDUyqiyUJrZkgeYm7JmGBRxwaIx+sbhqJBW98iA4emxWCD1+
-# rz2qWM0WwQPyLlqM83aa5RhSbYsiqQ7e5CK355/QsWoPn3yUc5KqoRYIUtXLhp/x
-# 2l2mQuYmvFVdDz8K88kUuqHRkNLCbgb0FlyrMVaXftMxyMt+q2EEkAJBupK0KCKW
-# BMucr/j4O5kc6PIbg2cyqPUtToOmZkuYAI3mhc1ufCYsXiD/eAMKJP8P4XY=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFDLkKWialfWLG4oU
+# a3LBRaE1qrclMA0GCSqGSIb3DQEBAQUABIIBAJDDeFyHMdWEc0hPLfttUwi3Pxw3
+# CXG0SeDcH3TlTDN32Z7pjffyvtzpzxibfw+ZWwMAAGeH35KPEkRIgz1li2lU2FbR
+# M4OjOdesJl08+juTEwOxDZ3uRSnb1GtuAz6J00rIEtVie4Wd7XvnogvvE0tVC4AC
+# tnnHQKAXV5q2/qnRbXm+EMa3jUtlIl4EYxGE5/pa1PqCXYoJ2EDJ/QJnLXqg99va
+# socK5/8XstGDe/5u/amd426AZ5zUTxDeeCER6+NxpPm+A3hQLitbFT8AXTVXN756
+# gMPaUI5xBIepeD+HbeexxPK8mDNEyz0jtlTv96/g+1j34tVD2hSN75jsZ6E=
 # SIG # End signature block
