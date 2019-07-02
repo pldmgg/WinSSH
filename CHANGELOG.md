@@ -1,5 +1,9 @@
 # Change log
 
+## 0.9.7 (July 2, 2019)
+
+- Removed New-SSHKey function's reliance on Lee Holmes' Await Module
+
 ## 0.9.6 (June 24, 2019)
 
 - Add-PublicKeyToRemoteHost function now prompts for ssh password if necessary instead of silently failing.

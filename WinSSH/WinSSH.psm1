@@ -3584,11 +3584,11 @@ function New-SSHKey {
         $NewSSHKeyPurpose = $NewSSHKeyPurpose -replace "[\s]",""
 
         $SSHKeyGenArgumentsString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"$NewSSHKeyPwd`" -C `"$NewSSHKeyPurpose`""
-        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -C `"$NewSSHKeyPurpose`""
+        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N '`"`"' -C `"$NewSSHKeyPurpose`""
     }
     else {
         $SSHKeyGenArgumentsString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N `"$NewSSHKeyPwd`""
-        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q"
+        $SSHKeyGenArgumentsNoPwdString = "-t rsa -b 2048 -f `"$SSHKeyOutFile`" -q -N '`"`"'"
     }
     
     ##### END Variable/Parameter Transforms and PreRun Prep #####
@@ -3597,117 +3597,33 @@ function New-SSHKey {
     ##### BEGIN Main Body #####
 
     # Create new public/private keypair
+    
+    $ProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $ProcessInfo.WorkingDirectory = $OpenSSHWinPath
+    $ProcessInfo.FileName = $(Get-Command ssh-keygen.exe).Source
+    $ProcessInfo.RedirectStandardError = $true
+    $ProcessInfo.RedirectStandardOutput = $true
+    #$ProcessInfo.StandardOutputEncoding = [System.Text.Encoding]::Unicode
+    #$ProcessInfo.StandardErrorEncoding = [System.Text.Encoding]::Unicode
+    $ProcessInfo.UseShellExecute = $false
     if ($NewSSHKeyPwd) {
-        $ProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $ProcessInfo.WorkingDirectory = $OpenSSHWinPath
-        $ProcessInfo.FileName = $(Get-Command ssh-keygen.exe).Source
-        $ProcessInfo.RedirectStandardError = $true
-        $ProcessInfo.RedirectStandardOutput = $true
-        #$ProcessInfo.StandardOutputEncoding = [System.Text.Encoding]::Unicode
-        #$ProcessInfo.StandardErrorEncoding = [System.Text.Encoding]::Unicode
-        $ProcessInfo.UseShellExecute = $false
         $ProcessInfo.Arguments = $SSHKeyGenArgumentsString
-        $Process = New-Object System.Diagnostics.Process
-        $Process.StartInfo = $ProcessInfo
-        $Process.Start() | Out-Null
-        $stdout = $Process.StandardOutput.ReadToEnd()
-        $stderr = $Process.StandardError.ReadToEnd()
-        $AllOutput = $stdout + $stderr
-
-        if ($AllOutput -match "fail|error") {
-            Write-Error $AllOutput
-            Write-Error "The 'ssh-keygen command failed! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
     }
     else {
-        <#
-        if (!$AllowAwaitModuleInstall -and $(Get-Module -ListAvailable).Name -notcontains "Await") {
-            Write-Warning "This function needs to install the PowerShell Await Module in order to generate a private key with a null password."
-            $ProceedChoice = Read-Host -Prompt "Would you like to proceed? [Yes\No]"
-            while ($ProceedChoice -notmatch "Yes|yes|Y|y|No|no|N|n") {
-                Write-Host "$ProceedChoice is NOT a valid choice! Please enter 'Yes' or 'No'"
-                $ProceedChoice = Read-Host -Prompt "Would you like to proceed? [Yes\No]"
-            }
+        $ProcessInfo.Arguments = $SSHKeyGenArgumentsNoPwdString
+    }
+    $Process = New-Object System.Diagnostics.Process
+    $Process.StartInfo = $ProcessInfo
+    $Process.Start() | Out-Null
+    $stdout = $Process.StandardOutput.ReadToEnd()
+    $stderr = $Process.StandardError.ReadToEnd()
+    $AllOutput = $stdout + $stderr
 
-            if ($ProceedChoice -match "No|no|N|n") {
-                Write-Error "User chose not to proceed! Halting!"
-                $global:FunctionResult = "1"
-                return
-            }
-        }
-        if ($AllowAwaitModuleInstall -or $ProceedChoice -match "Yes|yes|Y|y") {
-            # Need PowerShell Await Module (Windows version of Linux Expect) for ssh-keygen with null password
-            if ($(Get-Module -ListAvailable).Name -notcontains "Await") {
-                # Install-Module "Await" -Scope CurrentUser
-                # Clone PoshAwait repo to .zip
-                Invoke-WebRequest -Uri "https://github.com/pldmgg/PoshAwait/archive/master.zip" -OutFile "$HOME\PoshAwait.zip"
-                $tempDirectory = [IO.Path]::Combine([IO.Path]::GetTempPath(), [IO.Path]::GetRandomFileName())
-                $null = [IO.Directory]::CreateDirectory($tempDirectory)
-                UnzipFile -PathToZip "$HOME\PoshAwait.zip" -TargetDir "$tempDirectory"
-                if (!$(Test-Path "$HOME\Documents\WindowsPowerShell\Modules\Await")) {
-                    $null = New-Item -Type Directory "$HOME\Documents\WindowsPowerShell\Modules\Await"
-                }
-                else {
-                    Remove-Item "$HOME\Documents\WindowsPowerShell\Modules\Await" -Recurse -Force
-                }
-                Copy-Item -Recurse -Path "$tempDirectory\PoshAwait-master\*" -Destination "$HOME\Documents\WindowsPowerShell\Modules\Await"
-                Remove-Item -Recurse -Path $tempDirectory -Force
-
-                if ($($env:PSModulePath -split ";") -notcontains "$HOME\Documents\WindowsPowerShell\Modules") {
-                    $env:PSModulePath = "$HOME\Documents\WindowsPowerShell\Modules" + ";" + $env:PSModulePath
-                }
-            }
-        }
-        #>
-
-        # Make private key password $null
-        try {
-            Import-Module "$PSScriptRoot\Await\Await.psd1" -ErrorAction Stop
-        }
-        catch {
-            Write-Error "Unable to load the Await Module! Halting!"
-            $global:FunctionResult = "1"
-            return
-        }
-
-        Start-AwaitSession
-        Start-Sleep -Seconds 1
-        Send-AwaitCommand '$host.ui.RawUI.WindowTitle = "PSAwaitSession"'
-        $PSAwaitProcess = $($(Get-Process | Where-Object {$_.Name -eq "powershell"}) | Sort-Object -Property StartTime -Descending)[0]
-        Start-Sleep -Seconds 1
-        Send-AwaitCommand "`$env:Path = '$env:Path'; Push-Location '$OpenSSHWinPath'"
-        Start-Sleep -Seconds 1
-        Send-AwaitCommand "ssh-keygen $SSHKeyGenArgumentsNoPwdString"
-        Start-Sleep -Seconds 2
-        # The below is the equivalent of pressing [ENTER] to proceed with the ssh-keygen.exe interactive prompt
-        Send-AwaitCommand ""
-        Start-Sleep -Seconds 2
-        # The below is the equivalent of pressing [ENTER] to proceed with the ssh-keygen.exe interactive prompt
-        Send-AwaitCommand ""
-        Start-Sleep -Seconds 1
-        $SSHKeyGenConsoleOutput = Receive-AwaitResponse
-
-        # If Stop-AwaitSession errors for any reason, it doesn't return control, so we need to handle in try/catch block
-        try {
-            Stop-AwaitSession
-        }
-        catch {
-            if ($PSAwaitProcess.Id -eq $PID) {
-                Write-Verbose "The PSAwaitSession never spawned! Halting!"
-                Write-Error "The PSAwaitSession never spawned! Halting!"
-                $global:FunctionResult = "1"
-                return
-            }
-            else {
-                Stop-Process -Id $PSAwaitProcess.Id
-                while ([bool]$(Get-Process -Id $PSAwaitProcess.Id -ErrorAction SilentlyContinue)) {
-                    Write-Host "Waiting for Await Module Process Id $($PSAwaitProcess.Id) to end..."
-                    Start-Sleep -Seconds 1
-                }
-            }
-        }
+    if ($AllOutput -match "fail|error") {
+        Write-Error $AllOutput
+        Write-Error "The 'ssh-keygen command failed! Halting!"
+        $global:FunctionResult = "1"
+        return
     }
 
     $PubPrivKeyPairFiles = Get-ChildItem -Path "$HOME\.ssh" | Where-Object {$_.Name -match "$NewSSHKeyName"}
@@ -4438,8 +4354,8 @@ if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "C
 # SIG # Begin signature block
 # MIIMiAYJKoZIhvcNAQcCoIIMeTCCDHUCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjMGZvJ1Tgaqq5fmCLvIyiPVx
-# O7egggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGtVCCeYSX0k4N6rkmiSxXzYD
+# 4XKgggn9MIIEJjCCAw6gAwIBAgITawAAAB/Nnq77QGja+wAAAAAAHzANBgkqhkiG
 # 9w0BAQsFADAwMQwwCgYDVQQGEwNMQUIxDTALBgNVBAoTBFpFUk8xETAPBgNVBAMT
 # CFplcm9EQzAxMB4XDTE3MDkyMDIxMDM1OFoXDTE5MDkyMDIxMTM1OFowPTETMBEG
 # CgmSJomT8ixkARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMT
@@ -4496,11 +4412,11 @@ if ($PSVersionTable.Platform -eq "Win32NT" -and $PSVersionTable.PSEdition -eq "C
 # ARkWA0xBQjEUMBIGCgmSJomT8ixkARkWBFpFUk8xEDAOBgNVBAMTB1plcm9TQ0EC
 # E1gAAAH5oOvjAv3166MAAQAAAfkwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwx
 # CjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGC
-# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFNq2AkqXhg03UCJ1
-# 17igPhuNSizCMA0GCSqGSIb3DQEBAQUABIIBAIXIRBbk2CJXJnQzpGB+ntT0AHN1
-# 8NBqq1u5m2N0WIaDZpdGRb+JPGhuJMqP7BMLoGusH/BP2k1fjVNNhNoXqk3pujP3
-# OupISHeF/JFroaHkU5SPWtaTJoVn+FmOyNcQiy3VDAipZ9K2UvKVzjHa2TPK8JB7
-# 27G2x7f72vgW1vha1zvvJ9J82pe0aY+zDI74HISMhdnle3Qtu1oGMxsevlHQlimI
-# f84f2t3EbtDM1vLjLbMmX9AE/ybDAe1ErBRfslKAWmps6Pre7I21NGNpYCn9J6G4
-# V0uIoHIPcKh8vSbQsy8yxLul+tAP1r1UpQVUPT6CTT4wc6oYHP5Mb8Pu7SQ=
+# NwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcNAQkEMRYEFHk25PThhDMPrYZX
+# u2l9IwdEEIm3MA0GCSqGSIb3DQEBAQUABIIBAIoO157EvV42Psq2qAeE3tvLlJsS
+# t2ZorvgrNsPcsT0odwf9VfBcuUYJvXykWBhP3+KYpRzhs3xzZE4AytJCSXhARUJz
+# MP/ULRal1g/J/w1VxDUyqiyUJrZkgeYm7JmGBRxwaIx+sbhqJBW98iA4emxWCD1+
+# rz2qWM0WwQPyLlqM83aa5RhSbYsiqQ7e5CK355/QsWoPn3yUc5KqoRYIUtXLhp/x
+# 2l2mQuYmvFVdDz8K88kUuqHRkNLCbgb0FlyrMVaXftMxyMt+q2EEkAJBupK0KCKW
+# BMucr/j4O5kc6PIbg2cyqPUtToOmZkuYAI3mhc1ufCYsXiD/eAMKJP8P4XY=
 # SIG # End signature block
